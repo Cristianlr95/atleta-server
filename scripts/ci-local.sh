@@ -78,7 +78,12 @@ echo "✅ Tests de migración pasaron"
 
 # Validar migraciones Flyway
 echo "✅ Validando migraciones Flyway..."
-if ! ./mvnw flyway:validate -Dspring.profiles.active=test; then
+if ! ./mvnw \
+    -Dflyway.url=jdbc:postgresql://localhost:5432/atleta_test \
+    -Dflyway.user=test \
+    -Dflyway.password=test \
+    -Dflyway.locations=classpath:db/migration \
+    flyway:migrate flyway:validate; then
     echo "❌ Validación de migraciones falló"
     docker-compose -f docker-compose.ci.yml down -v
     exit 1
