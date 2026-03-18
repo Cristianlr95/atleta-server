@@ -1,0 +1,6 @@
+# Directorio para scripts de callback de Flyway
+# Scripts que se ejecutan en momentos específicos del ciclo de migración
+# Ejemplos:
+# beforeMigrate.sql - Se ejecuta antes de cada migración
+# afterMigrate.sql - Se ejecuta después de cada migración
+# beforeEachMigrate.sql - Se ejecuta antes de cada archivo de migración individual

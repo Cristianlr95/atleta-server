@@ -1,0 +1,206 @@
+-- Crear esquema inicial para aplicación Atleta
+-- Versión: V001
+-- Descripción: Esquema base con todas las entidades del dominio Atleta
+
+-- Habilitar extensiones necesarias
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- Tabla de atletas (identidad global)
+CREATE TABLE athletes (
+    atleta_uuid         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email              VARCHAR(255) NOT NULL UNIQUE,
+    password_hash      VARCHAR(255) NOT NULL,
+    nombre             VARCHAR(100) NOT NULL,
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMP(0),
+    version            INTEGER NOT NULL DEFAULT 0
+);
+
+-- Tabla de posiciones (catálogo fijo)
+CREATE TABLE positions (
+    id                 BIGSERIAL PRIMARY KEY,
+    nombre             VARCHAR(50) NOT NULL UNIQUE,
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMP(0),
+    version            INTEGER NOT NULL DEFAULT 0
+);
+
+-- Tabla de perfiles de jugador (contexto fútbol)
+CREATE TABLE player_profiles (
+    atleta_uuid        UUID PRIMARY KEY REFERENCES athletes(atleta_uuid),
+    alias              VARCHAR(50),
+    trust_score        INTEGER NOT NULL DEFAULT 100,
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMP(0),
+    version            INTEGER NOT NULL DEFAULT 0
+);
+
+-- Tabla de posiciones de jugador (N-M con prioridades)
+CREATE TABLE player_positions (
+    id                 BIGSERIAL PRIMARY KEY,
+    player_id          UUID NOT NULL REFERENCES player_profiles(atleta_uuid),
+    position_id        BIGINT NOT NULL REFERENCES positions(id),
+    prioridad          INTEGER NOT NULL CHECK (prioridad BETWEEN 1 AND 3),
+    xp                 INTEGER NOT NULL DEFAULT 0 CHECK (xp >= 0),
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMP(0),
+    version            INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(player_id, position_id),
+    UNIQUE(player_id, prioridad)
+);
+
+-- Tabla de equipos
+CREATE TABLE teams (
+    id                 BIGSERIAL PRIMARY KEY,
+    nombre             VARCHAR(100) NOT NULL UNIQUE,
+    logo_url           VARCHAR(500),
+    anio_fundacion     INTEGER,
+    creador_user_id    UUID NOT NULL REFERENCES player_profiles(atleta_uuid),
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMP(0),
+    version            INTEGER NOT NULL DEFAULT 0
+);
+
+-- Tabla de estadísticas de equipo
+CREATE TABLE team_stats (
+    id                 BIGSERIAL PRIMARY KEY,
+    team_id            BIGINT NOT NULL UNIQUE REFERENCES teams(id),
+    partidos_jugados   INTEGER NOT NULL DEFAULT 0,
+    partidos_ganados   INTEGER NOT NULL DEFAULT 0,
+    partidos_perdidos  INTEGER NOT NULL DEFAULT 0,
+    partidos_empatados INTEGER NOT NULL DEFAULT 0,
+    goles_favor        INTEGER NOT NULL DEFAULT 0,
+    goles_contra       INTEGER NOT NULL DEFAULT 0,
+    puntos             INTEGER NOT NULL DEFAULT 0,
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMP(0),
+    version            INTEGER NOT NULL DEFAULT 0
+);
+
+-- Tabla de miembros de equipo (N-M)
+CREATE TABLE team_members (
+    id                 BIGSERIAL PRIMARY KEY,
+    team_id            BIGINT NOT NULL REFERENCES teams(id),
+    user_id            UUID NOT NULL REFERENCES player_profiles(atleta_uuid),
+    rol                VARCHAR(20) NOT NULL CHECK (rol IN ('JUGADOR', 'CAPITAN', 'DT')),
+    activo             BOOLEAN NOT NULL DEFAULT true,
+    joined_at          TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMP(0),
+    version            INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(team_id, user_id)
+);
+
+-- Tabla de partidos
+CREATE TABLE matches (
+    id                      BIGSERIAL PRIMARY KEY,
+    modalidad              VARCHAR(20) NOT NULL CHECK (modalidad IN ('CINCO_VS_CINCO', 'SEIS_VS_SEIS', 'SIETE_VS_SIETE')),
+    fecha_hora_programada  TIMESTAMP(0) NOT NULL,
+    latitud                DECIMAL(10,8) CHECK (latitud BETWEEN -90 AND 90),
+    longitud               DECIMAL(11,8) CHECK (longitud BETWEEN -180 AND 180),
+    cuota                  DECIMAL(10,2) CHECK (cuota >= 0),
+    creador_user_id        UUID NOT NULL REFERENCES player_profiles(atleta_uuid),
+    estado                 VARCHAR(20) NOT NULL DEFAULT 'CREADO' CHECK (estado IN ('CREADO', 'INICIADO', 'FINALIZADO', 'INVALIDO')),
+    started_at             TIMESTAMP(0),
+    created_at             TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at             TIMESTAMP(0),
+    version                INTEGER NOT NULL DEFAULT 0
+);
+
+-- Tabla de equipos en partido (1 partido - 2 equipos exactamente)
+CREATE TABLE match_teams (
+    id                 BIGSERIAL PRIMARY KEY,
+    match_id           BIGINT NOT NULL REFERENCES matches(id),
+    team_id            BIGINT NOT NULL REFERENCES teams(id),
+    es_local           BOOLEAN NOT NULL,
+    goles              INTEGER NOT NULL DEFAULT 0 CHECK (goles >= 0),
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMP(0),
+    version            INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(match_id, team_id),
+    UNIQUE(match_id, es_local)
+);
+
+-- Tabla de jugadores en partido (N-M)
+CREATE TABLE match_players (
+    id                 BIGSERIAL PRIMARY KEY,
+    match_id           BIGINT NOT NULL REFERENCES matches(id),
+    team_id            BIGINT NOT NULL REFERENCES teams(id),
+    user_id            UUID NOT NULL REFERENCES player_profiles(atleta_uuid),
+    position_id        BIGINT NOT NULL REFERENCES positions(id),
+    rol                VARCHAR(20) NOT NULL CHECK (rol IN ('JUGADOR', 'CAPITAN', 'DT')),
+    confirmado         BOOLEAN NOT NULL DEFAULT false,
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMP(0),
+    version            INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(match_id, user_id),
+    UNIQUE(match_id, team_id, rol) -- Solo un capitán y un DT por equipo por partido
+);
+
+-- Tabla de eventos de partido
+CREATE TABLE match_events (
+    id                 BIGSERIAL PRIMARY KEY,
+    match_id           BIGINT NOT NULL REFERENCES matches(id),
+    team_id            BIGINT NOT NULL REFERENCES teams(id),
+    player_id          UUID NOT NULL REFERENCES player_profiles(atleta_uuid),
+    tipo_evento        VARCHAR(20) NOT NULL CHECK (tipo_evento IN ('GOL', 'ASISTENCIA')),
+    assist_player_id   UUID REFERENCES player_profiles(atleta_uuid),
+    registered_by_id   UUID NOT NULL REFERENCES player_profiles(atleta_uuid),
+    confirmed_by_home  BOOLEAN NOT NULL DEFAULT false,
+    confirmed_by_away  BOOLEAN NOT NULL DEFAULT false,
+    registered_at      TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    confirmed_at       TIMESTAMP(0),
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMP(0),
+    version            INTEGER NOT NULL DEFAULT 0
+);
+
+-- Tabla de historial de jugador (fuente de verdad - inmutable)
+CREATE TABLE player_history (
+    id                 BIGSERIAL PRIMARY KEY,
+    match_id           BIGINT NOT NULL REFERENCES matches(id),
+    user_id            UUID NOT NULL REFERENCES player_profiles(atleta_uuid),
+    team_id            BIGINT NOT NULL REFERENCES teams(id),
+    position_id        BIGINT NOT NULL REFERENCES positions(id),
+    goles              INTEGER NOT NULL DEFAULT 0,
+    asistencias        INTEGER NOT NULL DEFAULT 0,
+    resultado          VARCHAR(20) NOT NULL CHECK (resultado IN ('VICTORIA', 'DERROTA', 'EMPATE')),
+    xp_ganada          INTEGER NOT NULL DEFAULT 0,
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW()
+    -- Nota: No tiene updated_at ni version porque es inmutable
+);
+
+-- Tabla de logs de confianza
+CREATE TABLE trust_logs (
+    id                 BIGSERIAL PRIMARY KEY,
+    user_id            UUID NOT NULL REFERENCES player_profiles(atleta_uuid),
+    match_id           BIGINT REFERENCES matches(id),
+    cambio             INTEGER NOT NULL,
+    trust_score_anterior INTEGER NOT NULL,
+    trust_score_nuevo  INTEGER NOT NULL,
+    motivo             VARCHAR(255) NOT NULL,
+    changed_by_id      UUID REFERENCES player_profiles(atleta_uuid),
+    created_at         TIMESTAMP(0) NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMP(0),
+    version            INTEGER NOT NULL DEFAULT 0
+);
+
+-- Comentarios para documentación
+COMMENT ON TABLE athletes IS 'Tabla de atletas con identidad global única';
+COMMENT ON TABLE player_profiles IS 'Perfiles específicos de fútbol asociados a atletas';
+COMMENT ON TABLE positions IS 'Catálogo fijo de posiciones de fútbol';
+COMMENT ON TABLE teams IS 'Equipos de fútbol con información básica';
+COMMENT ON TABLE matches IS 'Partidos de fútbol con modalidades específicas';
+COMMENT ON TABLE player_history IS 'Historial inmutable de participaciones - FUENTE DE VERDAD';
+COMMENT ON TABLE trust_logs IS 'Registro de cambios en trust score con trazabilidad completa';
+
+-- Comentarios en columnas importantes
+COMMENT ON COLUMN athletes.atleta_uuid IS 'Identificador único UUID del atleta (Primary Key)';
+COMMENT ON COLUMN player_profiles.trust_score IS 'Puntuación de confianza del jugador (0-1000)';
+COMMENT ON COLUMN player_positions.prioridad IS 'Prioridad de la posición (1=primera, 2=segunda, 3=tercera)';
+COMMENT ON COLUMN matches.modalidad IS 'Modalidad del partido (CINCO_VS_CINCO, SEIS_VS_SEIS, SIETE_VS_SIETE)';
+COMMENT ON COLUMN match_teams.es_local IS 'Indica si el equipo es local (true) o visitante (false)';
+COMMENT ON COLUMN match_events.tipo_evento IS 'Tipo de evento (GOL, ASISTENCIA)';
+COMMENT ON COLUMN player_history.created_at IS 'Timestamp inmutable de creación del registro histórico';
+COMMENT ON COLUMN trust_logs.cambio IS 'Valor del cambio en trust score (positivo=incremento, negativo=decremento)';

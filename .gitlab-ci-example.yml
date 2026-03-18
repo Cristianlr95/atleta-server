@@ -1,0 +1,97 @@
+# Ejemplo de configuración GitLab CI para Atleta Server
+# Renombrar a '.gitlab-ci.yml' para activar
+
+stages:
+  - test
+  - build
+  - deploy-staging
+  - deploy-production
+
+variables:
+  JAVA_VERSION: "21"
+  MAVEN_OPTS: "-Xmx1024m"
+  POSTGRES_DB: "atleta_test"
+  POSTGRES_USER: "test"
+  POSTGRES_PASSWORD: "test"
+
+# Template para jobs con PostgreSQL
+.postgres-template: &postgres-template
+  services:
+    - name: postgres:16
+      alias: postgres
+  variables:
+    POSTGRES_HOST_AUTH_METHOD: trust
+
+test:
+  <<: *postgres-template
+  stage: test
+  image: openjdk:21-jdk
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq postgresql-client
+    - ./mvnw --version
+  script:
+    - ./mvnw test -Dspring.profiles.active=test
+    - ./mvnw test -Dtest="*IntegrationTest" -Dspring.profiles.active=test
+    - ./mvnw test -Dtest="*MigrationTest,FlywayIntegrationTest" -Dspring.profiles.active=test
+    - ./mvnw flyway:validate -Dspring.profiles.active=test
+  artifacts:
+    reports:
+      junit:
+        - target/surefire-reports/TEST-*.xml
+    paths:
+      - target/site/jacoco/
+  coverage: '/Total.*?([0-9]{1,3})%/'
+
+build:
+  stage: build
+  image: openjdk:21-jdk
+  script:
+    - ./mvnw clean package -DskipTests
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 1 hour
+
+deploy-staging:
+  stage: deploy-staging
+  image: openjdk:21-jdk
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq postgresql-client
+  script:
+    # Validar migraciones
+    - ./mvnw flyway:info flyway:validate -Dspring.profiles.active=staging
+    # Backup antes del deploy
+    - ./scripts/backup-database.sh staging
+    # Ejecutar migraciones
+    - ./mvnw flyway:migrate -Dspring.profiles.active=staging
+    # Deploy (placeholder)
+    - echo "Deploying to staging..."
+  environment:
+    name: staging
+    url: https://staging.atleta.com
+  only:
+    - develop
+
+deploy-production:
+  stage: deploy-production
+  image: openjdk:21-jdk
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq postgresql-client
+  script:
+    # Validar migraciones
+    - ./mvnw flyway:info flyway:validate -Dspring.profiles.active=prod
+    # Backup completo
+    - ./scripts/backup-database.sh prod
+    # Ejecutar migraciones
+    - ./mvnw flyway:migrate -Dspring.profiles.active=prod
+    # Deploy (placeholder)
+    - echo "Deploying to production..."
+    # Health check
+    - sleep 30
+    - curl -f https://api.atleta.com/actuator/health
+  environment:
+    name: production
+    url: https://api.atleta.com
+  when: manual
+  only:
+    - main

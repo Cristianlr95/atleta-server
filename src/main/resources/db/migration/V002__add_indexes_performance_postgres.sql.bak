@@ -1,0 +1,109 @@
+-- Agregar índices para optimización de performance
+-- Versión: V002
+-- Descripción: Índices adicionales para consultas frecuentes del dominio Atleta
+
+-- Índices básicos para búsquedas frecuentes
+CREATE INDEX idx_athletes_email ON athletes(email);
+CREATE INDEX idx_athletes_created_at ON athletes(created_at);
+
+CREATE INDEX idx_player_profiles_trust_score ON player_profiles(trust_score);
+CREATE INDEX idx_player_profiles_created_at ON player_profiles(created_at);
+
+CREATE INDEX idx_positions_nombre ON positions(nombre);
+
+CREATE INDEX idx_teams_nombre ON teams(nombre);
+CREATE INDEX idx_teams_creador ON teams(creador_user_id);
+CREATE INDEX idx_teams_created_at ON teams(created_at);
+
+CREATE INDEX idx_matches_estado ON matches(estado);
+CREATE INDEX idx_matches_fecha ON matches(fecha_hora_programada);
+CREATE INDEX idx_matches_creador ON matches(creador_user_id);
+CREATE INDEX idx_matches_modalidad ON matches(modalidad);
+
+-- Índices compuestos para consultas comunes
+CREATE INDEX idx_player_positions_player_priority ON player_positions(player_id, prioridad);
+CREATE INDEX idx_player_positions_position ON player_positions(position_id);
+
+CREATE INDEX idx_team_members_team_active ON team_members(team_id, activo);
+CREATE INDEX idx_team_members_user_active ON team_members(user_id, activo);
+CREATE INDEX idx_team_members_rol ON team_members(rol);
+
+CREATE INDEX idx_team_stats_team ON team_stats(team_id);
+
+CREATE INDEX idx_match_teams_match ON match_teams(match_id);
+CREATE INDEX idx_match_teams_team ON match_teams(team_id);
+CREATE INDEX idx_match_teams_local ON match_teams(match_id, es_local);
+
+CREATE INDEX idx_match_players_match_confirmed ON match_players(match_id, confirmado);
+CREATE INDEX idx_match_players_team ON match_players(team_id);
+CREATE INDEX idx_match_players_user ON match_players(user_id);
+CREATE INDEX idx_match_players_position ON match_players(position_id);
+
+CREATE INDEX idx_match_events_match_type ON match_events(match_id, tipo_evento);
+CREATE INDEX idx_match_events_player ON match_events(player_id);
+CREATE INDEX idx_match_events_team ON match_events(team_id);
+CREATE INDEX idx_match_events_confirmed ON match_events(match_id, confirmed_by_home, confirmed_by_away);
+
+CREATE INDEX idx_player_history_user_match ON player_history(user_id, match_id);
+CREATE INDEX idx_player_history_team ON player_history(team_id);
+CREATE INDEX idx_player_history_position ON player_history(position_id);
+CREATE INDEX idx_player_history_resultado ON player_history(resultado);
+CREATE INDEX idx_player_history_created_at ON player_history(created_at);
+
+CREATE INDEX idx_trust_logs_user_date ON trust_logs(user_id, created_at);
+CREATE INDEX idx_trust_logs_match ON trust_logs(match_id);
+CREATE INDEX idx_trust_logs_changed_by ON trust_logs(changed_by_id);
+
+-- Índices para búsquedas geográficas
+CREATE INDEX idx_matches_location ON matches(latitud, longitud) 
+WHERE latitud IS NOT NULL AND longitud IS NOT NULL;
+
+-- Índices para búsquedas de texto usando trigram
+CREATE INDEX idx_athletes_nombre_trgm ON athletes USING gin(nombre gin_trgm_ops);
+CREATE INDEX idx_teams_nombre_trgm ON teams USING gin(nombre gin_trgm_ops);
+
+-- Índices para consultas de estadísticas frecuentes
+CREATE INDEX idx_team_stats_puntos ON team_stats(puntos DESC);
+CREATE INDEX idx_team_stats_partidos_jugados ON team_stats(partidos_jugados DESC);
+CREATE INDEX idx_team_stats_diferencia_goles ON team_stats((goles_favor - goles_contra) DESC);
+
+-- Índices para consultas de historial y análisis
+CREATE INDEX idx_player_history_goles ON player_history(goles DESC) WHERE goles > 0;
+CREATE INDEX idx_player_history_asistencias ON player_history(asistencias DESC) WHERE asistencias > 0;
+CREATE INDEX idx_player_history_xp ON player_history(xp_ganada DESC);
+
+-- Índices para consultas de confianza
+CREATE INDEX idx_trust_logs_cambio ON trust_logs(cambio);
+CREATE INDEX idx_trust_logs_score_range ON trust_logs(trust_score_nuevo);
+
+-- Índices parciales para optimizar consultas específicas
+CREATE INDEX idx_matches_active ON matches(id, fecha_hora_programada) 
+WHERE estado IN ('CREADO', 'INICIADO');
+
+CREATE INDEX idx_team_members_active ON team_members(team_id, user_id, rol) 
+WHERE activo = true;
+
+CREATE INDEX idx_match_players_confirmed ON match_players(match_id, team_id, user_id) 
+WHERE confirmado = true;
+
+CREATE INDEX idx_match_events_pending_confirmation ON match_events(match_id, created_at) 
+WHERE confirmed_by_home = false OR confirmed_by_away = false;
+
+-- Índices para consultas de rendimiento por posición
+CREATE INDEX idx_player_positions_xp_by_position ON player_positions(position_id, xp DESC);
+
+-- Índices para consultas temporales frecuentes
+CREATE INDEX idx_matches_recent ON matches(created_at DESC) 
+WHERE created_at >= NOW() - INTERVAL '30 days';
+
+CREATE INDEX idx_player_history_recent ON player_history(created_at DESC) 
+WHERE created_at >= NOW() - INTERVAL '90 days';
+
+-- Comentarios para documentación de índices
+COMMENT ON INDEX idx_athletes_email IS 'Índice único para búsquedas por email de atleta';
+COMMENT ON INDEX idx_matches_location IS 'Índice compuesto para búsquedas geográficas de partidos';
+COMMENT ON INDEX idx_athletes_nombre_trgm IS 'Índice trigram para búsquedas de texto difuso en nombres';
+COMMENT ON INDEX idx_teams_nombre_trgm IS 'Índice trigram para búsquedas de texto difuso en nombres de equipos';
+COMMENT ON INDEX idx_team_stats_diferencia_goles IS 'Índice calculado para ordenar por diferencia de goles';
+COMMENT ON INDEX idx_matches_active IS 'Índice parcial para partidos activos (CREADO, INICIADO)';
+COMMENT ON INDEX idx_match_events_pending_confirmation IS 'Índice parcial para eventos pendientes de confirmación';

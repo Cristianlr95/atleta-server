@@ -1,0 +1,142 @@
+// Ejemplo de Jenkinsfile para Atleta Server
+// Renombrar a 'Jenkinsfile' para activar
+
+pipeline {
+    agent any
+    
+    environment {
+        JAVA_VERSION = '21'
+        MAVEN_OPTS = '-Xmx1024m'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Test') {
+            parallel {
+                stage('Unit Tests') {
+                    steps {
+                        sh './mvnw test -Dspring.profiles.active=test'
+                    }
+                    post {
+                        always {
+                            junit 'target/surefire-reports/*.xml'
+                        }
+                    }
+                }
+                
+                stage('Integration Tests') {
+                    steps {
+                        sh './mvnw test -Dtest="*IntegrationTest" -Dspring.profiles.active=test'
+                    }
+                }
+                
+                stage('Migration Tests') {
+                    steps {
+                        sh './mvnw test -Dtest="*MigrationTest,FlywayIntegrationTest" -Dspring.profiles.active=test'
+                        sh './mvnw flyway:validate -Dspring.profiles.active=test'
+                    }
+                }
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                sh './mvnw clean package -DskipTests'
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+            }
+        }
+        
+        stage('Deploy to Staging') {
+            when {
+                branch 'develop'
+            }
+            environment {
+                DB_HOST = credentials('staging-db-host')
+                DB_USERNAME = credentials('staging-db-username')
+                DB_PASSWORD = credentials('staging-db-password')
+                DB_NAME = credentials('staging-db-name')
+            }
+            steps {
+                script {
+                    // Validar migraciones
+                    sh './mvnw flyway:info flyway:validate -Dspring.profiles.active=staging'
+                    
+                    // Backup antes del deploy
+                    sh '''
+                        export STAGING_DB_HOST=${DB_HOST}
+                        export STAGING_DB_USERNAME=${DB_USERNAME}
+                        export STAGING_DB_PASSWORD=${DB_PASSWORD}
+                        export STAGING_DB_NAME=${DB_NAME}
+                        ./scripts/backup-database.sh staging
+                    '''
+                    
+                    // Ejecutar migraciones
+                    sh './mvnw flyway:migrate -Dspring.profiles.active=staging'
+                    
+                    // Deploy (placeholder)
+                    echo 'Deploying to staging...'
+                }
+            }
+        }
+        
+        stage('Deploy to Production') {
+            when {
+                branch 'main'
+            }
+            environment {
+                DB_HOST = credentials('prod-db-host')
+                DB_USERNAME = credentials('prod-db-username')
+                DB_PASSWORD = credentials('prod-db-password')
+                DB_NAME = credentials('prod-db-name')
+            }
+            steps {
+                script {
+                    // Solicitar aprobación manual
+                    input message: 'Deploy to production?', ok: 'Deploy'
+                    
+                    // Validar migraciones
+                    sh './mvnw flyway:info flyway:validate -Dspring.profiles.active=prod'
+                    
+                    // Backup completo
+                    sh '''
+                        export PROD_DB_HOST=${DB_HOST}
+                        export PROD_DB_USERNAME=${DB_USERNAME}
+                        export PROD_DB_PASSWORD=${DB_PASSWORD}
+                        export PROD_DB_NAME=${DB_NAME}
+                        ./scripts/backup-database.sh prod
+                    '''
+                    
+                    // Ejecutar migraciones
+                    sh './mvnw flyway:migrate -Dspring.profiles.active=prod'
+                    
+                    // Deploy (placeholder)
+                    echo 'Deploying to production...'
+                    
+                    // Health check
+                    sh '''
+                        sleep 30
+                        curl -f https://api.atleta.com/actuator/health
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+            // Aquí se podrían agregar notificaciones
+        }
+    }
+}

@@ -1,0 +1,6 @@
+# Directorio para migraciones principales de Flyway
+# Convención de nomenclatura: V{VERSION}__{DESCRIPTION}.sql
+# Ejemplos:
+# V001__create_initial_schema.sql
+# V002__add_indexes_performance.sql
+# V003__insert_initial_data.sql

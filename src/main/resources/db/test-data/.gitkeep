@@ -1,0 +1,6 @@
+# Directorio para datos de prueba específicos para testing
+# Convención de nomenclatura: V9XX__insert_test_data.sql
+# Ejemplos:
+# V900__insert_test_athletes.sql
+# V901__insert_test_teams.sql
+# V902__insert_test_matches.sql
