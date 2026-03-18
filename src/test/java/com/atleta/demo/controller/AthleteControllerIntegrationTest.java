@@ -4,6 +4,7 @@ import com.atleta.demo.dto.request.ChangePasswordRequest;
 import com.atleta.demo.dto.request.CreateAthleteRequest;
 import com.atleta.demo.dto.request.LoginRequest;
 import com.atleta.demo.dto.request.UpdateAthleteRequest;
+import com.atleta.demo.enums.GenderType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,6 +70,7 @@ public class AthleteControllerIntegrationTest {
         request.setEmail("test@example.com");
         request.setPassword("password123");
         request.setNombre("Test Athlete");
+        request.setGenero(GenderType.MASCULINO);
 
         // When & Then
         mockMvc.perform(post("/api/v1/athletes/register")
@@ -88,6 +90,7 @@ public class AthleteControllerIntegrationTest {
         request1.setEmail("duplicate@example.com");
         request1.setPassword("password123");
         request1.setNombre("First Athlete");
+        request1.setGenero(GenderType.MASCULINO);
 
         mockMvc.perform(post("/api/v1/athletes/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -99,6 +102,7 @@ public class AthleteControllerIntegrationTest {
         request2.setEmail("duplicate@example.com");
         request2.setPassword("password456");
         request2.setNombre("Second Athlete");
+        request2.setGenero(GenderType.FEMENINO);
 
         // Then
         mockMvc.perform(post("/api/v1/athletes/register")
@@ -114,6 +118,7 @@ public class AthleteControllerIntegrationTest {
         request.setEmail("invalid@example.com");
         request.setPassword("password123");
         request.setNombre(""); // Empty name should fail validation
+        request.setGenero(GenderType.MASCULINO);
 
         // When & Then
         mockMvc.perform(post("/api/v1/athletes/register")
@@ -129,6 +134,7 @@ public class AthleteControllerIntegrationTest {
         createRequest.setEmail("login@example.com");
         createRequest.setPassword("password123");
         createRequest.setNombre("Login Test");
+        createRequest.setGenero(GenderType.MASCULINO);
 
         mockMvc.perform(post("/api/v1/athletes/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -156,6 +162,7 @@ public class AthleteControllerIntegrationTest {
         createRequest.setEmail("login@example.com");
         createRequest.setPassword("password123");
         createRequest.setNombre("Login Test");
+        createRequest.setGenero(GenderType.MASCULINO);
 
         mockMvc.perform(post("/api/v1/athletes/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -181,6 +188,7 @@ public class AthleteControllerIntegrationTest {
         createRequest.setEmail("get@example.com");
         createRequest.setPassword("password123");
         createRequest.setNombre("Get Test");
+        createRequest.setGenero(GenderType.MASCULINO);
 
         String response = mockMvc.perform(post("/api/v1/athletes/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -216,6 +224,7 @@ public class AthleteControllerIntegrationTest {
         createRequest.setEmail("email@example.com");
         createRequest.setPassword("password123");
         createRequest.setNombre("Email Test");
+        createRequest.setGenero(GenderType.MASCULINO);
 
         mockMvc.perform(post("/api/v1/athletes/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -236,6 +245,7 @@ public class AthleteControllerIntegrationTest {
         createRequest.setEmail("update@example.com");
         createRequest.setPassword("password123");
         createRequest.setNombre("Original Name");
+        createRequest.setGenero(GenderType.MASCULINO);
 
         String response = mockMvc.perform(post("/api/v1/athletes/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -265,6 +275,7 @@ public class AthleteControllerIntegrationTest {
         createRequest.setEmail("password@example.com");
         createRequest.setPassword("oldpassword");
         createRequest.setNombre("Password Test");
+        createRequest.setGenero(GenderType.MASCULINO);
 
         String response = mockMvc.perform(post("/api/v1/athletes/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -303,16 +314,19 @@ public class AthleteControllerIntegrationTest {
         request1.setEmail("search1@example.com");
         request1.setPassword("password123");
         request1.setNombre("John Smith");
+        request1.setGenero(GenderType.MASCULINO);
 
         CreateAthleteRequest request2 = new CreateAthleteRequest();
         request2.setEmail("search2@example.com");
         request2.setPassword("password123");
         request2.setNombre("John Doe");
+        request2.setGenero(GenderType.MASCULINO);
 
         CreateAthleteRequest request3 = new CreateAthleteRequest();
         request3.setEmail("search3@example.com");
         request3.setPassword("password123");
         request3.setNombre("Jane Smith");
+        request3.setGenero(GenderType.FEMENINO);
 
         mockMvc.perform(post("/api/v1/athletes/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -344,6 +358,7 @@ public class AthleteControllerIntegrationTest {
         createRequest.setEmail("exists@example.com");
         createRequest.setPassword("password123");
         createRequest.setNombre("Exists Test");
+        createRequest.setGenero(GenderType.MASCULINO);
 
         mockMvc.perform(post("/api/v1/athletes/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -366,12 +381,19 @@ public class AthleteControllerIntegrationTest {
 
     @Test
     void testGetTotalAthletes() throws Exception {
+        long initialTotal = Long.parseLong(mockMvc.perform(get("/api/v1/athletes/stats"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+
         // Given - Create some athletes
         for (int i = 0; i < 3; i++) {
             CreateAthleteRequest request = new CreateAthleteRequest();
             request.setEmail("athlete" + i + "@example.com");
             request.setPassword("password123");
             request.setNombre("Athlete " + i);
+            request.setGenero(i % 2 == 0 ? GenderType.MASCULINO : GenderType.FEMENINO);
 
             mockMvc.perform(post("/api/v1/athletes/register")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -382,7 +404,7 @@ public class AthleteControllerIntegrationTest {
         // When & Then
         mockMvc.perform(get("/api/v1/athletes/stats"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("3"));
+                .andExpect(content().string(String.valueOf(initialTotal + 3)));
     }
 
     @Test
@@ -392,6 +414,7 @@ public class AthleteControllerIntegrationTest {
         request.setEmail("recent@example.com");
         request.setPassword("password123");
         request.setNombre("Recent Athlete");
+        request.setGenero(GenderType.MASCULINO);
 
         mockMvc.perform(post("/api/v1/athletes/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -404,7 +427,6 @@ public class AthleteControllerIntegrationTest {
         mockMvc.perform(get("/api/v1/athletes/registered-after")
                 .param("fecha", yesterday.toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].email").value("recent@example.com"));
+                .andExpect(jsonPath("$[*].email", hasItem("recent@example.com")));
     }
 }

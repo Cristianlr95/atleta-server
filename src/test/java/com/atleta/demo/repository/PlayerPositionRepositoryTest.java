@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,9 @@ class PlayerPositionRepositoryTest {
     @Autowired
     private PositionRepository positionRepository;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     private PlayerProfile testPlayer1;
     private PlayerProfile testPlayer2;
     private Position testPosition1;
@@ -45,11 +49,7 @@ class PlayerPositionRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        // Limpiar datos existentes
-        playerPositionRepository.deleteAll();
-        positionRepository.deleteAll();
-        playerProfileRepository.deleteAll();
-        athleteRepository.deleteAll();
+        cleanupData();
 
         // Crear atletas y perfiles
         Athlete athlete1 = new Athlete("player1@example.com", "hash1", "Player One");
@@ -65,18 +65,9 @@ class PlayerPositionRepositoryTest {
         testPlayer2 = playerProfileRepository.save(testPlayer2);
 
         // Crear posiciones
-        testPosition1 = new Position();
-        testPosition1.setNombre("Delantero");
-        
-        testPosition2 = new Position();
-        testPosition2.setNombre("Mediocampista");
-        
-        testPosition3 = new Position();
-        testPosition3.setNombre("Defensa");
-
-        testPosition1 = positionRepository.save(testPosition1);
-        testPosition2 = positionRepository.save(testPosition2);
-        testPosition3 = positionRepository.save(testPosition3);
+        testPosition1 = findOrCreatePosition("Delantero");
+        testPosition2 = findOrCreatePosition("Mediocampista");
+        testPosition3 = findOrCreatePosition("Defensa");
 
         // Crear asignaciones de posiciones
         testPlayerPosition1 = new PlayerPosition();
@@ -244,12 +235,15 @@ class PlayerPositionRepositoryTest {
     void testGetXpStatisticsByPosition_ValidPosition_ReturnsCorrectStats() {
         // When
         Object[] stats = playerPositionRepository.getXpStatisticsByPosition(testPosition1);
+        Object[] values = stats.length == 1 && stats[0] instanceof Object[] nestedStats
+                ? nestedStats
+                : stats;
 
         // Then
-        assertThat(stats).hasSize(3);
-        assertThat(stats[0]).isEqualTo(80);   // MIN
-        assertThat(stats[1]).isEqualTo(100);  // MAX
-        assertThat(stats[2]).isEqualTo(90.0); // AVG
+        assertThat(values).hasSize(3);
+        assertThat(values[0]).isEqualTo(80);   // MIN
+        assertThat(values[1]).isEqualTo(100);  // MAX
+        assertThat(values[2]).isEqualTo(90.0); // AVG
     }
 
     @Test
@@ -342,5 +336,35 @@ class PlayerPositionRepositoryTest {
         Optional<PlayerPosition> found = playerPositionRepository.findById(testPlayerPosition1.getId());
         assertThat(found).isPresent();
         assertThat(found.get().getXp()).isEqualTo(150);
+    }
+
+    private Position findOrCreatePosition(String name) {
+        return positionRepository.findByNombre(name)
+                .orElseGet(() -> {
+                    Position position = new Position();
+                    position.setNombre(name);
+                    return positionRepository.save(position);
+                });
+    }
+
+    private void cleanupData() {
+        String[] statements = {
+                "DELETE FROM trust_logs",
+                "DELETE FROM player_history",
+                "DELETE FROM match_events",
+                "DELETE FROM match_players",
+                "DELETE FROM match_teams",
+                "DELETE FROM matches",
+                "DELETE FROM team_members",
+                "DELETE FROM team_stats",
+                "DELETE FROM teams",
+                "DELETE FROM player_positions",
+                "DELETE FROM player_profiles",
+                "DELETE FROM athletes"
+        };
+
+        for (String statement : statements) {
+            jdbcTemplate.execute(statement);
+        }
     }
 }

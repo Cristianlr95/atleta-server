@@ -131,9 +131,12 @@ public class MatchControllerIntegrationTest {
         testTeamId = team.getId();
 
         // Create test position
-        Position position = new Position();
-        position.setNombre("Delantero");
-        position = positionRepository.save(position);
+        Position position = positionRepository.findByNombre("Delantero")
+                .orElseGet(() -> {
+                    Position newPosition = new Position();
+                    newPosition.setNombre("Delantero");
+                    return positionRepository.save(newPosition);
+                });
         testPositionId = position.getId();
     }
 
@@ -220,7 +223,7 @@ public class MatchControllerIntegrationTest {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.modalidad").value(mode.toString()));
+                    .andExpect(jsonPath("$.modalidad").value(mode.name()));
         }
     }
 
@@ -343,6 +346,10 @@ public class MatchControllerIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
 
         Long matchId = objectMapper.readTree(response).get("id").asLong();
+
+        mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .param("esLocal", "true"))
+                .andExpect(status().isOk());
 
         // When & Then - Change status to INICIADO
         mockMvc.perform(put("/api/v1/matches/{matchId}/status", matchId)
@@ -509,12 +516,17 @@ public class MatchControllerIntegrationTest {
                 matchId, testPlayerUuid))
                 .andExpect(status().isOk());
 
+        mockMvc.perform(put("/api/v1/matches/{matchId}/status", matchId)
+                .param("status", "INICIADO"))
+                .andExpect(status().isOk());
+
         // When - Register goal event
         CreateMatchEventRequest eventRequest = new CreateMatchEventRequest();
         eventRequest.setMatchId(matchId);
         eventRequest.setPlayerUuid(testPlayerUuid);
         eventRequest.setTeamId(testTeamId);
         eventRequest.setEventType(EventType.GOL);
+        eventRequest.setRegisteredByUuid(testCreatorUuid);
 
         // Then
         mockMvc.perform(post("/api/v1/matches/events")
@@ -523,8 +535,8 @@ public class MatchControllerIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.eventType").value("GOL"))
                 .andExpect(jsonPath("$.player.atletaUuid").value(testPlayerUuid.toString()))
-                .andExpect(jsonPath("$.confirmadoLocal").value(false))
-                .andExpect(jsonPath("$.confirmadoVisitante").value(false));
+                .andExpect(jsonPath("$.confirmedByLocal").value(true))
+                .andExpect(jsonPath("$.confirmedByVisitante").value(true));
     }
 
     @Test

@@ -326,12 +326,15 @@ class MatchEventRepositoryTest {
     void testGetEventStatsByPlayer_ValidPlayer_ReturnsCorrectStats() {
         // When
         Object[] stats = matchEventRepository.getEventStatsByPlayer(testPlayer1);
+        Object[] values = stats.length == 1 && stats[0] instanceof Object[] nestedStats
+                ? nestedStats
+                : stats;
 
         // Then
-        assertThat(stats).hasSize(3);
-        assertThat(stats[0]).isEqualTo(1L); // total_goles
-        assertThat(stats[1]).isEqualTo(0L); // total_asistencias
-        assertThat(stats[2]).isEqualTo(1L); // total_eventos
+        assertThat(values).hasSize(3);
+        assertThat(values[0]).isEqualTo(1L); // total_goles
+        assertThat(values[1]).isEqualTo(0L); // total_asistencias
+        assertThat(values[2]).isEqualTo(1L); // total_eventos
     }
 
     @Test

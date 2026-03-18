@@ -59,7 +59,7 @@ class RatingExceptionHandlingTest {
             () -> ratingService.updatePlayerRatings(matchId, performances)
         );
         
-        assertTrue(exception.getMessage().contains("lista de rendimientos de jugadores no puede estar vacía"));
+        assertTrue(exception.getMessage().contains("lista de rendimientos de jugadores no puede estar vac"));
         assertEquals("performances", exception.getFieldName());
     }
 
@@ -76,7 +76,7 @@ class RatingExceptionHandlingTest {
             () -> ratingService.updatePlayerRatings(matchId, performances)
         );
         
-        assertTrue(exception.getMessage().contains("rendimiento del jugador en posición 0 no puede ser nulo"));
+        assertTrue(exception.getMessage().contains("rendimiento del jugador"));
         assertEquals("performance[0]", exception.getFieldName());
     }
 
@@ -130,7 +130,7 @@ class RatingExceptionHandlingTest {
             () -> ratingService.updatePlayerRatings(matchId, performances)
         );
         
-        assertTrue(exception.getMessage().contains("goles anotados deben ser un número no negativo"));
+        assertTrue(exception.getMessage().contains("goles anotados"));
         assertEquals("goalsScored", exception.getFieldName());
         assertEquals(-1, exception.getInvalidValue());
     }

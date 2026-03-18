@@ -1,34 +1,54 @@
 package com.atleta.demo.integration;
 
 import com.atleta.demo.dto.request.PlayerPerformanceDto;
-import com.atleta.demo.entity.*;
-import com.atleta.demo.enums.*;
-import com.atleta.demo.repository.*;
+import com.atleta.demo.entity.Match;
+import com.atleta.demo.entity.MatchEvent;
+import com.atleta.demo.entity.MatchPlayer;
+import com.atleta.demo.entity.MatchTeam;
+import com.atleta.demo.entity.PlayerProfile;
+import com.atleta.demo.entity.Position;
+import com.atleta.demo.entity.Team;
+import com.atleta.demo.enums.EventType;
+import com.atleta.demo.enums.MatchMode;
+import com.atleta.demo.enums.MatchStatus;
+import com.atleta.demo.enums.PlayerRole;
+import com.atleta.demo.repository.MatchEventRepository;
+import com.atleta.demo.repository.MatchPlayerRepository;
+import com.atleta.demo.repository.MatchRepository;
+import com.atleta.demo.repository.MatchTeamRepository;
+import com.atleta.demo.repository.PlayerHistoryRepository;
+import com.atleta.demo.repository.PlayerPositionRepository;
+import com.atleta.demo.repository.PlayerProfileRepository;
+import com.atleta.demo.repository.PositionRepository;
+import com.atleta.demo.repository.TeamMemberRepository;
+import com.atleta.demo.repository.TeamRepository;
 import com.atleta.demo.service.MatchService;
 import com.atleta.demo.service.RatingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
- * Test de integración para verificar que el sistema de calificaciones
- * se integra correctamente con el flujo de finalización de partidos.
+ * Test de integracion para verificar que el sistema de calificaciones
+ * se integra correctamente con el flujo de finalizacion de partidos.
  */
 @ExtendWith(MockitoExtension.class)
 class MatchRatingIntegrationTest {
@@ -48,24 +68,47 @@ class MatchRatingIntegrationTest {
     @Mock
     private PositionRepository positionRepository;
     @Mock
+    private TeamMemberRepository teamMemberRepository;
+    @Mock
+    private PlayerPositionRepository playerPositionRepository;
+    @Mock
+    private PlayerHistoryRepository playerHistoryRepository;
+    @Mock
     private RatingService ratingService;
 
-    @InjectMocks
     private MatchService matchService;
 
     private Match sampleMatch;
     private List<MatchTeam> matchTeams;
     private List<MatchPlayer> matchPlayers;
     private List<MatchEvent> matchEvents;
+    private PlayerProfile creator;
 
     @BeforeEach
     void setUp() {
-        // Crear partido de muestra
+        matchService = new MatchService(
+                matchRepository,
+                matchTeamRepository,
+                matchPlayerRepository,
+                matchEventRepository,
+                playerProfileRepository,
+                teamRepository,
+                positionRepository,
+                teamMemberRepository,
+                playerPositionRepository,
+                playerHistoryRepository,
+                ratingService
+        );
+
+        creator = new PlayerProfile();
+        creator.setAtletaUuid(UUID.randomUUID());
+        creator.setAlias("Creador");
+
         sampleMatch = new Match();
         sampleMatch.setId(1L);
-        // No establecer estado aquí - se hará en cada test individual
+        sampleMatch.setCreador(creator);
+        sampleMatch.setModalidad(MatchMode.CINCO_VS_CINCO);
 
-        // Crear equipos
         Team localTeam = new Team();
         localTeam.setId(1L);
         localTeam.setNombre("Equipo Local");
@@ -75,21 +118,11 @@ class MatchRatingIntegrationTest {
         visitingTeam.setNombre("Equipo Visitante");
 
         MatchTeam localMatchTeam = new MatchTeam(sampleMatch, localTeam, true);
-        localMatchTeam.setGoles(2); // Local gana 2-1
-
+        localMatchTeam.setGoles(2);
         MatchTeam visitingMatchTeam = new MatchTeam(sampleMatch, visitingTeam, false);
         visitingMatchTeam.setGoles(1);
-
-        matchTeams = Arrays.asList(localMatchTeam, visitingMatchTeam);
-
-        // Crear jugadores
-        PlayerProfile player1 = new PlayerProfile();
-        player1.setAtletaUuid(UUID.randomUUID());
-        player1.setAlias("Jugador 1");
-
-        PlayerProfile player2 = new PlayerProfile();
-        player2.setAtletaUuid(UUID.randomUUID());
-        player2.setAlias("Jugador 2");
+        matchTeams = List.of(localMatchTeam, visitingMatchTeam);
+        sampleMatch.setMatchTeams(new ArrayList<>(matchTeams));
 
         Position attackPosition = new Position();
         attackPosition.setId(1L);
@@ -99,122 +132,104 @@ class MatchRatingIntegrationTest {
         defensePosition.setId(2L);
         defensePosition.setNombre("Defensa");
 
-        MatchPlayer matchPlayer1 = new MatchPlayer(sampleMatch, localTeam, player1, attackPosition, PlayerRole.JUGADOR);
-        matchPlayer1.setConfirmado(true);
+        matchPlayers = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            PlayerProfile localPlayer = new PlayerProfile();
+            localPlayer.setAtletaUuid(UUID.randomUUID());
+            localPlayer.setAlias("Local " + i);
+            MatchPlayer matchPlayer = new MatchPlayer(sampleMatch, localTeam, localPlayer, attackPosition, PlayerRole.JUGADOR);
+            matchPlayer.setConfirmado(true);
+            matchPlayers.add(matchPlayer);
+        }
 
-        MatchPlayer matchPlayer2 = new MatchPlayer(sampleMatch, visitingTeam, player2, defensePosition, PlayerRole.JUGADOR);
-        matchPlayer2.setConfirmado(true);
+        for (int i = 0; i < 4; i++) {
+            PlayerProfile awayPlayer = new PlayerProfile();
+            awayPlayer.setAtletaUuid(UUID.randomUUID());
+            awayPlayer.setAlias("Visitante " + i);
+            MatchPlayer matchPlayer = new MatchPlayer(sampleMatch, visitingTeam, awayPlayer, defensePosition, PlayerRole.JUGADOR);
+            matchPlayer.setConfirmado(true);
+            matchPlayers.add(matchPlayer);
+        }
 
-        matchPlayers = Arrays.asList(matchPlayer1, matchPlayer2);
+        MatchPlayer creatorParticipation = new MatchPlayer(sampleMatch, localTeam, creator, attackPosition, PlayerRole.CAPITAN);
+        creatorParticipation.setConfirmado(true);
+        matchPlayers.add(creatorParticipation);
 
-        // Crear eventos (goles)
-        MatchEvent goal1 = new MatchEvent(sampleMatch, EventType.GOL, player1, localTeam, player1);
+        PlayerProfile scorer = matchPlayers.get(0).getPlayer();
+        PlayerProfile assister = matchPlayers.get(1).getPlayer();
+
+        MatchEvent goal1 = new MatchEvent(sampleMatch, EventType.GOL, scorer, localTeam, scorer);
         goal1.setConfirmedByHome(true);
         goal1.setConfirmedByAway(true);
 
-        MatchEvent goal2 = new MatchEvent(sampleMatch, EventType.GOL, player1, localTeam, player1);
+        MatchEvent goal2 = new MatchEvent(sampleMatch, EventType.GOL, scorer, localTeam, scorer);
         goal2.setConfirmedByHome(true);
         goal2.setConfirmedByAway(true);
-        goal2.setAssistPlayer(player2); // Player2 asiste a Player1
+        goal2.setAssistPlayer(assister);
 
-        matchEvents = Arrays.asList(goal1, goal2);
+        matchEvents = List.of(goal1, goal2);
     }
 
     @Test
     void changeMatchStatus_ToFinalizado_ShouldTriggerRatingUpdate() {
-        // Arrange - Create fresh match with correct status
-        Match testMatch = new Match();
-        testMatch.setId(1L);
-        testMatch.setEstado(MatchStatus.INICIADO); // Correct initial status for transition to FINALIZADO
-        
-        // Mock the save method to return the match with FINALIZADO status
-        Match savedMatch = new Match();
-        savedMatch.setId(1L);
-        savedMatch.setEstado(MatchStatus.FINALIZADO);
-        
-        when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
-        when(matchRepository.save(any(Match.class))).thenReturn(savedMatch);
+        sampleMatch.setEstado(MatchStatus.INICIADO);
+
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(matchTeamRepository.findByMatch(any(Match.class))).thenReturn(matchTeams);
         when(matchPlayerRepository.findByMatch(any(Match.class))).thenReturn(matchPlayers);
         when(matchEventRepository.findByMatchOrderByCreatedAt(any(Match.class))).thenReturn(matchEvents);
+        when(matchEventRepository.findPendingEventsByMatch(any(Match.class))).thenReturn(List.of());
 
-        // Act
         matchService.changeMatchStatus(1L, MatchStatus.FINALIZADO);
 
-        // Assert
-        // Verificar que se llamó al servicio de calificaciones
         ArgumentCaptor<Long> matchIdCaptor = ArgumentCaptor.forClass(Long.class);
         ArgumentCaptor<List<PlayerPerformanceDto>> performanceCaptor = ArgumentCaptor.forClass(List.class);
-        
+
         verify(ratingService, times(1)).updatePlayerRatings(matchIdCaptor.capture(), performanceCaptor.capture());
-        
-        // Verificar parámetros
         assertEquals(1L, matchIdCaptor.getValue());
-        
-        List<PlayerPerformanceDto> performanceData = performanceCaptor.getValue();
-        assertEquals(2, performanceData.size());
+        assertEquals(matchPlayers.size(), performanceCaptor.getValue().size());
     }
 
     @Test
     void changeMatchStatus_ToFinalizado_WithNoPlayers_ShouldNotCallRatingService() {
-        // Arrange - Create fresh match with correct status
-        Match testMatch = new Match();
-        testMatch.setId(1L);
-        testMatch.setEstado(MatchStatus.INICIADO); // Correct initial status for transition to FINALIZADO
-        
-        when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
-        when(matchRepository.save(any(Match.class))).thenReturn(testMatch);
-        when(matchTeamRepository.findByMatch(testMatch)).thenReturn(matchTeams);
-        when(matchPlayerRepository.findByMatch(testMatch)).thenReturn(Arrays.asList()); // Sin jugadores
-        when(matchEventRepository.findByMatchOrderByCreatedAt(testMatch)).thenReturn(matchEvents);
+        sampleMatch.setEstado(MatchStatus.INICIADO);
 
-        // Act
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(List.of());
+
         matchService.changeMatchStatus(1L, MatchStatus.FINALIZADO);
 
-        // Assert
         verify(ratingService, never()).updatePlayerRatings(any(), any());
     }
 
     @Test
     void changeMatchStatus_ToIniciado_ShouldNotTriggerRatingUpdate() {
-        // Arrange - Create fresh match with correct status
-        Match testMatch = new Match();
-        testMatch.setId(1L);
-        testMatch.setEstado(MatchStatus.CREADO); // Correct initial status for transition to INICIADO
-        
-        when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
-        when(matchRepository.save(any(Match.class))).thenReturn(testMatch);
+        sampleMatch.setEstado(MatchStatus.CREADO);
 
-        // Act
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
         matchService.changeMatchStatus(1L, MatchStatus.INICIADO);
 
-        // Assert
         verify(ratingService, never()).updatePlayerRatings(any(), any());
     }
 
     @Test
     void changeMatchStatus_RatingServiceThrowsException_ShouldNotFailStatusChange() {
-        // Arrange - Create fresh match with correct status
-        Match testMatch = new Match();
-        testMatch.setId(1L);
-        testMatch.setEstado(MatchStatus.INICIADO); // Correct initial status for transition to FINALIZADO
-        
-        when(matchRepository.findById(1L)).thenReturn(Optional.of(testMatch));
-        when(matchRepository.save(any(Match.class))).thenReturn(testMatch);
-        when(matchTeamRepository.findByMatch(testMatch)).thenReturn(matchTeams);
-        when(matchPlayerRepository.findByMatch(testMatch)).thenReturn(matchPlayers);
-        when(matchEventRepository.findByMatchOrderByCreatedAt(testMatch)).thenReturn(matchEvents);
-        
-        // Simular error en el servicio de calificaciones
-        doThrow(new RuntimeException("Error en calificaciones")).when(ratingService)
-                .updatePlayerRatings(any(), any());
+        sampleMatch.setEstado(MatchStatus.INICIADO);
 
-        // Act & Assert
-        assertDoesNotThrow(() -> {
-            matchService.changeMatchStatus(1L, MatchStatus.FINALIZADO);
-        });
-        
-        // Verificar que el estado del partido se cambió a pesar del error
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(matchTeamRepository.findByMatch(sampleMatch)).thenReturn(matchTeams);
+        when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(matchPlayers);
+        when(matchEventRepository.findByMatchOrderByCreatedAt(sampleMatch)).thenReturn(matchEvents);
+        when(matchEventRepository.findPendingEventsByMatch(sampleMatch)).thenReturn(List.of());
+        doThrow(new RuntimeException("Error en calificaciones")).when(ratingService).updatePlayerRatings(any(), any());
+
+        assertDoesNotThrow(() -> matchService.changeMatchStatus(1L, MatchStatus.FINALIZADO));
+
         verify(matchRepository, times(1)).save(any(Match.class));
     }
 }

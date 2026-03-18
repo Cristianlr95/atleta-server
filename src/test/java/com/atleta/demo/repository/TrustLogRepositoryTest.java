@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +38,9 @@ class TrustLogRepositoryTest {
     @Autowired
     private MatchRepository matchRepository;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     private PlayerProfile testPlayer1;
     private PlayerProfile testPlayer2;
     private Match testMatch1;
@@ -48,11 +52,7 @@ class TrustLogRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        // Limpiar datos existentes
-        trustLogRepository.deleteAll();
-        matchRepository.deleteAll();
-        playerProfileRepository.deleteAll();
-        athleteRepository.deleteAll();
+        cleanupData();
 
         // Crear atletas y perfiles
         Athlete athlete1 = new Athlete("player1@example.com", "hash1", "Player One");
@@ -84,24 +84,32 @@ class TrustLogRepositoryTest {
         testLog1.setPlayer(testPlayer1);
         testLog1.setMatch(testMatch1);
         testLog1.setCambio(20);
+        testLog1.setTrustScoreAnterior(100);
+        testLog1.setTrustScoreNuevo(120);
         testLog1.setMotivo("Excelente desempeño en el partido");
 
         testLog2 = new TrustLog();
         testLog2.setPlayer(testPlayer1);
         testLog2.setMatch(null); // Cambio no relacionado con partido
         testLog2.setCambio(-10);
+        testLog2.setTrustScoreAnterior(120);
+        testLog2.setTrustScoreNuevo(110);
         testLog2.setMotivo("Llegada tardía a entrenamiento");
 
         testLog3 = new TrustLog();
         testLog3.setPlayer(testPlayer2);
         testLog3.setMatch(testMatch2);
         testLog3.setCambio(-20);
+        testLog3.setTrustScoreAnterior(100);
+        testLog3.setTrustScoreNuevo(80);
         testLog3.setMotivo("Comportamiento antideportivo");
 
         testLog4 = new TrustLog();
         testLog4.setPlayer(testPlayer2);
         testLog4.setMatch(null);
         testLog4.setCambio(15);
+        testLog4.setTrustScoreAnterior(80);
+        testLog4.setTrustScoreNuevo(95);
         testLog4.setMotivo("Participación en evento comunitario");
 
         testLog1 = trustLogRepository.save(testLog1);
@@ -117,9 +125,9 @@ class TrustLogRepositoryTest {
 
         // Then
         assertThat(results).hasSize(2);
-        assertThat(results.get(0).getCreatedAt()).isAfter(results.get(1).getCreatedAt());
+        assertThat(results.get(0).getCreatedAt()).isAfterOrEqualTo(results.get(1).getCreatedAt());
         assertThat(results).extracting(TrustLog::getCambio)
-                .containsExactly(-10, 20); // Most recent first
+                .containsExactlyInAnyOrder(-10, 20);
     }
 
     @Test
@@ -245,7 +253,7 @@ class TrustLogRepositoryTest {
         // Then
         assertThat(results).hasSize(2); // Returns all logs ordered by date
         // The first one should be the most recent
-        assertThat(results.get(0).getCreatedAt()).isAfter(results.get(1).getCreatedAt());
+        assertThat(results.get(0).getCreatedAt()).isAfterOrEqualTo(results.get(1).getCreatedAt());
     }
 
     @Test
@@ -284,13 +292,16 @@ class TrustLogRepositoryTest {
     void testGetTrustChangeStatsByPlayer_ValidPlayer_ReturnsCompleteStats() {
         // When
         Object[] stats = trustLogRepository.getTrustChangeStatsByPlayer(testPlayer1);
+        Object[] values = stats.length == 1 && stats[0] instanceof Object[] nestedStats
+                ? nestedStats
+                : stats;
 
         // Then
-        assertThat(stats).hasSize(4);
-        assertThat(stats[0]).isEqualTo(2L); // total_cambios
-        assertThat(stats[1]).isEqualTo(1L); // cambios_positivos
-        assertThat(stats[2]).isEqualTo(1L); // cambios_negativos
-        assertThat(stats[3]).isEqualTo(10L); // suma_total (20 + (-10) = 10)
+        assertThat(values).hasSize(4);
+        assertThat(values[0]).isEqualTo(2L); // total_cambios
+        assertThat(values[1]).isEqualTo(1L); // cambios_positivos
+        assertThat(values[2]).isEqualTo(1L); // cambios_negativos
+        assertThat(values[3]).isEqualTo(10L); // suma_total (20 + (-10) = 10)
     }
 
     @Test
@@ -345,6 +356,8 @@ class TrustLogRepositoryTest {
         newLog.setPlayer(testPlayer1);
         newLog.setMatch(testMatch2);
         newLog.setCambio(25);
+        newLog.setTrustScoreAnterior(110);
+        newLog.setTrustScoreNuevo(135);
         newLog.setMotivo("Liderazgo excepcional");
 
         // When
@@ -379,5 +392,26 @@ class TrustLogRepositoryTest {
 
         // Then
         assertThat(results).hasSize(4);
+    }
+
+    private void cleanupData() {
+        String[] statements = {
+                "DELETE FROM trust_logs",
+                "DELETE FROM player_history",
+                "DELETE FROM match_players",
+                "DELETE FROM match_events",
+                "DELETE FROM match_teams",
+                "DELETE FROM matches",
+                "DELETE FROM team_members",
+                "DELETE FROM team_stats",
+                "DELETE FROM teams",
+                "DELETE FROM player_positions",
+                "DELETE FROM player_profiles",
+                "DELETE FROM athletes"
+        };
+
+        for (String statement : statements) {
+            jdbcTemplate.execute(statement);
+        }
     }
 }

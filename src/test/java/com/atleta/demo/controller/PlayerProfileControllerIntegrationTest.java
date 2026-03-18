@@ -3,6 +3,7 @@ package com.atleta.demo.controller;
 import com.atleta.demo.dto.request.*;
 import com.atleta.demo.entity.Athlete;
 import com.atleta.demo.entity.Position;
+import com.atleta.demo.enums.GenderType;
 import com.atleta.demo.repository.AthleteRepository;
 import com.atleta.demo.repository.PositionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -79,13 +80,12 @@ public class PlayerProfileControllerIntegrationTest {
         athlete.setEmail("test@example.com");
         athlete.setPasswordHash("hashedpassword");
         athlete.setNombre("Test Athlete");
+        athlete.setGenero(GenderType.MASCULINO);
         athlete = athleteRepository.save(athlete);
         testAthleteUuid = athlete.getAtletaUuid();
 
         // Create test position
-        Position position = new Position();
-        position.setNombre("Delantero");
-        position = positionRepository.save(position);
+        Position position = findOrCreatePosition("Delantero");
         testPositionId = position.getId();
     }
 
@@ -105,7 +105,7 @@ public class PlayerProfileControllerIntegrationTest {
                 .andExpect(jsonPath("$.atletaUuid").value(testAthleteUuid.toString()))
                 .andExpect(jsonPath("$.alias").value("TestPlayer"))
                 .andExpect(jsonPath("$.trustScore").value(100))
-                .andExpect(jsonPath("$.createdAt").exists());
+                .andExpect(jsonPath("$.genero").value(GenderType.MASCULINO.name()));
     }
 
     @Test
@@ -267,9 +267,7 @@ public class PlayerProfileControllerIntegrationTest {
                 .andExpect(status().isCreated());
 
         // Create another position
-        Position position2 = new Position();
-        position2.setNombre("Mediocampista");
-        position2 = positionRepository.save(position2);
+        Position position2 = findOrCreatePosition("Mediocampista");
 
         // When - Try to add second position with same priority
         AddPlayerPositionRequest secondPosition = new AddPlayerPositionRequest();
@@ -309,9 +307,7 @@ public class PlayerProfileControllerIntegrationTest {
                 .andExpect(status().isCreated());
 
         // Add second position
-        Position position2 = new Position();
-        position2.setNombre("Mediocampista");
-        position2 = positionRepository.save(position2);
+        Position position2 = findOrCreatePosition("Mediocampista");
 
         AddPlayerPositionRequest position2Request = new AddPlayerPositionRequest();
         position2Request.setPlayerUuid(testAthleteUuid);
@@ -432,6 +428,7 @@ public class PlayerProfileControllerIntegrationTest {
             athlete.setEmail("trust" + i + "@example.com");
             athlete.setPasswordHash("hashedpassword");
             athlete.setNombre("Trust Athlete " + i);
+            athlete.setGenero(GenderType.MASCULINO);
             athlete = athleteRepository.save(athlete);
 
             CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
@@ -460,7 +457,7 @@ public class PlayerProfileControllerIntegrationTest {
                 .param("minScore", "105")
                 .param("maxScore", "125"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2))); // Should find players with scores 110 and 120
+                .andExpect(jsonPath("$[*].alias", hasItems("TrustPlayer1", "TrustPlayer2"))); // Seed data can add more matching profiles
     }
 
     @Test
@@ -471,12 +468,14 @@ public class PlayerProfileControllerIntegrationTest {
         athlete1.setEmail("search1@example.com");
         athlete1.setPasswordHash("hashedpassword");
         athlete1.setNombre("John Smith");
+        athlete1.setGenero(GenderType.MASCULINO);
         athlete1 = athleteRepository.save(athlete1);
 
         Athlete athlete2 = new Athlete();
         athlete2.setEmail("search2@example.com");
         athlete2.setPasswordHash("hashedpassword");
         athlete2.setNombre("John Doe");
+        athlete2.setGenero(GenderType.MASCULINO);
         athlete2 = athleteRepository.save(athlete2);
 
         CreatePlayerProfileRequest profile1 = new CreatePlayerProfileRequest();
@@ -538,5 +537,14 @@ public class PlayerProfileControllerIntegrationTest {
         mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/positions", testAthleteUuid))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].xp").value(50));
+    }
+
+    private Position findOrCreatePosition(String name) {
+        return positionRepository.findByNombre(name)
+                .orElseGet(() -> {
+                    Position position = new Position();
+                    position.setNombre(name);
+                    return positionRepository.save(position);
+                });
     }
 }

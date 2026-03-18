@@ -60,14 +60,14 @@ public interface AthleteRepository extends JpaRepository<Athlete, UUID> {
      * Busca atletas que tienen perfil de jugador asociado
      * @return Lista de atletas con perfil de jugador
      */
-    @Query("SELECT a FROM Athlete a WHERE a.playerProfile IS NOT NULL")
+    @Query("SELECT DISTINCT a FROM Athlete a JOIN PlayerProfile pp ON pp.athlete = a")
     List<Athlete> findAthletesWithPlayerProfile();
 
     /**
      * Busca atletas que NO tienen perfil de jugador asociado
      * @return Lista de atletas sin perfil de jugador
      */
-    @Query("SELECT a FROM Athlete a WHERE a.playerProfile IS NULL")
+    @Query("SELECT a FROM Athlete a LEFT JOIN PlayerProfile pp ON pp.athlete = a WHERE pp IS NULL")
     List<Athlete> findAthletesWithoutPlayerProfile();
 
     /**

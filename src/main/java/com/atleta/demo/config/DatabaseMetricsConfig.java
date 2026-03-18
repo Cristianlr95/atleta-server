@@ -155,7 +155,7 @@ public class DatabaseMetricsConfig {
             // Por ahora retornamos el número de perfiles de jugador
             // TODO: Implementar cuando se agregue la tabla player_positions
             Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM player_profiles", 
+                "SELECT COUNT(DISTINCT player_id) FROM player_positions",
                 Integer.class);
             return count != null ? count.doubleValue() : 0.0;
         } catch (Exception e) {

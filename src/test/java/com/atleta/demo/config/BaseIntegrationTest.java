@@ -57,7 +57,7 @@ public abstract class BaseIntegrationTest {
         String[] tablesToClean = {
             "trust_logs", "player_history", "match_events", "match_players", 
             "match_teams", "matches", "team_members", "team_stats", "teams", 
-            "player_positions", "player_profiles", "athletes", "positions"
+            "player_positions", "player_profiles", "athletes"
         };
         
         for (String table : tablesToClean) {

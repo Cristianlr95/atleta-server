@@ -32,7 +32,7 @@ class PositionRepositoryTest {
     @BeforeEach
     void setUp() {
         // Limpiar datos existentes
-        positionRepository.deleteAll();
+        positionRepository.deleteAllInBatch();
 
         // Crear posiciones de prueba
         testPosition1 = new Position();
@@ -221,14 +221,8 @@ class PositionRepositoryTest {
         Position duplicatePosition = new Position();
         duplicatePosition.setNombre("Portero"); // Same name as testPosition1
 
-        // When/Then
-        // Note: This test depends on database constraints
-        // If unique constraint exists, this should throw an exception
-        // If not, it will save successfully
-        Position saved = positionRepository.save(duplicatePosition);
-        assertThat(saved.getId()).isNotNull();
-        
-        // Verify we now have 4 positions (including duplicate)
-        assertThat(positionRepository.count()).isEqualTo(4);
+        // When / Then
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> positionRepository.saveAndFlush(duplicatePosition)))
+                .isNotNull();
     }
 }

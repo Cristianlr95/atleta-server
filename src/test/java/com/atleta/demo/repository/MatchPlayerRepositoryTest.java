@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +45,9 @@ class MatchPlayerRepositoryTest {
     @Autowired
     private PositionRepository positionRepository;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     private PlayerProfile testPlayer1;
     private PlayerProfile testPlayer2;
     private PlayerProfile testPlayer3;
@@ -59,13 +63,7 @@ class MatchPlayerRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        // Limpiar datos existentes
-        matchPlayerRepository.deleteAll();
-        matchRepository.deleteAll();
-        teamRepository.deleteAll();
-        positionRepository.deleteAll();
-        playerProfileRepository.deleteAll();
-        athleteRepository.deleteAll();
+        cleanupData();
 
         // Crear atletas y perfiles
         Athlete athlete1 = new Athlete("player1@example.com", "hash1", "Player One");
@@ -85,13 +83,8 @@ class MatchPlayerRepositoryTest {
         testPlayer3 = playerProfileRepository.save(testPlayer3);
 
         // Crear posiciones
-        testPosition1 = new Position();
-        testPosition1.setNombre("Delantero");
-        testPosition2 = new Position();
-        testPosition2.setNombre("Mediocampista");
-        
-        testPosition1 = positionRepository.save(testPosition1);
-        testPosition2 = positionRepository.save(testPosition2);
+        testPosition1 = findOrCreatePosition("Delantero");
+        testPosition2 = findOrCreatePosition("Mediocampista");
 
         // Crear equipos
         testTeam1 = new Team("Team Alpha", testPlayer1);
@@ -365,12 +358,15 @@ class MatchPlayerRepositoryTest {
     void testGetConfirmationStatsByPlayer_ValidPlayer_ReturnsCorrectStats() {
         // When
         Object[] stats = matchPlayerRepository.getConfirmationStatsByPlayer(testPlayer1);
+        Object[] values = stats.length == 1 && stats[0] instanceof Object[] nestedStats
+                ? nestedStats
+                : stats;
 
         // Then
-        assertThat(stats).hasSize(3);
-        assertThat(stats[0]).isEqualTo(1L); // total_partidos
-        assertThat(stats[1]).isEqualTo(1L); // partidos_confirmados
-        assertThat(stats[2]).isEqualTo(1.0); // porcentaje_confirmacion
+        assertThat(values).hasSize(3);
+        assertThat(values[0]).isEqualTo(1L); // total_partidos
+        assertThat(values[1]).isEqualTo(1L); // partidos_confirmados
+        assertThat(values[2]).isEqualTo(1.0); // porcentaje_confirmacion
     }
 
     @Test
@@ -433,5 +429,35 @@ class MatchPlayerRepositoryTest {
         Optional<MatchPlayer> found = matchPlayerRepository.findById(testMatchPlayer2.getId());
         assertThat(found).isPresent();
         assertThat(found.get().isConfirmado()).isTrue();
+    }
+
+    private Position findOrCreatePosition(String name) {
+        return positionRepository.findByNombre(name)
+                .orElseGet(() -> {
+                    Position position = new Position();
+                    position.setNombre(name);
+                    return positionRepository.save(position);
+                });
+    }
+
+    private void cleanupData() {
+        String[] statements = {
+                "DELETE FROM match_players",
+                "DELETE FROM match_events",
+                "DELETE FROM player_history",
+                "DELETE FROM trust_logs",
+                "DELETE FROM match_teams",
+                "DELETE FROM matches",
+                "DELETE FROM team_members",
+                "DELETE FROM team_stats",
+                "DELETE FROM teams",
+                "DELETE FROM player_positions",
+                "DELETE FROM player_profiles",
+                "DELETE FROM athletes"
+        };
+
+        for (String statement : statements) {
+            jdbcTemplate.execute(statement);
+        }
     }
 }

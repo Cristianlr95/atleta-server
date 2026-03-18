@@ -98,7 +98,7 @@ public class AtletaDatabaseHealthIndicator implements HealthIndicator {
         for (String tableName : CRITICAL_TABLES) {
             try {
                 Integer count = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = ? AND table_schema = 'public'",
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE UPPER(table_name) = UPPER(?)",
                     Integer.class, tableName);
                 tableStatus.put(tableName, count != null && count > 0);
             } catch (Exception e) {

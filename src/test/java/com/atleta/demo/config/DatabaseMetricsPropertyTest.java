@@ -10,11 +10,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,6 +31,7 @@ import static org.mockito.Mockito.when;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
+@Import(TestConfig.class)
 class DatabaseMetricsPropertyTest {
 
     @Autowired
@@ -48,8 +51,12 @@ class DatabaseMetricsPropertyTest {
         // Mock database responses for metrics
         when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM player_profile WHERE trust_score > 0", Integer.class))
             .thenReturn(5);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM player_profiles WHERE trust_score > 0", Integer.class))
+            .thenReturn(5);
         when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM teams", Integer.class))
             .thenReturn(3);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM matches", Integer.class))
+            .thenReturn(7);
         when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM matches WHERE estado = ?", Integer.class, "CREADO"))
             .thenReturn(2);
         when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM matches WHERE estado = ?", Integer.class, "INICIADO"))
@@ -58,6 +65,31 @@ class DatabaseMetricsPropertyTest {
             .thenReturn(4);
         when(jdbcTemplate.queryForObject("SELECT COUNT(DISTINCT user_id) FROM player_positions", Integer.class))
             .thenReturn(8);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(DISTINCT player_id) FROM player_positions", Integer.class))
+            .thenReturn(8);
+        when(jdbcTemplate.queryForObject("SELECT 1", Integer.class))
+            .thenReturn(1);
+        for (String tableName : List.of("athletes", "player_profiles", "positions", "teams", "matches", "match_players", "player_history")) {
+            when(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE UPPER(table_name) = UPPER(?)",
+                Integer.class,
+                tableName
+            )).thenReturn(1);
+        }
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'flyway_schema_history'", Integer.class))
+            .thenReturn(1);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM flyway_schema_history", Integer.class))
+            .thenReturn(2);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = true", Integer.class))
+            .thenReturn(2);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success = false", Integer.class))
+            .thenReturn(0);
+        when(jdbcTemplate.queryForList("SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 1"))
+            .thenReturn(List.of(Map.of("version", "1", "description", "init", "success", true)));
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM athletes", Integer.class))
+            .thenReturn(5);
+        when(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM positions", Integer.class))
+            .thenReturn(6);
         
         // Wait a moment for metrics to be registered after application startup
         try {

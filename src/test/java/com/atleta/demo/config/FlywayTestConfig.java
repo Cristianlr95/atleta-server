@@ -1,6 +1,8 @@
 package com.atleta.demo.config;
 
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,6 +28,7 @@ public class FlywayTestConfig {
     @Bean
     @ServiceConnection
     @Profile("testcontainers")
+    @ConditionalOnProperty(name = "testcontainers.enabled", havingValue = "true")
     static PostgreSQLContainer<?> postgreSQLContainer() {
         return new PostgreSQLContainer<>("postgres:16")
                 .withDatabaseName("atleta_test")
@@ -37,6 +40,7 @@ public class FlywayTestConfig {
      * Proporciona un PasswordEncoder para tests.
      */
     @Bean
+    @ConditionalOnMissingBean(PasswordEncoder.class)
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }

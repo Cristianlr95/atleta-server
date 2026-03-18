@@ -19,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -301,6 +302,8 @@ class MatchServiceTest {
         when(matchTeamRepository.countByMatch(sampleMatch)).thenReturn(0L);
         when(matchTeamRepository.findLocalTeamByMatch(sampleMatch)).thenReturn(Optional.empty());
         when(matchTeamRepository.existsByMatchAndTeam(sampleMatch, sampleTeam)).thenReturn(false);
+        when(matchPlayerRepository.existsByMatchAndPlayer(sampleMatch, samplePlayer)).thenReturn(false);
+        when(positionRepository.findAllOrderByNombre()).thenReturn(List.of(samplePosition));
         when(matchTeamRepository.save(any(MatchTeam.class))).thenReturn(new MatchTeam());
         when(matchTeamRepository.findByMatch(sampleMatch)).thenReturn(java.util.Collections.emptyList());
         when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(java.util.Collections.emptyList());

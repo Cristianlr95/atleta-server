@@ -4,6 +4,7 @@ import com.atleta.demo.dto.request.CreateTeamRequest;
 import com.atleta.demo.dto.response.PlayerProfileResponse;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.dto.response.TeamResponse;
+import com.atleta.demo.dto.response.TeamStatsResponse;
 import com.atleta.demo.entity.PlayerPosition;
 import com.atleta.demo.entity.PlayerProfile;
 import com.atleta.demo.entity.Team;
@@ -84,7 +85,7 @@ public class TeamService {
         team.setCreador(creator);
         team.setLogoUrl(normalizeBlank(request.getLogoUrl()));
         team.setAnioFundacion(request.getAnioFundacion());
-        team = teamRepository.save(team);
+        team = teamRepository.saveAndFlush(team);
 
         TeamStats teamStats = new TeamStats(team);
         teamStatsRepository.save(teamStats);
@@ -233,7 +234,25 @@ public class TeamService {
             ));
         }
 
+        if (team.getStats() != null) {
+            response.setStats(toTeamStatsResponse(team.getStats()));
+        }
+
         return response;
+    }
+
+    private TeamStatsResponse toTeamStatsResponse(TeamStats stats) {
+        return new TeamStatsResponse(
+                stats.getId(),
+                stats.getPartidosJugados(),
+                stats.getPartidosGanados(),
+                stats.getPartidosEmpatados(),
+                stats.getPartidosPerdidos(),
+                stats.getGolesFavor(),
+                stats.getGolesContra(),
+                stats.getDiferenciaGoles(),
+                stats.getPuntos()
+        );
     }
 
     private String normalizeBlank(String value) {

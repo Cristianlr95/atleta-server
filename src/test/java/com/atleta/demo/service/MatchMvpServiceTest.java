@@ -118,8 +118,6 @@ class MatchMvpServiceTest {
         when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
         when(playerProfileRepository.findById(voter.getAtletaUuid())).thenReturn(Optional.of(voter));
         when(playerProfileRepository.findById(candidateB.getAtletaUuid())).thenReturn(Optional.of(candidateB));
-        when(matchPlayerRepository.isPlayerConfirmedForMatch(match, voter)).thenReturn(true);
-        when(matchPlayerRepository.isPlayerConfirmedForMatch(match, candidateB)).thenReturn(true);
         when(matchMvpVoteRepository.findByMatchAndVoter(match, voter)).thenReturn(Optional.of(existingVote));
         when(matchMvpVoteRepository.findByMatch(match)).thenReturn(List.of(existingVote));
         when(matchPlayerRepository.findConfirmedPlayersByMatch(match)).thenReturn(List.of(

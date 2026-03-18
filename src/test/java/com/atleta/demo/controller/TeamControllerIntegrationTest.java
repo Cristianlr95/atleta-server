@@ -2,9 +2,8 @@ package com.atleta.demo.controller;
 
 import com.atleta.demo.dto.request.CreateTeamRequest;
 import com.atleta.demo.entity.Athlete;
-import com.atleta.demo.entity.PlayerProfile;
+import com.atleta.demo.enums.GenderType;
 import com.atleta.demo.repository.AthleteRepository;
-import com.atleta.demo.repository.PlayerProfileRepository;
 import com.atleta.demo.config.TestConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
@@ -22,6 +22,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -54,10 +55,10 @@ public class TeamControllerIntegrationTest {
     private AthleteRepository athleteRepository;
 
     @Autowired
-    private PlayerProfileRepository playerProfileRepository;
+    private ObjectMapper objectMapper;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    private JdbcTemplate jdbcTemplate;
 
     private MockMvc mockMvc;
     private UUID testCreatorUuid;
@@ -81,16 +82,15 @@ public class TeamControllerIntegrationTest {
         athlete.setEmail("creator" + testTimestamp + "@example.com");
         athlete.setPasswordHash("hashedpassword");
         athlete.setNombre("Team Creator " + testTimestamp);
-        athlete = athleteRepository.save(athlete);
+        athlete.setGenero(GenderType.MASCULINO);
+        athlete = athleteRepository.saveAndFlush(athlete);
         testCreatorUuid = athlete.getAtletaUuid();
-
-        // Create PlayerProfile separately to avoid entity relationship issues
-        PlayerProfile profile = new PlayerProfile();
-        profile.setAtletaUuid(testCreatorUuid);
-        profile.setAthlete(athlete); // Set the athlete reference for @MapsId
-        profile.setAlias("Creator " + testTimestamp);
-        profile.setTrustScore(100);
-        playerProfileRepository.save(profile);
+        jdbcTemplate.update(
+                "INSERT INTO player_profiles (atleta_uuid, alias, trust_score, created_at, updated_at, version) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)",
+                testCreatorUuid,
+                "Creator " + testTimestamp,
+                100
+        );
     }
 
     @Test
@@ -118,8 +118,8 @@ public class TeamControllerIntegrationTest {
                 .andExpect(jsonPath("$.stats.partidosGanados").value(0))
                 .andExpect(jsonPath("$.stats.partidosPerdidos").value(0))
                 .andExpect(jsonPath("$.stats.partidosEmpatados").value(0))
-                .andExpect(jsonPath("$.stats.golesAFavor").value(0))
-                .andExpect(jsonPath("$.stats.golesEnContra").value(0));
+                .andExpect(jsonPath("$.stats.golesAnotados").value(0))
+                .andExpect(jsonPath("$.stats.golesRecibidos").value(0));
     }
 
     @Test
@@ -224,13 +224,13 @@ public class TeamControllerIntegrationTest {
                 .andExpect(jsonPath("$.logoUrl").value("https://example.com/complete-logo.png"))
                 .andExpect(jsonPath("$.anioFundacion").value(2020))
                 .andExpect(jsonPath("$.creador.atletaUuid").value(testCreatorUuid.toString()))
-                .andExpect(jsonPath("$.creador.alias").value("Creator"))
+                .andExpect(jsonPath("$.creador.alias", startsWith("Creator ")))
                 .andExpect(jsonPath("$.stats.partidosJugados").value(0))
                 .andExpect(jsonPath("$.stats.partidosGanados").value(0))
                 .andExpect(jsonPath("$.stats.partidosPerdidos").value(0))
                 .andExpect(jsonPath("$.stats.partidosEmpatados").value(0))
-                .andExpect(jsonPath("$.stats.golesAFavor").value(0))
-                .andExpect(jsonPath("$.stats.golesEnContra").value(0));
+                .andExpect(jsonPath("$.stats.golesAnotados").value(0))
+                .andExpect(jsonPath("$.stats.golesRecibidos").value(0));
     }
 
     @Test
@@ -300,9 +300,9 @@ public class TeamControllerIntegrationTest {
                 .andExpect(jsonPath("$.stats.partidosGanados").value(0))
                 .andExpect(jsonPath("$.stats.partidosPerdidos").value(0))
                 .andExpect(jsonPath("$.stats.partidosEmpatados").value(0))
-                .andExpect(jsonPath("$.stats.golesAFavor").value(0))
-                .andExpect(jsonPath("$.stats.golesEnContra").value(0))
-                .andExpect(jsonPath("$.stats.team").exists());
+                .andExpect(jsonPath("$.stats.golesAnotados").value(0))
+                .andExpect(jsonPath("$.stats.golesRecibidos").value(0))
+                .andExpect(jsonPath("$.stats.id").exists());
     }
 
     @Test

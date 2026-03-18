@@ -288,12 +288,15 @@ class TeamStatsRepositoryTest {
     void testGetGeneralStatistics_ReturnsCorrectAggregatedStats() {
         // When
         Object[] stats = teamStatsRepository.getGeneralStatistics();
+        Object[] values = stats.length == 1 && stats[0] instanceof Object[] nestedStats
+                ? nestedStats
+                : stats;
 
         // Then
-        assertThat(stats).hasSize(3);
-        assertThat(stats[0]).isEqualTo(18L); // total_partidos (10 + 8 + 0)
-        assertThat(stats[1]).isEqualTo(37L); // total_goles (25 + 12 + 0)
-        assertThat((Double) stats[2]).isEqualTo(12.333333333333334); // promedio_goles_por_partido
+        assertThat(values).hasSize(3);
+        assertThat(values[0]).isEqualTo(18L); // total_partidos (10 + 8 + 0)
+        assertThat(values[1]).isEqualTo(37L); // total_goles (25 + 12 + 0)
+        assertThat((Double) values[2]).isEqualTo(12.333333333333334); // promedio_goles_por_partido
     }
 
     @Test

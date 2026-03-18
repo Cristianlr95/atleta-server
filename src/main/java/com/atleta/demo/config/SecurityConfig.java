@@ -1,5 +1,6 @@
 package com.atleta.demo.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -28,6 +29,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @ConditionalOnMissingBean(PasswordEncoder.class)
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
@@ -35,18 +37,20 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         boolean isDev = environment.acceptsProfiles(Profiles.of("dev"));
+        boolean isTest = environment.acceptsProfiles(Profiles.of("test"));
 
         http
             .csrf(csrf -> csrf.disable())
             .cors(Customizer.withDefaults())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> {
-                if (isDev) {
+                if (isDev || isTest) {
                     auth
                         .requestMatchers(
                             "/swagger-ui/**",
                             "/v3/api-docs/**",
                             "/swagger-ui.html",
+                            "/actuator/**",
                             "/api/v1/**"
                         ).permitAll();
                 } else {

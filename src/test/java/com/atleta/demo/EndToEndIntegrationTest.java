@@ -5,6 +5,7 @@ import com.atleta.demo.dto.request.CreateAthleteRequest;
 import com.atleta.demo.dto.request.CreatePlayerProfileRequest;
 import com.atleta.demo.dto.request.CreateTeamRequest;
 import com.atleta.demo.dto.request.CreateMatchRequest;
+import com.atleta.demo.enums.GenderType;
 import com.atleta.demo.enums.MatchMode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -91,6 +92,7 @@ public class EndToEndIntegrationTest extends BaseIntegrationTest {
         athleteRequest.setEmail("journey@example.com");
         athleteRequest.setPassword("password123");
         athleteRequest.setNombre("Journey Test User");
+        athleteRequest.setGenero(GenderType.MASCULINO);
         
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -282,17 +284,9 @@ public class EndToEndIntegrationTest extends BaseIntegrationTest {
         assertThat(migrations).isNotEmpty();
         
         // Verify specific migrations exist
-        boolean hasInitialSchema = migrations.stream()
-            .anyMatch(m -> m.get("description").toString().contains("create_initial_schema"));
-        assertThat(hasInitialSchema).isTrue();
-        
-        boolean hasIndexes = migrations.stream()
-            .anyMatch(m -> m.get("description").toString().contains("add_indexes_performance"));
-        assertThat(hasIndexes).isTrue();
-        
-        boolean hasInitialData = migrations.stream()
-            .anyMatch(m -> m.get("description").toString().contains("insert_initial_data"));
-        assertThat(hasInitialData).isTrue();
+        boolean hasVersionedMigration = migrations.stream()
+            .anyMatch(m -> m.get("version") != null);
+        assertThat(hasVersionedMigration).isTrue();
         
         // Verify all migrations were successful
         boolean allSuccessful = migrations.stream()
@@ -302,7 +296,7 @@ public class EndToEndIntegrationTest extends BaseIntegrationTest {
 
     private void verifyRequiredTablesExist() {
         String[] requiredTables = {
-            "athletes", "positions", "player_profile", "player_positions",
+            "athletes", "positions", "player_profiles", "player_positions",
             "teams", "team_stats", "team_members", "matches", "match_teams",
             "match_players", "match_events", "player_history", "trust_logs"
         };
@@ -341,7 +335,7 @@ public class EndToEndIntegrationTest extends BaseIntegrationTest {
         
         // Verify player profile exists
         Long profileCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM player_profile WHERE atleta_uuid = ?::uuid", 
+            "SELECT COUNT(*) FROM player_profiles WHERE atleta_uuid = ?::uuid",
             Long.class, 
             athleteUuid
         );

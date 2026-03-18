@@ -49,16 +49,23 @@ public class LoggingConfigurationPropertyTest {
     @Property
     @Report(Reporting.GENERATED)
     void mdcContextShouldBeIncludedInLogs(@ForAll("validMdcContext") Map<String, String> mdcContext) {
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        ListAppender<ILoggingEvent> localAppender = new ListAppender<>();
+        localAppender.setContext(loggerContext);
+        localAppender.start();
+        ch.qos.logback.classic.Logger testLogger = loggerContext.getLogger(LoggingConfigurationPropertyTest.class);
+        testLogger.addAppender(localAppender);
+
         // Given: Un contexto MDC con información de usuario y transacción
         mdcContext.forEach(MDC::put);
         
         try {
             // When: Se registra un log
             String testMessage = "Test message for MDC context validation";
-            logger.info(testMessage);
+            logger.warn(testMessage);
             
             // Then: El log debe contener la información del contexto MDC
-            List<ILoggingEvent> logEvents = listAppender.list;
+            List<ILoggingEvent> logEvents = localAppender.list;
             assertThat(logEvents).isNotEmpty();
             
             ILoggingEvent lastEvent = logEvents.get(logEvents.size() - 1);
@@ -79,7 +86,8 @@ public class LoggingConfigurationPropertyTest {
         } finally {
             // Limpiar MDC después del test
             MDC.clear();
-            listAppender.list.clear();
+            testLogger.detachAppender(localAppender);
+            localAppender.stop();
         }
     }
 

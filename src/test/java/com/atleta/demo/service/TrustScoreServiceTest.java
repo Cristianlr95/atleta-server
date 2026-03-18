@@ -8,9 +8,9 @@ import com.atleta.demo.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.ArgumentMatchers;
 
 import java.util.Arrays;
 import java.util.List;
@@ -37,7 +37,6 @@ class TrustScoreServiceTest {
     @Mock
     private MatchRepository matchRepository;
 
-    @InjectMocks
     private TrustScoreService trustScoreService;
 
     private UpdateTrustScoreRequest validRequest;
@@ -48,6 +47,12 @@ class TrustScoreServiceTest {
 
     @BeforeEach
     void setUp() {
+        trustScoreService = new TrustScoreService(
+                trustLogRepository,
+                playerProfileRepository,
+                matchRepository
+        );
+
         UUID playerId = UUID.randomUUID();
         UUID changedById = UUID.randomUUID();
         
@@ -178,7 +183,7 @@ class TrustScoreServiceTest {
         assertEquals(sampleTrustLog.getCambio(), response.getCambio());
 
         verify(playerProfileRepository).findById(validRequest.getPlayerUuid());
-        verify(playerProfileRepository, never()).findById(any(UUID.class));
+        verify(playerProfileRepository, never()).findById(ArgumentMatchers.isNull());
         verify(matchRepository).findById(validRequest.getMatchId());
         verify(trustLogRepository).save(any(TrustLog.class));
         verify(playerProfileRepository).save(samplePlayer);

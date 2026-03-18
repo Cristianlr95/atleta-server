@@ -9,7 +9,6 @@ import com.atleta.demo.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -39,7 +38,15 @@ class TeamServiceTest {
     @Mock
     private PlayerProfileRepository playerProfileRepository;
 
-    @InjectMocks
+    @Mock
+    private PlayerPositionRepository playerPositionRepository;
+
+    @Mock
+    private TeamInviteRepository teamInviteRepository;
+
+    @Mock
+    private MatchInviteRepository matchInviteRepository;
+
     private TeamService teamService;
 
     private CreateTeamRequest validCreateRequest;
@@ -50,6 +57,16 @@ class TeamServiceTest {
 
     @BeforeEach
     void setUp() {
+        teamService = new TeamService(
+                teamRepository,
+                playerProfileRepository,
+                teamMemberRepository,
+                teamStatsRepository,
+                playerPositionRepository,
+                teamInviteRepository,
+                matchInviteRepository
+        );
+
         UUID playerId = UUID.randomUUID();
         
         samplePlayer = new PlayerProfile();
@@ -85,7 +102,7 @@ class TeamServiceTest {
         // Arrange
         when(teamRepository.existsByNombre(validCreateRequest.getNombre())).thenReturn(false);
         when(playerProfileRepository.findById(validCreateRequest.getCreadorUuid())).thenReturn(Optional.of(samplePlayer));
-        when(teamRepository.save(any(Team.class))).thenReturn(sampleTeam);
+        when(teamRepository.saveAndFlush(any(Team.class))).thenReturn(sampleTeam);
         when(teamStatsRepository.save(any(TeamStats.class))).thenReturn(sampleStats);
         when(teamMemberRepository.save(any(TeamMember.class))).thenReturn(new TeamMember());
 
@@ -100,7 +117,7 @@ class TeamServiceTest {
 
         verify(teamRepository).existsByNombre(validCreateRequest.getNombre());
         verify(playerProfileRepository).findById(validCreateRequest.getCreadorUuid());
-        verify(teamRepository).save(any(Team.class));
+        verify(teamRepository).saveAndFlush(any(Team.class));
         verify(teamStatsRepository).save(any(TeamStats.class));
         verify(teamMemberRepository).save(any(TeamMember.class));
     }
@@ -116,10 +133,10 @@ class TeamServiceTest {
                 () -> teamService.createTeam(validCreateRequest)
         );
 
-        assertEquals("Ya existe un equipo con el nombre: " + validCreateRequest.getNombre(), exception.getMessage());
+        assertEquals("Ya existe un equipo con ese nombre", exception.getMessage());
         verify(teamRepository).existsByNombre(validCreateRequest.getNombre());
         verify(playerProfileRepository, never()).findById(any());
-        verify(teamRepository, never()).save(any(Team.class));
+        verify(teamRepository, never()).saveAndFlush(any(Team.class));
     }
 
     @Test
@@ -137,7 +154,7 @@ class TeamServiceTest {
         assertEquals("Creador no encontrado: " + validCreateRequest.getCreadorUuid(), exception.getMessage());
         verify(teamRepository).existsByNombre(validCreateRequest.getNombre());
         verify(playerProfileRepository).findById(validCreateRequest.getCreadorUuid());
-        verify(teamRepository, never()).save(any(Team.class));
+        verify(teamRepository, never()).saveAndFlush(any(Team.class));
     }
 
     // TODO: Uncomment these tests when the corresponding methods are implemented in TeamService

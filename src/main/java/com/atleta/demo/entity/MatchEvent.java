@@ -106,6 +106,7 @@ public class MatchEvent extends BaseEntity {
         this.player = player;
         this.team = team;
         this.registeredBy = registeredBy;
+        this.registeredAt = LocalDateTime.now();
         this.confirmedByHome = false;
         this.confirmedByAway = false;
     }
@@ -118,6 +119,7 @@ public class MatchEvent extends BaseEntity {
         this.team = team;
         this.assistPlayer = assistPlayer;
         this.registeredBy = registeredBy;
+        this.registeredAt = LocalDateTime.now();
         this.confirmedByHome = false;
         this.confirmedByAway = false;
     }

@@ -30,6 +30,9 @@ class PlayerProfileRepositoryTest {
     @Autowired
     private AthleteRepository athleteRepository;
 
+    @Autowired
+    private TeamRepository teamRepository;
+
     private Athlete testAthlete1;
     private Athlete testAthlete2;
     private Athlete testAthlete3;
@@ -40,6 +43,7 @@ class PlayerProfileRepositoryTest {
     @BeforeEach
     void setUp() {
         // Limpiar datos existentes
+        teamRepository.deleteAll();
         playerProfileRepository.deleteAll();
         athleteRepository.deleteAll();
         
@@ -214,12 +218,15 @@ class PlayerProfileRepositoryTest {
     void testGetTrustScoreStatistics_ReturnsCorrectStatistics() {
         // When
         Object[] stats = playerProfileRepository.getTrustScoreStatistics();
+        Object[] values = stats.length == 1 && stats[0] instanceof Object[] nestedStats
+                ? nestedStats
+                : stats;
 
         // Then
-        assertThat(stats).hasSize(3);
-        assertThat(stats[0]).isEqualTo(80); // MIN
-        assertThat(stats[1]).isEqualTo(150); // MAX
-        assertThat((Double) stats[2]).isEqualTo(116.66666666666667); // AVG
+        assertThat(values).hasSize(3);
+        assertThat(values[0]).isEqualTo(80); // MIN
+        assertThat(values[1]).isEqualTo(150); // MAX
+        assertThat((Double) values[2]).isEqualTo(116.66666666666667); // AVG
     }
 
     @Test
