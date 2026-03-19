@@ -1,49 +1,58 @@
 package com.atleta.demo.service;
 
+import com.atleta.demo.config.JwtProperties;
 import com.atleta.demo.entity.Athlete;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
-import java.util.Base64;
+import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Servicio simple para generar tokens JWT.
- * En producción, usar una librería como jjwt o spring-security-oauth2-jose.
- */
 @Service
 public class JwtService {
 
-    /**
-     * Genera un token JWT simple para el atleta.
-     * NOTA: Esta es una implementación básica para desarrollo.
-     * En producción, usar una librería JWT completa con firma y validación.
-     * 
-     * @param athlete Atleta autenticado
-     * @return Token JWT
-     */
-    public String generateToken(Athlete athlete) {
-        // Implementación simple: Base64(atletaUuid:email:authProvider)
-        // En producción, usar jjwt o spring-security-oauth2-jose
-        String payload = athlete.getAtletaUuid() + ":" + 
-                        athlete.getEmail() + ":" + 
-                        athlete.getAuthProvider();
-        
-        return Base64.getEncoder().encodeToString(payload.getBytes());
+    private final JwtEncoder jwtEncoder;
+    private final JwtDecoder jwtDecoder;
+    private final JwtProperties jwtProperties;
+
+    public JwtService(JwtEncoder jwtEncoder, JwtDecoder jwtDecoder, JwtProperties jwtProperties) {
+        this.jwtEncoder = jwtEncoder;
+        this.jwtDecoder = jwtDecoder;
+        this.jwtProperties = jwtProperties;
     }
 
-    /**
-     * Valida y decodifica un token JWT.
-     * 
-     * @param token Token JWT
-     * @return UUID del atleta
-     */
+    public String generateToken(Athlete athlete) {
+        Instant issuedAt = Instant.now();
+        Instant expiresAt = issuedAt.plus(jwtProperties.getExpiration());
+
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+            .issuer(jwtProperties.getIssuer())
+            .issuedAt(issuedAt)
+            .expiresAt(expiresAt)
+            .subject(athlete.getAtletaUuid().toString())
+            .claim("uuid", athlete.getAtletaUuid().toString())
+            .claim("email", athlete.getEmail())
+            .claim("auth_provider", athlete.getAuthProvider())
+            .build();
+
+        return jwtEncoder.encode(JwtEncoderParameters.from(
+            JwsHeader.with(MacAlgorithm.HS256).build(),
+            claims
+        )).getTokenValue();
+    }
+
     public UUID validateToken(String token) {
         try {
-            String decoded = new String(Base64.getDecoder().decode(token));
-            String[] parts = decoded.split(":");
-            return UUID.fromString(parts[0]);
+            Jwt jwt = jwtDecoder.decode(token);
+            return UUID.fromString(jwt.getSubject());
         } catch (Exception e) {
-            throw new IllegalArgumentException("Token inválido");
+            throw new IllegalArgumentException("Token invalido", e);
         }
     }
 }

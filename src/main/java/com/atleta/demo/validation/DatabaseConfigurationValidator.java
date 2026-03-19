@@ -4,15 +4,17 @@ import org.flywaydb.core.Flyway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 @Component
 public class DatabaseConfigurationValidator {
@@ -28,16 +30,11 @@ public class DatabaseConfigurationValidator {
     @Autowired
     private Flyway flyway;
 
-    /**
-     * Required variables per environment.
-     * DEV: none (uses application.yml)
-     * PROD: strict
-     */
     private static final Map<String, List<String>> REQUIRED_ENV_VARS = Map.of(
-        "dev", List.of(), // 👈 NO exigir en dev
+        "dev", List.of(),
         "test", List.of(),
-        "staging", List.of("DB_HOST", "DB_NAME", "DB_USERNAME", "DB_PASSWORD"),
-        "prod", List.of("DB_HOST", "DB_PORT", "DB_NAME", "DB_USERNAME", "DB_PASSWORD", "OAUTH2_ISSUER_URI")
+        "staging", List.of("DB_HOST", "DB_NAME", "DB_USERNAME", "DB_PASSWORD", "JWT_SECRET"),
+        "prod", List.of("DB_HOST", "DB_PORT", "DB_NAME", "DB_USERNAME", "DB_PASSWORD", "JWT_SECRET")
     );
 
     private static final Map<String, FlywayValidationRules> FLYWAY_RULES = Map.of(
@@ -106,7 +103,7 @@ public class DatabaseConfigurationValidator {
             case "DB_USERNAME" -> environment.getProperty("spring.datasource.username");
             case "DB_PASSWORD" -> environment.getProperty("spring.datasource.password");
             case "DB_HOST" -> environment.getProperty("spring.datasource.url");
-            case "OAUTH2_ISSUER_URI" -> environment.getProperty("spring.security.oauth2.resourceserver.jwt.issuer-uri");
+            case "JWT_SECRET" -> environment.getProperty("security.jwt.secret");
             default -> null;
         };
     }
