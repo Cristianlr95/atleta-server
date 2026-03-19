@@ -68,9 +68,11 @@ public class PlayerProfileService {
         Athlete athlete = athleteRepository.findById(request.getAtletaUuid())
                 .orElseThrow(() -> new IllegalArgumentException("No se encontró atleta con UUID: " + request.getAtletaUuid()));
 
+        // La fuente de verdad del genero vive en Athlete. Solo usamos el request
+        // como compatibilidad para atletas legacy que aun no tengan ese dato.
         if (athlete.getGenero() == null) {
             if (request.getGenero() == null) {
-                throw new IllegalArgumentException("Debe definir genero para crear el perfil de jugador");
+                throw new IllegalArgumentException("Debe definir genero al crear el atleta antes de configurar el jugador");
             }
             athlete.setGenero(request.getGenero());
             athleteRepository.save(athlete);

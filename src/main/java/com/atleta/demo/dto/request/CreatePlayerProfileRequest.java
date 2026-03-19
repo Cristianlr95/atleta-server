@@ -22,6 +22,10 @@ public class CreatePlayerProfileRequest {
     @Size(max = 50, message = "El alias no puede exceder 50 caracteres")
     private String alias;
 
+    /**
+     * Campo heredado para compatibilidad hacia atras.
+     * La fuente de verdad actual del genero vive en Athlete.
+     */
     private GenderType genero;
 
     // Constructors
