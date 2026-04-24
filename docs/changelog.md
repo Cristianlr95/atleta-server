@@ -1,55 +1,51 @@
 # Changelog de Documentacion Viva
 
-## Estado inicial documentado - 2026-04-23
+## 2026-04-23 - Preparacion de despliegue backend
 
-### Backend detectado
+### Objetivo cubierto
 
-- Monolito Spring Boot 3.3.2 sobre Java 21
-- Persistencia principal en PostgreSQL con Flyway
-- Seguridad con BCrypt + Google OAuth + JWT HS256
-- Modulos activos: atletas, perfiles, posiciones, equipos, partidos, ratings, social, canchas, observabilidad
+- Se dejo el backend listo para correr en `dev` y para desplegarse en `staging`/`prod` con configuracion por ambiente, Docker y documentacion operativa.
 
-### Modulos principales
+### Archivos tocados
 
-- Identidad y autenticacion
-- Perfil de jugador y trust score
-- Equipos y membresias
-- Partidos y cierre con XP/rating
-- MVP y SSE
-- Ratings, OVR y leaderboard
-- Amistades, invitaciones y notificaciones
-- Catalogo de canchas y posiciones
-
-### Hallazgos importantes
-
-- `ratings/**` esta publico en `SecurityConfig`, incluyendo escrituras.
-- La autorizacion por identidad es debil: varios endpoints reciben UUIDs arbitrarios sin verificar el `sub` del JWT.
-- `MatchService` ya soporta auto-start y auto-invalidacion, pero solo se ejecutan durante lecturas.
-- Hay duplicidad entre `PlayerProfileService` y `TrustScoreService`.
-- El pipeline CI existe, pero deploy sigue siendo placeholder.
-- `docker-compose.ci.yml` no es suficiente porque falta `Dockerfile`.
-- Parte de la documentacion heredada no refleja el estado real del codigo.
-
-### Deuda tecnica inicial
-
-- God services en `MatchService` y `RatingService`
-- Autorizacion de dominio ausente
-- Credenciales locales hardcodeadas en `application-dev.yaml`
-- Inconsistencias en semillas/catalogos de posiciones
-- Falta scheduler para automatizaciones temporales
-
-### Riesgos principales
-
-- Riesgo alto de mutaciones no autorizadas
-- Riesgo alto por endpoints de rating expuestos sin auth
-- Riesgo medio por manejo de archivos subidos
-- Riesgo medio por despliegue no automatizado realmente
-
-### Archivos creados en esta pasada
-
-- `docs/memory.md`
-- `docs/funcionalidades.md`
-- `docs/architecture.md`
+- `.env.example`
+- `.gitignore`
+- `Dockerfile`
+- `.dockerignore`
+- `docker-compose.yml`
 - `docs/deployment.md`
-- `docs/feedback-system.md`
 - `docs/changelog.md`
+- `src/main/resources/application.yaml`
+- `src/main/resources/application-dev.yaml`
+- `src/main/resources/application-staging.yaml`
+- `src/main/resources/application-prod.yaml`
+- `src/main/java/com/atleta/demo/config/SecurityConfig.java`
+- `src/main/java/com/atleta/demo/config/AppCorsProperties.java`
+- `src/main/java/com/atleta/demo/validation/DatabaseConfigurationValidator.java`
+- `src/main/java/com/atleta/demo/exception/DatabaseExceptionHandler.java`
+- `src/main/java/com/atleta/demo/exception/RatingExceptionHandler.java`
+- `src/main/java/com/atleta/demo/exception/ApiExceptionHandler.java`
+
+### Cambios principales
+
+- `dev` pasa a ser perfil por defecto, no perfil forzado.
+- Se habilita carga opcional de `/.env`.
+- PostgreSQL queda parametrizado por variables en `dev`, `staging` y `prod`.
+- CORS sale de Java hardcodeado y pasa a propiedades configurables.
+- En `staging` y `prod` se exigen origenes CORS explicitos.
+- `ratings/**` deja de estar publico en `SecurityConfig`.
+- Se endurece el manejo de errores para no filtrar detalles sensibles fuera de `dev`/`test`.
+- Se agregan probes de salud y readiness.
+- Se agrega contenedorizacion base para build y ejecucion.
+
+### Riesgos detectados
+
+- Persisten riesgos de autorizacion de negocio en endpoints que aceptan UUIDs arbitrarios.
+- El `.env` local existente usa una password debil; no esta versionado, pero conviene rotarlo.
+- Las migraciones siguen acopladas al arranque de la app; en alta concurrencia es mejor separarlas en un job dedicado.
+- Actuator ofrece observabilidad basica, pero aun falta alertado y trazabilidad centralizada.
+- No se audito en esta pasada cada endpoint para ownership checks entre `JWT.sub` y recursos mutables.
+
+### Siguiente paso recomendado
+
+- Implementar una capa de autorizacion por dominio para comparar `JWT.sub` con el recurso mutado y definir un job de migracion separado para releases productivos.

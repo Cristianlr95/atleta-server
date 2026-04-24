@@ -1,8 +1,10 @@
 spring:
   application:
     name: server-atleta
+  config:
+    import: optional:file:.env[.properties]
   profiles:
-    active: dev
+    default: dev
 
 # Common configuration for all profiles
 management:
@@ -12,6 +14,8 @@ management:
         include: health,info,metrics,flyway,prometheus
   endpoint:
     health:
+      probes:
+        enabled: true
       show-details: when-authorized
       show-components: always
   prometheus:
@@ -27,11 +31,24 @@ management:
   health:
     db:
       enabled: true
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
 
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{userId}] [%X{transactionId}] %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
 features:
   mvp-xp-bonus-enabled: ${MVP_XP_BONUS_ENABLED:true}
+
+app:
+  cors:
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:8100,http://localhost:4200,http://localhost:4201,http://localhost:3000}
+    allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,PATCH,DELETE,OPTIONS}
+    allowed-headers: ${CORS_ALLOWED_HEADERS:Authorization,Content-Type,Accept,Origin,X-Requested-With}
+    exposed-headers: ${CORS_EXPOSED_HEADERS:Authorization}
+    allow-credentials: ${CORS_ALLOW_CREDENTIALS:true}
+    max-age: ${CORS_MAX_AGE:3600}

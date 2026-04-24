@@ -33,19 +33,24 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
-import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, AppCorsProperties.class})
 public class SecurityConfig {
 
     private final Environment environment;
     private final JwtProperties jwtProperties;
+    private final AppCorsProperties corsProperties;
 
-    public SecurityConfig(Environment environment, JwtProperties jwtProperties) {
+    public SecurityConfig(
+        Environment environment,
+        JwtProperties jwtProperties,
+        AppCorsProperties corsProperties
+    ) {
         this.environment = environment;
         this.jwtProperties = jwtProperties;
+        this.corsProperties = corsProperties;
     }
 
     @Bean
@@ -80,8 +85,8 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/athletes/register").permitAll()
                     .requestMatchers("/api/v1/athletes/login").permitAll()
                     .requestMatchers("/api/v1/athletes/auth/google").permitAll()
-                    .requestMatchers("/api/v1/ratings/**").permitAll()
                     .requestMatchers("/actuator/health").permitAll()
+                    .requestMatchers("/actuator/health/**").permitAll()
                     .anyRequest().authenticated();
             })
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
@@ -124,15 +129,12 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of(
-            "http://localhost:8100",
-            "http://localhost:4200",
-            "http://localhost:3000"
-        ));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setExposedHeaders(List.of("Authorization"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowedOriginPatterns(corsProperties.getAllowedOriginPatterns());
+        configuration.setAllowedMethods(corsProperties.getAllowedMethods());
+        configuration.setAllowedHeaders(corsProperties.getAllowedHeaders());
+        configuration.setExposedHeaders(corsProperties.getExposedHeaders());
+        configuration.setAllowCredentials(corsProperties.isAllowCredentials());
+        configuration.setMaxAge(corsProperties.getMaxAge());
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

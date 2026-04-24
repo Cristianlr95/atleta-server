@@ -1,7 +1,7 @@
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST:staging-db.atleta.com}:${DB_PORT:5432}/${DB_NAME:atleta_staging}
-    username: ${DB_USERNAME:atleta_staging}
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}?ApplicationName=Atleta-Staging
+    username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
@@ -27,9 +27,9 @@ spring:
           timeout: 60000
 
   flyway:
-    enabled: true
+    enabled: ${FLYWAY_ENABLED:true}
     locations: classpath:db/migration
-    baseline-on-migrate: false
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
     validate-on-migrate: true
     clean-disabled: true
     schemas: public
@@ -71,3 +71,8 @@ management:
 
 server:
   port: ${SERVER_PORT:8080}
+  forward-headers-strategy: framework
+
+app:
+  cors:
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS}
