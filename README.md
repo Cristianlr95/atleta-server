@@ -1,450 +1,163 @@
-# Sistema Atleta - Plataforma de Gestión Deportiva
+# Atleta Server
 
-Sistema completo de gestión de atletas, equipos, partidos y calificaciones con autenticación dual (Local y Google OAuth2).
+## Descripcion
+Backend REST para Atleta, una plataforma de gestion deportiva para futbol amateur. El sistema administra atletas, perfiles de jugador, posiciones, equipos, partidos, invitaciones, ratings, OVR, leaderboard, trust score y eventos asociados a la competencia.
 
-## 🎯 Características Principales
+## Problema que resuelve
+Los grupos de futbol amateur suelen organizarse por chats, planillas y acuerdos manuales. Eso dificulta medir rendimiento, confirmar asistencia, balancear equipos, mantener historial y dar trazabilidad a partidos. Atleta Server centraliza la logica de negocio en una API con persistencia, seguridad, ratings y contratos documentados para frontend.
 
-### Autenticación
-- ✅ Registro y login con Email/Password
-- ✅ Autenticación con Google OAuth2
-- ✅ Vinculación automática de cuentas
-- ✅ Tokens JWT para sesiones
+## Funcionalidades principales
+- Registro y login local con JWT.
+- Login/registro con Google OAuth desde token de identidad.
+- Perfil de jugador con alias, posiciones, trust score y ratings.
+- Gestion de equipos, miembros e invitaciones.
+- Creacion y administracion de partidos 5v5, 6v6 y 7v7.
+- Confirmacion de jugadores, asignacion de equipos, eventos, cierre de partido y MVP.
+- Sistema de ratings por rol, OVR, historial y leaderboard.
+- Catalogo de posiciones y canchas.
+- Notificaciones e invitaciones sociales.
+- Migraciones Flyway, OpenAPI, Actuator y metricas.
 
-### Gestión de Jugadores
-- ✅ Perfiles de jugador con alias único
-- ✅ Sistema de Trust Score (0-100)
-- ✅ Múltiples posiciones por jugador
-- ✅ Historial completo de participación
+## Stack tecnico
+- Java 21
+- Spring Boot 3.3
+- Spring Web, Spring Security, OAuth2 Client/Resource Server
+- Spring Data JPA y Bean Validation
+- PostgreSQL 16
+- Flyway 10
+- OpenAPI/Swagger con `springdoc-openapi`
+- Micrometer, Prometheus y Actuator
+- Maven Wrapper
+- JUnit 5, Spring Security Test, Testcontainers, H2, jqwik y JaCoCo
+- Docker y Docker Compose
 
-### Sistema de Calificaciones
-- ✅ Calificaciones por rol (6 roles diferentes)
-- ✅ Cálculo automático basado en rendimiento
-- ✅ Hexágono de estadísticas estilo Pokémon
-- ✅ OVR (Overall Rating) estilo FIFA
-- ✅ Historial completo de calificaciones
+## Arquitectura / Estructura
+El backend es un monolito modular por capas. La estructura efectiva separa contratos HTTP, servicios de negocio, repositorios, entidades, DTOs, configuracion y validaciones.
 
-### Gestión de Partidos
-- ✅ Creación de partidos (5v5, 6v6, 7v7)
-- ✅ Sistema de confirmación de jugadores
-- ✅ Registro de eventos (goles, asistencias)
-- ✅ Actualización automática de calificaciones
-
-## 🚀 Inicio Rápido
-
-### Requisitos Previos
-
-- Java 21+
-- PostgreSQL 15+
-- Maven 3.8+
-- Cuenta de Google Cloud (para OAuth2)
-
-### 1. Clonar y Configurar
-
-```bash
-# Clonar repositorio
-git clone <repository-url>
-cd server-atleta
-
-# Crear base de datos
-createdb atleta_dev
+```text
+atleta-server/
+  src/main/java/com/atleta/demo/
+    controller/        # endpoints REST
+    service/           # reglas de negocio y orquestacion
+    repository/        # acceso a datos JPA
+    entity/            # modelo persistente
+    dto/
+      request/         # contratos de entrada
+      response/        # contratos de salida
+    enums/             # estados y tipos de dominio
+    config/            # seguridad, OpenAPI, metricas
+    validation/        # validadores de configuracion
+    exception/         # manejo centralizado de errores
+  src/main/resources/
+    db/migration/      # migraciones Flyway
+    db/test-data/      # datos para testing
+    application*.yaml
+  api/                 # documentacion de API por dominio
+  docs/                # documentacion tecnica y funcional
+  scripts/             # backup y restore de base de datos
 ```
 
-### 2. Configurar Variables de Entorno
+## Instalacion y ejecucion local
+Requisitos:
+
+- Java 21
+- Docker Desktop o PostgreSQL local
+- Maven Wrapper incluido
+
+### Opcion recomendada con Docker Compose
 
 ```bash
-# Copiar archivo de ejemplo
 cp .env.example .env
-
-# Editar .env con tus credenciales
-nano .env
+docker compose up --build
 ```
 
-Variables requeridas:
+Si no existe `.env.example` en tu copia, crea `.env` con al menos:
+
 ```env
-# Base de datos
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=atleta_dev
 DB_USERNAME=postgres
-DB_PASSWORD=tu_password
-
-# Google OAuth2 (opcional pero recomendado)
-GOOGLE_CLIENT_ID=tu-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=tu-client-secret
+DB_PASSWORD=postgres
+SPRING_PROFILES_ACTIVE=dev
 ```
 
-### 3. Ejecutar la Aplicación
+La API queda disponible en `http://localhost:8080`.
+
+### Ejecucion local contra PostgreSQL
 
 ```bash
-# Compilar y ejecutar
-mvn clean install
-mvn spring-boot:run
+# Windows PowerShell
+$env:DB_HOST="localhost"
+$env:DB_PORT="5432"
+$env:DB_NAME="atleta_dev"
+$env:DB_USERNAME="postgres"
+$env:DB_PASSWORD="postgres"
+.\mvnw.cmd spring-boot:run
+```
 
-# O con el wrapper
+```bash
+# Linux/macOS
+export DB_HOST=localhost
+export DB_PORT=5432
+export DB_NAME=atleta_dev
+export DB_USERNAME=postgres
+export DB_PASSWORD=postgres
 ./mvnw spring-boot:run
 ```
 
-La aplicación estará disponible en: `http://localhost:8080`
-
-### 4. Verificar Instalación
+Comandos utiles:
 
 ```bash
-# Health check
-curl http://localhost:8080/actuator/health
-
-# Swagger UI (solo desarrollo)
-open http://localhost:8080/swagger-ui.html
+./mvnw test
+./mvnw verify
 ```
 
-## 📚 Documentación
+En Windows:
 
-### Para Desarrolladores Frontend
-- **[api/](api/)** ⭐ **NUEVO** - Documentación dividida por secciones
-  - [00-getting-started.md](api/00-getting-started.md) - Inicio rápido
-  - [01-autenticacion.md](api/01-autenticacion.md) - Registro y login
-  - [02-perfiles-jugadores.md](api/02-perfiles-jugadores.md) - Perfiles y posiciones
-  - [03-equipos.md](api/03-equipos.md) - Gestión de equipos
-  - [04-partidos.md](api/04-partidos.md) - Crear y gestionar partidos
-  - [05-calificaciones.md](api/05-calificaciones.md) - Ratings y OVR
-  - [06-utilidades.md](api/06-utilidades.md) - Helpers y ejemplos
-- **[API-REFERENCE-FRONTEND.md](API-REFERENCE-FRONTEND.md)** - Referencia completa en un solo archivo
-- **[GUIA-API-FRONTEND.md](GUIA-API-FRONTEND.md)** - Guía rápida
-
-### Configuración OAuth2
-- **[GOOGLE-OAUTH-SETUP.md](GOOGLE-OAUTH-SETUP.md)** - Configuración de Google Cloud Console
-
-### Sistema de Calificaciones
-- **[docs/analisis-sistema-calificaciones-y-flujos.md](docs/analisis-sistema-calificaciones-y-flujos.md)** - Fórmulas y flujos
-- **[docs/sistema-hexagono-estadisticas.md](docs/sistema-hexagono-estadisticas.md)** - Hexágono estilo Pokémon
-- **[docs/calificacion-general-jugador.md](docs/calificacion-general-jugador.md)** - Sistema OVR
-- **[docs/implementacion-ovr-completa.md](docs/implementacion-ovr-completa.md)** - Implementación técnica
-
-### Documentación Técnica
-- **[docs/endpoints-y-accesos.md](docs/endpoints-y-accesos.md)** - Todos los endpoints disponibles
-- **[docs/ci-cd-configuration.md](docs/ci-cd-configuration.md)** - Configuración CI/CD
-- **[docs/database-security-guide.md](docs/database-security-guide.md)** - Seguridad de base de datos
-- **[docs/database-migration-guide.md](docs/database-migration-guide.md)** - Guía de migraciones
-
-## 🔐 Autenticación
-
-### Opción 1: Google OAuth2 (Recomendado)
-
-```javascript
-// Frontend - Botón de Google Sign-In
-<script src="https://accounts.google.com/gsi/client" async defer></script>
-
-<div id="g_id_onload"
-     data-client_id="TU_CLIENT_ID.apps.googleusercontent.com"
-     data-callback="handleGoogleSignIn">
-</div>
-<div class="g_id_signin" data-type="standard"></div>
-
-<script>
-function handleGoogleSignIn(response) {
-    fetch('http://localhost:8080/api/v1/athletes/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken: response.credential })
-    })
-    .then(res => res.json())
-    .then(data => {
-        localStorage.setItem('accessToken', data.accessToken);
-        window.location.href = '/dashboard';
-    });
-}
-</script>
+```powershell
+.\mvnw.cmd test
+.\mvnw.cmd verify
 ```
 
-### Opción 2: Email/Password (Local)
+## Endpoints de referencia
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- Health check: `http://localhost:8080/actuator/health`
+- Documentacion por dominio: [`api/`](api/)
+- Documentacion tecnica: [`docs/`](docs/)
 
-```bash
-# Registro
-curl -X POST http://localhost:8080/api/v1/athletes/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "nombre": "Juan Pérez",
-    "email": "juan@example.com",
-    "password": "MiPassword123"
-  }'
+## Estado del proyecto
+Proyecto en desarrollo avanzado. La API contiene los dominios principales y reglas deportivas, pero aun requiere hardening antes de produccion: autorizacion fina por identidad, revision de endpoints publicos, jobs programados para automatizaciones temporales, validacion mas estricta de archivos y fortalecimiento de sesiones.
 
-# Login
-curl -X POST http://localhost:8080/api/v1/athletes/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "juan@example.com",
-    "password": "MiPassword123"
-  }'
-```
+## Funcionalidades implementadas
+- Autenticacion local y Google OAuth.
+- Perfil de jugador, posiciones, equipos y trust score.
+- Partidos, invitaciones, confirmaciones, eventos, cierre y MVP.
+- Ratings, OVR, historial y leaderboard.
+- Catalogos de posiciones y canchas.
+- Notificaciones, amistades e invitaciones sociales.
+- Observabilidad basica con Actuator/Micrometer.
 
-## 📊 Endpoints Principales
+## Funcionalidades en desarrollo o parciales
+- Auto-start y auto-invalidacion de partidos dependen de lecturas; no hay scheduler dedicado.
+- Confirmacion dual de eventos existe en API, pero el registro actual cierra eventos inmediatamente.
+- Algunas rutas requieren autorizacion de dominio mas estricta.
+- Trust score tiene logica distribuida y trazabilidad incompleta para `matchId`.
+- Gestion de equipos no cubre edicion completa, reactivacion ni roles avanzados.
 
-### Autenticación
-- `POST /api/v1/athletes/register` - Registro local
-- `POST /api/v1/athletes/login` - Login local
-- `POST /api/v1/athletes/auth/google` - Autenticación con Google
+## Proximas mejoras
+- Separar servicios grandes como `MatchService` y `RatingService`.
+- Introducir policies de autorizacion basadas en el usuario autenticado.
+- Versionar formulas de rating/XP.
+- Agregar jobs programados para expiracion, inicio automatico y recordatorios.
+- Ampliar pruebas de integracion para partidos, ratings y seguridad.
+- Revisar CORS, secretos, HTTPS y exposicion de Swagger/Actuator por ambiente.
 
-### Jugadores
-- `POST /api/v1/player-profiles` - Crear perfil de jugador
-- `GET /api/v1/player-profiles/{uuid}` - Obtener perfil
-- `POST /api/v1/player-profiles/positions` - Agregar posición
+## Valor profesional del proyecto
+Este backend demuestra capacidad para modelar un dominio complejo, construir APIs REST con Spring Boot, disenar persistencia relacional versionada, aplicar seguridad JWT/OAuth, documentar contratos para frontend, instrumentar observabilidad y sostener reglas de negocio no triviales como ratings, MVP, trust score y balance de equipos.
 
-### Partidos
-- `POST /api/v1/matches` - Crear partido
-- `POST /api/v1/matches/join` - Unirse a partido
-- `POST /api/v1/matches/events` - Registrar evento
-- `PUT /api/v1/matches/{id}/status` - Cambiar estado
-
-### Calificaciones
-- `GET /api/v1/ratings/player/{uuid}` - Calificaciones por rol
-- `GET /api/v1/ratings/player/{uuid}/overall` - OVR completo
-- `GET /api/v1/ratings/player/{uuid}/history` - Historial
-
-Ver documentación completa en [GUIA-API-FRONTEND.md](GUIA-API-FRONTEND.md)
-
-## 🛠️ Tecnologías
-
-- **Backend:** Java 21, Spring Boot 3.3.2
-- **Base de Datos:** PostgreSQL 15+
-- **Seguridad:** Spring Security, OAuth2 Client
-- **Migraciones:** Flyway
-- **Documentación:** OpenAPI/Swagger
-- **Testing:** JUnit 5, Testcontainers
-
-## 📁 Estructura del Proyecto
-
-```
-server-atleta/
-├── src/main/java/com/atleta/demo/
-│   ├── config/              # Configuración (Security, OAuth2, etc.)
-│   ├── controller/          # Controladores REST
-│   ├── dto/                 # DTOs (request/response)
-│   ├── entity/              # Entidades JPA
-│   ├── repository/          # Repositorios Spring Data
-│   ├── service/             # Lógica de negocio
-│   └── validation/          # Validadores personalizados
-├── src/main/resources/
-│   ├── db/migration/        # Scripts Flyway
-│   ├── application.yaml     # Configuración común
-│   └── application-dev.yaml # Configuración desarrollo
-├── docs/                    # Documentación técnica
-├── scripts/                 # Scripts de utilidad
-└── *.md                     # Documentación del proyecto
-```
-
-## 🧪 Testing
-
-```bash
-# Ejecutar todos los tests
-mvn test
-
-# Tests específicos
-mvn test -Dtest=AthleteServiceTest
-
-# Con cobertura
-mvn clean test jacoco:report
-```
-
-## 🔧 Configuración Avanzada
-
-### Perfiles de Ejecución
-
-```bash
-# Desarrollo (default)
-mvn spring-boot:run
-
-# Staging
-mvn spring-boot:run -Dspring-boot.run.profiles=staging
-
-# Producción
-mvn spring-boot:run -Dspring-boot.run.profiles=prod
-```
-
-### Configuración de Google OAuth2
-
-1. Crear proyecto en [Google Cloud Console](https://console.cloud.google.com/)
-2. Habilitar Google+ API
-3. Configurar OAuth Consent Screen
-4. Crear credenciales OAuth 2.0
-5. Configurar Authorized JavaScript origins:
-   - `http://localhost:8080` (desarrollo)
-   - `https://tu-dominio.com` (producción)
-6. Configurar Authorized redirect URIs:
-   - `http://localhost:8080/login/oauth2/code/google`
-
-Ver guía completa: [GOOGLE-OAUTH-SETUP.md](GOOGLE-OAUTH-SETUP.md)
-
-## 📈 Monitoreo
-
-### Actuator Endpoints
-
-- `GET /actuator/health` - Estado de salud
-- `GET /actuator/metrics` - Métricas de la aplicación
-- `GET /actuator/prometheus` - Métricas Prometheus
-- `GET /actuator/flyway` - Estado de migraciones
-
-### Logs
-
-```bash
-# Ver logs en tiempo real
-tail -f logs/application.log
-
-# Nivel de logs (application-dev.yaml)
-logging:
-  level:
-    com.atleta.demo: DEBUG
-```
-
-## 🚨 Troubleshooting
-
-### Error: "Token de Google inválido"
-- Verifica que el token no haya expirado (duran 1 hora)
-- Verifica que el `GOOGLE_CLIENT_ID` sea correcto
-- Verifica que el token sea para tu aplicación
-
-### Error: "Connection refused" a PostgreSQL
-```bash
-# Verificar que PostgreSQL esté corriendo
-pg_isready
-
-# Verificar credenciales
-psql -U postgres -d atleta_dev
-```
-
-### Error: Flyway migration failed
-```bash
-# Limpiar y reiniciar (solo desarrollo)
-mvn flyway:clean
-mvn flyway:migrate
-```
-
-## 🎮 Ejemplo Completo de Uso
-
-### 1. Registrar Usuario con Google
-
-```javascript
-// Frontend obtiene ID Token de Google
-const idToken = response.credential;
-
-// Enviar al backend
-const authResponse = await fetch('/api/v1/athletes/auth/google', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken })
-});
-
-const data = await authResponse.json();
-// data.accessToken - Token para usar en requests
-// data.atletaUuid - UUID del usuario
-```
-
-### 2. Crear Perfil de Jugador
-
-```javascript
-const profileResponse = await fetch('/api/v1/player-profiles', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-    },
-    body: JSON.stringify({
-        atletaUuid: data.atletaUuid,
-        alias: "JuanGol"
-    })
-});
-```
-
-### 3. Crear y Unirse a Partido
-
-```javascript
-// Crear partido
-const matchResponse = await fetch('/api/v1/matches', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-    },
-    body: JSON.stringify({
-        creadorUuid: data.atletaUuid,
-        modalidad: "CINCO_VS_CINCO",
-        fechaHoraProgramada: "2024-12-25T18:00:00",
-        cuota: 500.0
-    })
-});
-
-const match = await matchResponse.json();
-
-// Unirse al partido
-await fetch('/api/v1/matches/join', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-    },
-    body: JSON.stringify({
-        matchId: match.id,
-        playerUuid: data.atletaUuid,
-        teamId: 1,
-        positionId: 5, // Delantero
-        role: "JUGADOR"
-    })
-});
-```
-
-### 4. Ver Calificaciones (OVR)
-
-```javascript
-const ratingsResponse = await fetch(
-    `/api/v1/ratings/player/${data.atletaUuid}/overall`,
-    {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-    }
-);
-
-const ratings = await ratingsResponse.json();
-console.log(`OVR: ${ratings.hybridOVR}`);
-console.log(`Clasificación: ${ratings.classification}`);
-console.log(`Mejor rol: ${ratings.bestRole}`);
-```
-
-## 📝 Notas Importantes
-
-1. **Autenticación Dual:** El sistema soporta Google OAuth2 y Email/Password
-2. **Vinculación Automática:** Cuentas locales se vinculan con Google si usan el mismo email
-3. **Calificaciones Automáticas:** Se actualizan al finalizar cada partido
-4. **Trust Score:** Inicia en 100 y se ajusta según comportamiento
-5. **Tokens JWT:** Actualmente usa Base64 simple (mejorar para producción)
-
-## 🔒 Seguridad
-
-- ✅ Contraseñas hasheadas con BCrypt
-- ✅ Tokens de Google validados con API oficial
-- ✅ Verificación de email en Google OAuth
-- ✅ CORS y CSRF configurables
-- ✅ Sesiones stateless (JWT)
-- ⚠️ Implementar JWT con firma para producción
-- ⚠️ Configurar HTTPS en producción
-
-## 🤝 Contribuir
-
-1. Fork el proyecto
-2. Crea una rama (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
-## 📄 Licencia
-
-Este proyecto está bajo la licencia MIT.
-
-## 📧 Soporte
-
-Para preguntas o problemas:
-- Consulta la documentación en `/docs`
-- Revisa los archivos `.md` en la raíz
-- Abre un issue en el repositorio
-
----
-
-**¡Listo para usar!** 🎉
-
-Ver [GUIA-API-FRONTEND.md](GUIA-API-FRONTEND.md) para comenzar a integrar con tu frontend.
+## Mejoras visuales sugeridas
+- Diagrama de dominio: atleta, perfil, equipo, partido, rating y notificaciones.
+- Diagrama de flujo de creacion/cierre de partido.
+- Capturas de Swagger UI y ejemplos de requests.
+- GIF del frontend consumiendo los endpoints principales.
