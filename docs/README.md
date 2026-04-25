@@ -1,7 +1,7 @@
 # Documentacion tecnica de Atleta Server
 
 ## Proposito
-Esta carpeta centraliza documentacion complementaria del backend: arquitectura, funcionalidades reales, despliegue, seguridad de base de datos, migraciones, CI/CD, changelog y analisis del sistema de calificaciones.
+Esta carpeta centraliza documentacion complementaria del backend: arquitectura, funcionalidades reales, despliegue, seguridad de base de datos, migraciones, CI/CD y analisis del sistema de calificaciones.
 
 ## Lectura recomendada
 - [`architecture.md`](architecture.md): arquitectura detectada, capas, dominio y deuda tecnica.
@@ -16,12 +16,9 @@ Esta carpeta centraliza documentacion complementaria del backend: arquitectura, 
 - [`analisis-sistema-calificaciones-y-flujos.md`](analisis-sistema-calificaciones-y-flujos.md)
 - [`sistema-hexagono-estadisticas.md`](sistema-hexagono-estadisticas.md)
 - [`calificacion-general-jugador.md`](calificacion-general-jugador.md)
-- [`implementacion-ovr-completa.md`](implementacion-ovr-completa.md)
 
 ## Documentacion de API para frontend
 - [`../api/`](../api/): documentacion por dominio.
-- [`../API-REFERENCE-FRONTEND.md`](../API-REFERENCE-FRONTEND.md): referencia completa en un archivo.
-- [`../GUIA-API-FRONTEND.md`](../GUIA-API-FRONTEND.md): guia rapida de integracion.
 - [`../GOOGLE-OAUTH-SETUP.md`](../GOOGLE-OAUTH-SETUP.md): configuracion de Google OAuth.
 
 ## Estado

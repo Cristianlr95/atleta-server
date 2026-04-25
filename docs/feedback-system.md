@@ -43,7 +43,7 @@
 - Actualizar `docs/funcionalidades.md` si cambia cobertura funcional.
 - Actualizar `docs/architecture.md` si cambia estructura, patrones o servicios.
 - Actualizar `docs/deployment.md` si cambian perfiles, secretos, pipeline, monitoreo o infraestructura.
-- Registrar el cambio relevante en `docs/changelog.md`.
+- Registrar el cambio relevante en el documento vivo correspondiente.
 
 ## Reglas de seguridad obligatorias
 
