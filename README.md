@@ -3,6 +3,9 @@
 ## Descripcion
 Backend REST para Atleta, una plataforma de gestion deportiva para futbol amateur. El sistema administra atletas, perfiles de jugador, posiciones, equipos, partidos, invitaciones, ratings, OVR, leaderboard, trust score y eventos asociados a la competencia.
 
+## Repositorios relacionados
+- Frontend cliente: [Cristianlr95/atleta-app](https://github.com/Cristianlr95/atleta-app)
+
 ## Problema que resuelve
 Los grupos de futbol amateur suelen organizarse por chats, planillas y acuerdos manuales. Eso dificulta medir rendimiento, confirmar asistencia, balancear equipos, mantener historial y dar trazabilidad a partidos. Atleta Server centraliza la logica de negocio en una API con persistencia, seguridad, ratings y contratos documentados para frontend.
 
@@ -127,7 +130,7 @@ En Windows:
 - Documentacion tecnica: [`docs/`](docs/)
 
 ## Estado del proyecto
-Proyecto en desarrollo avanzado. La API contiene los dominios principales y reglas deportivas, pero aun requiere hardening antes de produccion: autorizacion fina por identidad, revision de endpoints publicos, jobs programados para automatizaciones temporales, validacion mas estricta de archivos y fortalecimiento de sesiones.
+Proyecto en estado funcional avanzado. La API ya cubre los dominios principales de negocio, autenticacion, ratings y trazabilidad de partidos. El foco actual de evolucion esta en hardening productivo, autorizacion fina y automatizaciones operativas.
 
 ## Funcionalidades implementadas
 - Autenticacion local y Google OAuth.
@@ -156,8 +159,8 @@ Proyecto en desarrollo avanzado. La API contiene los dominios principales y regl
 ## Valor profesional del proyecto
 Este backend demuestra capacidad para modelar un dominio complejo, construir APIs REST con Spring Boot, disenar persistencia relacional versionada, aplicar seguridad JWT/OAuth, documentar contratos para frontend, instrumentar observabilidad y sostener reglas de negocio no triviales como ratings, MVP, trust score y balance de equipos.
 
-## Mejoras visuales sugeridas
-- Diagrama de dominio: atleta, perfil, equipo, partido, rating y notificaciones.
-- Diagrama de flujo de creacion/cierre de partido.
-- Capturas de Swagger UI y ejemplos de requests.
-- GIF del frontend consumiendo los endpoints principales.
+## Que conviene revisar primero
+- Seguridad y autenticacion JWT/OAuth.
+- Dominio de partidos: creacion, confirmaciones, cierre y MVP.
+- Sistema de ratings, OVR y leaderboard.
+- Migraciones Flyway, OpenAPI y documentacion tecnica del repositorio.
