@@ -13,7 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -94,7 +94,6 @@ public class TeamControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_Success() throws Exception {
         // Given
         CreateTeamRequest request = new CreateTeamRequest();
@@ -105,6 +104,7 @@ public class TeamControllerIntegrationTest {
 
         // When & Then
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -123,7 +123,6 @@ public class TeamControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_CreatorNotFound() throws Exception {
         // Given - Non-existent creator UUID
         CreateTeamRequest request = new CreateTeamRequest();
@@ -134,13 +133,13 @@ public class TeamControllerIntegrationTest {
 
         // When & Then
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(UUID.randomUUID()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict());
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_DuplicateName() throws Exception {
         // Given - Create first team
         CreateTeamRequest request1 = new CreateTeamRequest();
@@ -150,6 +149,7 @@ public class TeamControllerIntegrationTest {
         request1.setCreadorUuid(testCreatorUuid);
 
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -163,13 +163,13 @@ public class TeamControllerIntegrationTest {
 
         // Then
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isConflict());
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_InvalidData() throws Exception {
         // Given - Invalid request with empty name
         CreateTeamRequest request = new CreateTeamRequest();
@@ -180,13 +180,13 @@ public class TeamControllerIntegrationTest {
 
         // When & Then
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_MinimalData() throws Exception {
         // Given - Request with only required fields
         CreateTeamRequest request = new CreateTeamRequest();
@@ -196,6 +196,7 @@ public class TeamControllerIntegrationTest {
 
         // When & Then
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -206,7 +207,6 @@ public class TeamControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_WithAllFields() throws Exception {
         // Given - Request with all fields
         CreateTeamRequest request = new CreateTeamRequest();
@@ -217,6 +217,7 @@ public class TeamControllerIntegrationTest {
 
         // When & Then
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -234,7 +235,6 @@ public class TeamControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_ValidatesNameLength() throws Exception {
         // Given - Request with name too long (over 100 characters)
         CreateTeamRequest request = new CreateTeamRequest();
@@ -243,13 +243,13 @@ public class TeamControllerIntegrationTest {
 
         // When & Then
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_ValidatesFoundationYear() throws Exception {
         // Given - Request with invalid foundation year (future year)
         CreateTeamRequest request = new CreateTeamRequest();
@@ -259,6 +259,7 @@ public class TeamControllerIntegrationTest {
 
         // When & Then - This should still succeed as business logic might allow future years
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -266,7 +267,6 @@ public class TeamControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_ValidatesLogoUrl() throws Exception {
         // Given - Request with invalid URL format
         CreateTeamRequest request = new CreateTeamRequest();
@@ -276,6 +276,7 @@ public class TeamControllerIntegrationTest {
 
         // When & Then - This might succeed depending on validation rules
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -283,7 +284,6 @@ public class TeamControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_CreatesTeamStats() throws Exception {
         // Given
         CreateTeamRequest request = new CreateTeamRequest();
@@ -292,6 +292,7 @@ public class TeamControllerIntegrationTest {
 
         // When & Then - Verify that team stats are created and initialized to zero
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -306,7 +307,6 @@ public class TeamControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_SetsCreationTimestamp() throws Exception {
         // Given
         CreateTeamRequest request = new CreateTeamRequest();
@@ -315,6 +315,7 @@ public class TeamControllerIntegrationTest {
 
         // When & Then - Verify creation timestamp is set
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -323,7 +324,6 @@ public class TeamControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testCreateTeam_MultipleTeamsBySameCreator() throws Exception {
         // Given - Create first team
         CreateTeamRequest request1 = new CreateTeamRequest();
@@ -331,6 +331,7 @@ public class TeamControllerIntegrationTest {
         request1.setCreadorUuid(testCreatorUuid);
 
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -342,10 +343,15 @@ public class TeamControllerIntegrationTest {
 
         // Then - Should succeed (same creator can create multiple teams)
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.nombre").value("Second Team"))
                 .andExpect(jsonPath("$.creador.atletaUuid").value(testCreatorUuid.toString()));
+    }
+
+    private SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor jwtFor(UUID subject) {
+        return SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(subject.toString()));
     }
 }
