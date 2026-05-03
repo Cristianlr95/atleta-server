@@ -12,6 +12,7 @@ import com.atleta.demo.dto.response.MatchPlayerResponse;
 import com.atleta.demo.dto.response.MatchEventResponse;
 import com.atleta.demo.dto.response.MatchMvpResponse;
 import com.atleta.demo.enums.MatchStatus;
+import com.atleta.demo.security.AuthenticatedUserUtils;
 import com.atleta.demo.service.MatchLiveEventService;
 import com.atleta.demo.service.MatchMvpService;
 import com.atleta.demo.service.MatchService;
@@ -92,7 +93,7 @@ public class MatchController {
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody CreateMatchRequest request
     ) {
-        request.setCreadorUuid(currentUserUuid(jwt));
+        request.setCreadorUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
         logger.info("Solicitud de creación de partido: modalidad {} por creador: {}", 
                    request.getModalidad(), request.getCreadorUuid());
         
@@ -179,7 +180,9 @@ public class MatchController {
     })
     public ResponseEntity<List<MatchResponse>> getMatchesByPlayer(
             @Parameter(description = "UUID del jugador")
-            @PathVariable UUID playerUuid) {
+            @PathVariable UUID playerUuid,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerUuid);
         
         logger.debug("Obteniendo partidos del jugador: {}", playerUuid);
         
@@ -239,7 +242,7 @@ public class MatchController {
             @Parameter(description = "UUID del responsable que ejecuta el cambio (opcional)")
             @RequestParam(required = false) UUID actorUuid) {
 
-        UUID authenticatedActorUuid = currentUserUuid(jwt);
+        UUID authenticatedActorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
         logger.info("Cambiando estado del partido {} a: {} por {}", matchId, status, authenticatedActorUuid);
 
         try {
@@ -303,7 +306,11 @@ public class MatchController {
         @ApiResponse(responseCode = "400", description = "Datos inválidos o el jugador ya está registrado"),
         @ApiResponse(responseCode = "404", description = "Partido, jugador, equipo o posición no encontrados")
     })
-    public ResponseEntity<MatchPlayerResponse> joinMatch(@Valid @RequestBody JoinMatchRequest request) {
+    public ResponseEntity<MatchPlayerResponse> joinMatch(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody JoinMatchRequest request
+    ) {
+        request.setPlayerUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
         logger.info("Jugador {} uniéndose al partido {} con equipo {} en posición {}", 
                    request.getPlayerUuid(), request.getMatchId(), 
                    request.getTeamId(), request.getPositionId());
@@ -368,7 +375,9 @@ public class MatchController {
     })
     public ResponseEntity<List<MatchResponse>> getMatchesByPlayerOrCreator(
             @Parameter(description = "UUID del jugador")
-            @PathVariable UUID playerUuid) {
+            @PathVariable UUID playerUuid,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerUuid);
 
         logger.debug("Obteniendo partidos por jugador o creador: {}", playerUuid);
 
@@ -389,7 +398,7 @@ public class MatchController {
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody UpdateMatchTeamAssignmentsRequest request
     ) {
-        request.setActorUuid(currentUserUuid(jwt));
+        request.setActorUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
         logger.info("Actualizando asignacion de equipos del partido {}. home={}, away={}",
                 matchId,
                 request.getHomePlayerUuids() != null ? request.getHomePlayerUuids().size() : 0,
@@ -423,7 +432,9 @@ public class MatchController {
             @Parameter(description = "ID del partido")
             @PathVariable Long matchId,
             @Parameter(description = "UUID del jugador")
-            @PathVariable UUID playerUuid) {
+            @PathVariable UUID playerUuid,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerUuid);
 
         logger.info("Eliminando jugador {} del partido {}", playerUuid, matchId);
 
@@ -446,7 +457,9 @@ public class MatchController {
             @Parameter(description = "ID del partido")
             @PathVariable Long matchId,
             @Parameter(description = "UUID del jugador")
-            @PathVariable UUID playerUuid) {
+            @PathVariable UUID playerUuid,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerUuid);
         
         logger.info("Confirmando participación del jugador {} en el partido {}", playerUuid, matchId);
         
@@ -475,7 +488,7 @@ public class MatchController {
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody CreateMatchEventRequest request
     ) {
-        request.setRegisteredByUuid(currentUserUuid(jwt));
+        request.setRegisteredByUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
         logger.info("Registrando evento {} del jugador {} en el partido {}",
                    request.getEventType(), request.getPlayerUuid(), request.getMatchId());
         
@@ -514,7 +527,7 @@ public class MatchController {
             @Parameter(description = "Indica si confirma el equipo local (true) o visitante (false)")
             @RequestParam Boolean isLocalTeam) {
 
-        UUID authenticatedConfirmingUuid = currentUserUuid(jwt);
+        UUID authenticatedConfirmingUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
         logger.info("Confirmando evento {} por jugador {} del equipo {}",
                    eventId, authenticatedConfirmingUuid, isLocalTeam ? "local" : "visitante");
 
@@ -596,7 +609,7 @@ public class MatchController {
             @AuthenticationPrincipal Jwt jwt
     ) {
         try {
-            UUID voterUserId = currentUserUuid(jwt);
+            UUID voterUserId = AuthenticatedUserUtils.currentUserUuid(jwt);
             return ResponseEntity.ok(matchMvpService.getMvpState(matchId, voterUserId));
         } catch (IllegalArgumentException e) {
             logger.warn("Error obteniendo MVP para partido {}: {}", matchId, e.getMessage());
@@ -616,7 +629,7 @@ public class MatchController {
             @Valid @RequestBody VoteMatchMvpRequest request
     ) {
         try {
-            UUID voterUserId = currentUserUuid(jwt);
+            UUID voterUserId = AuthenticatedUserUtils.currentUserUuid(jwt);
             return ResponseEntity.ok(matchMvpService.vote(matchId, voterUserId, request.getVotedUserId()));
         } catch (IllegalArgumentException e) {
             logger.warn("Error votando MVP para partido {}: {}", matchId, e.getMessage());
@@ -627,17 +640,6 @@ public class MatchController {
         }
     }
 
-    private UUID currentUserUuid(Jwt jwt) {
-        if (jwt == null || jwt.getSubject() == null || jwt.getSubject().isBlank()) {
-            throw new IllegalArgumentException("No se pudo identificar el usuario autenticado");
-        }
-
-        try {
-            return UUID.fromString(jwt.getSubject());
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("El usuario autenticado no tiene un UUID valido");
-        }
-    }
 }
 
 
