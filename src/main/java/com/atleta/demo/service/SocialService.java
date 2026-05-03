@@ -4,10 +4,13 @@ import com.atleta.demo.dto.request.CreateFriendRequest;
 import com.atleta.demo.dto.request.CreateMatchInviteRequest;
 import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
 import com.atleta.demo.dto.request.CreateTeamInviteRequest;
+import com.atleta.demo.dto.request.RegisterPushTokenRequest;
 import com.atleta.demo.dto.request.RespondRequestDecision;
 import com.atleta.demo.dto.response.AppNotificationResponse;
+import com.atleta.demo.dto.response.PushTokenResponse;
 import com.atleta.demo.dto.response.SocialPlayerLookupResponse;
 import com.atleta.demo.dto.response.SocialRequestResponse;
+import com.atleta.demo.dto.response.UnreadNotificationCountResponse;
 import com.atleta.demo.entity.*;
 import com.atleta.demo.enums.NotificationType;
 import com.atleta.demo.enums.MatchTeamSide;
@@ -40,6 +43,7 @@ public class SocialService {
     private final PositionRepository positionRepository;
     private final PlayerPositionRepository playerPositionRepository;
     private final MatchLiveEventService matchLiveEventService;
+    private final PushNotificationTokenRepository pushNotificationTokenRepository;
 
     public SocialService(
             PlayerProfileRepository playerProfileRepository,
@@ -53,7 +57,8 @@ public class SocialService {
             MatchPlayerRepository matchPlayerRepository,
             PositionRepository positionRepository,
             PlayerPositionRepository playerPositionRepository,
-            MatchLiveEventService matchLiveEventService
+            MatchLiveEventService matchLiveEventService,
+            PushNotificationTokenRepository pushNotificationTokenRepository
     ) {
         this.playerProfileRepository = playerProfileRepository;
         this.friendshipRepository = friendshipRepository;
@@ -67,6 +72,7 @@ public class SocialService {
         this.positionRepository = positionRepository;
         this.playerPositionRepository = playerPositionRepository;
         this.matchLiveEventService = matchLiveEventService;
+        this.pushNotificationTokenRepository = pushNotificationTokenRepository;
     }
 
     public SocialRequestResponse createFriendRequest(CreateFriendRequest request) {
@@ -398,6 +404,40 @@ public class SocialService {
         return toNotificationResponse(notification);
     }
 
+    public PushTokenResponse registerPushToken(UUID playerUuid, RegisterPushTokenRequest request) {
+        PlayerProfile player = getPlayer(playerUuid);
+        String normalizedToken = normalizeRequired(request.getToken(), "El push token es obligatorio");
+        String normalizedPlatform = normalizeRequired(request.getPlatform(), "La plataforma es obligatoria");
+        String normalizedDeviceId = normalizeOptional(request.getDeviceId());
+
+        PushNotificationToken entity = normalizedDeviceId != null
+                ? pushNotificationTokenRepository.findByRecipientAndDeviceId(player, normalizedDeviceId).orElse(null)
+                : null;
+
+        if (entity == null) {
+            entity = pushNotificationTokenRepository.findByToken(normalizedToken).orElse(null);
+        }
+
+        if (entity == null) {
+            entity = new PushNotificationToken(player, normalizedToken, normalizedPlatform, normalizedDeviceId);
+        } else {
+            entity.setRecipient(player);
+            entity.setToken(normalizedToken);
+            entity.setPlatform(normalizedPlatform);
+            entity.setDeviceId(normalizedDeviceId);
+            entity.setActive(true);
+            entity.setLastSeenAt(LocalDateTime.now());
+        }
+
+        return toPushTokenResponse(pushNotificationTokenRepository.save(entity));
+    }
+
+    @Transactional(readOnly = true)
+    public UnreadNotificationCountResponse getUnreadNotificationCount(UUID playerUuid) {
+        PlayerProfile player = getPlayer(playerUuid);
+        return new UnreadNotificationCountResponse(appNotificationRepository.countUnreadByRecipient(player));
+    }
+
     @Transactional(readOnly = true)
     public List<SocialPlayerLookupResponse> searchPlayers(String query) {
         String normalized = query == null ? "" : query.trim();
@@ -428,11 +468,23 @@ public class SocialService {
     }
 
     private String normalizeMessage(String message) {
-        if (message == null) {
+        return normalizeOptional(message);
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) {
             return null;
         }
-        String normalized = message.trim();
+        String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String normalizeRequired(String value, String errorMessage) {
+        String normalized = normalizeOptional(value);
+        if (normalized == null) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+        return normalized;
     }
 
     private String aliasOf(PlayerProfile player) {
@@ -521,6 +573,18 @@ public class SocialService {
         response.setRead(notification.getIsRead());
         response.setReadAt(notification.getReadAt());
         response.setCreatedAt(notification.getCreatedAt());
+        return response;
+    }
+
+    private PushTokenResponse toPushTokenResponse(PushNotificationToken token) {
+        PushTokenResponse response = new PushTokenResponse();
+        response.setId(token.getId());
+        response.setPlayerUuid(token.getRecipient().getAtletaUuid());
+        response.setPlatform(token.getPlatform());
+        response.setDeviceId(token.getDeviceId());
+        response.setActive(token.getActive());
+        response.setLastSeenAt(token.getLastSeenAt());
+        response.setCreatedAt(token.getCreatedAt());
         return response;
     }
 

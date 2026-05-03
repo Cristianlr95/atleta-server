@@ -4,16 +4,21 @@ import com.atleta.demo.dto.request.CreateFriendRequest;
 import com.atleta.demo.dto.request.CreateMatchInviteRequest;
 import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
 import com.atleta.demo.dto.request.CreateTeamInviteRequest;
+import com.atleta.demo.dto.request.RegisterPushTokenRequest;
 import com.atleta.demo.dto.request.RespondRequestDecision;
 import com.atleta.demo.dto.response.AppNotificationResponse;
+import com.atleta.demo.dto.response.PushTokenResponse;
 import com.atleta.demo.dto.response.SocialPlayerLookupResponse;
 import com.atleta.demo.dto.response.SocialRequestResponse;
+import com.atleta.demo.dto.response.UnreadNotificationCountResponse;
 import com.atleta.demo.service.SocialService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -127,9 +132,39 @@ public class SocialController {
         return ResponseEntity.status(HttpStatus.CREATED).body(socialService.sendIncompleteFormReminder(playerUuid));
     }
 
+    @PostMapping("/notifications/push-tokens")
+    @Operation(summary = "Registrar o refrescar push token del usuario autenticado")
+    public ResponseEntity<PushTokenResponse> registerPushToken(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody RegisterPushTokenRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(socialService.registerPushToken(currentUserUuid(jwt), request));
+    }
+
+    @GetMapping("/notifications/unread-count")
+    @Operation(summary = "Obtener contador de notificaciones no leidas del usuario autenticado")
+    public ResponseEntity<UnreadNotificationCountResponse> getUnreadNotificationCount(
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ResponseEntity.ok(socialService.getUnreadNotificationCount(currentUserUuid(jwt)));
+    }
+
     @GetMapping("/players/search")
     @Operation(summary = "Buscar jugadores para invitaciones")
     public ResponseEntity<List<SocialPlayerLookupResponse>> searchPlayers(@RequestParam String q) {
         return ResponseEntity.ok(socialService.searchPlayers(q));
+    }
+
+    private UUID currentUserUuid(Jwt jwt) {
+        if (jwt == null || jwt.getSubject() == null || jwt.getSubject().isBlank()) {
+            throw new IllegalArgumentException("No se pudo identificar el usuario autenticado");
+        }
+
+        try {
+            return UUID.fromString(jwt.getSubject());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("El usuario autenticado no tiene un UUID valido");
+        }
     }
 }
