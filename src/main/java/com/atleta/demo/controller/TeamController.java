@@ -3,6 +3,7 @@ package com.atleta.demo.controller;
 import com.atleta.demo.dto.request.CreateTeamRequest;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.dto.response.TeamResponse;
+import com.atleta.demo.security.AuthenticatedUserUtils;
 import com.atleta.demo.service.TeamService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -14,6 +15,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -59,9 +62,14 @@ public class TeamController {
             description = "Retorna equipos donde el jugador es miembro activo y/o creador")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Equipos obtenidos exitosamente"),
-            @ApiResponse(responseCode = "404", description = "Jugador no encontrado")
+            @ApiResponse(responseCode = "404", description = "Jugador no encontrado"),
+            @ApiResponse(responseCode = "403", description = "No autorizado")
     })
-    public ResponseEntity<List<TeamResponse>> getTeamsByPlayer(@PathVariable UUID playerUuid) {
+    public ResponseEntity<List<TeamResponse>> getTeamsByPlayer(
+            @PathVariable UUID playerUuid,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerUuid);
         try {
             return ResponseEntity.ok(teamService.getTeamsByPlayer(playerUuid));
         } catch (IllegalArgumentException e) {
@@ -72,7 +80,11 @@ public class TeamController {
     @GetMapping("/by-creator/{creatorUuid}")
     @Operation(summary = "Listar equipos creados por un jugador",
             description = "Retorna equipos activos cuyo creador coincide con el jugador indicado")
-    public ResponseEntity<List<TeamResponse>> getTeamsByCreator(@PathVariable UUID creatorUuid) {
+    public ResponseEntity<List<TeamResponse>> getTeamsByCreator(
+            @PathVariable UUID creatorUuid,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        AuthenticatedUserUtils.requireSameUser(jwt, creatorUuid);
         try {
             return ResponseEntity.ok(teamService.getTeamsByCreator(creatorUuid));
         } catch (IllegalArgumentException e) {
@@ -100,7 +112,11 @@ public class TeamController {
             @ApiResponse(responseCode = "404", description = "Creador no encontrado"),
             @ApiResponse(responseCode = "409", description = "Ya existe un equipo con el mismo nombre")
     })
-    public ResponseEntity<TeamResponse> createTeam(@Valid @RequestBody CreateTeamRequest request) {
+    public ResponseEntity<TeamResponse> createTeam(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody CreateTeamRequest request
+    ) {
+        request.setCreadorUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
         logger.info("Solicitud de creacion de equipo: {} por creador: {}", request.getNombre(), request.getCreadorUuid());
 
         try {
@@ -121,11 +137,16 @@ public class TeamController {
             @ApiResponse(responseCode = "403", description = "No autorizado para eliminar el equipo"),
             @ApiResponse(responseCode = "404", description = "Equipo o jugador no encontrado")
     })
-    public ResponseEntity<Void> deleteTeam(@PathVariable Long teamId, @RequestParam UUID actorUuid) {
-        logger.info("Solicitud de eliminacion de equipo {} por actor {}", teamId, actorUuid);
+    public ResponseEntity<Void> deleteTeam(
+            @PathVariable Long teamId,
+            @RequestParam UUID actorUuid,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        UUID authenticatedActorUuid = AuthenticatedUserUtils.requireSameUser(jwt, actorUuid);
+        logger.info("Solicitud de eliminacion de equipo {} por actor {}", teamId, authenticatedActorUuid);
 
         try {
-            teamService.deleteTeam(teamId, actorUuid);
+            teamService.deleteTeam(teamId, authenticatedActorUuid);
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
             logger.warn("Error de eliminacion de equipo {}: {}", teamId, e.getMessage());
