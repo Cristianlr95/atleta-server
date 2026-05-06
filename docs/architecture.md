@@ -103,6 +103,7 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 - DTOs separados en `dto/request` y `dto/response`.
 - Naming del dominio en espanol, enums en espanol/ingles mixto.
 - Servicios grandes concentran mapping entity -> DTO dentro del mismo servicio.
+- Los contratos HTTP criticos se protegen con smoke MVC en `ApiContractSmokeTest`, usando controllers reales y servicios mockeados.
 
 ## Puntos debiles de arquitectura
 
@@ -117,7 +118,8 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 
 1. Separar `MatchService` en submodulos: convocatoria, arbitraje/eventos, cierre, validacion automatica.
 2. Introducir autorizacion basada en principal JWT y policies de dominio.
-3. Consolidar trust score en una sola API interna.
-4. Extraer mappers DTO dedicados para bajar acoplamiento.
-5. Introducir jobs programados para expiracion y auto-start.
-6. Versionar formulas de rating/XP para evitar cambios silenciosos en el dominio.
+3. Agregar smoke E2E contra FE+BE levantados si se estabiliza seed/credenciales de prueba.
+4. Consolidar trust score en una sola API interna.
+5. Extraer mappers DTO dedicados para bajar acoplamiento.
+6. Introducir jobs programados para expiracion y auto-start.
+7. Versionar formulas de rating/XP para evitar cambios silenciosos en el dominio.

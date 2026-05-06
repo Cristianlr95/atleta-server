@@ -138,6 +138,12 @@
 - `Parcial` La proteccion de seguridad es insuficiente: toda la ruta `/api/v1/ratings/**` esta abierta.
 - `Recomendada` Versionado de formulas de rating y trazabilidad de reglas activas por fecha.
 
+### Smoke de contratos HTTP backend
+
+- `Implementada parcial` Existe `ApiContractSmokeTest` con `@WebMvcTest` para contratos HTTP usados por frontend.
+- Cubre rutas principales de auth, teams, matches/MVP y ratings, validando status y campos JSON criticos.
+- Pendiente opcional: smoke E2E contra frontend y backend levantados con datos/credenciales estables.
+
 ## Reglas de negocio detectadas
 
 - Email unico global por atleta.

@@ -21,6 +21,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Migraciones: 19 migraciones Flyway activas, desde esquema base hasta genero de atleta.
 - Observabilidad: Actuator, health check custom, metricas Micrometer/Prometheus y logging con MDC.
 - Testing: suite amplia de unit, integration, migration, property-based y seguridad en `src/test/java`.
+- `ApiContractSmokeTest` cubre contratos HTTP backend consumidos por el frontend para auth, teams, matches/MVP y ratings sin levantar base de datos.
 
 ## Modulos reales detectados
 
@@ -60,6 +61,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Hay esfuerzo fuerte en testing y migraciones, pero menos rigor en autorizacion fina.
 - El dominio de partido ya contempla ventanas temporales, validacion de cierre, MVP y categoria por genero.
 - Se detecta coexistencia de documentacion antigua y codigo nuevo; el codigo es la fuente confiable.
+- Los contratos FE-BE criticos ya tienen doble proteccion: smoke unitario en `atleta-app` para rutas cliente y smoke MVC en backend para rutas/respuestas principales.
 
 ## Errores, riesgos y hallazgos
 
@@ -95,8 +97,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 1. Cerrar la brecha de seguridad: exigir JWT valido en ratings y cruzar `actorUuid` con `Authentication`.
 2. Introducir autorizacion de dominio por casos de uso sensibles: borrar equipo, cerrar partido, registrar evento, votar MVP.
-3. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
-4. Consolidar trust score en un solo servicio.
-5. Implementar scheduler para refresco de estados de partido.
-6. Eliminar secretos hardcodeados de `application-dev.yaml` y estandarizar `.env.example`.
-7. Agregar Dockerfile y convertir CI/deploy en pipeline ejecutable.
+3. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
+4. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
+5. Consolidar trust score en un solo servicio.
+6. Implementar scheduler para refresco de estados de partido.
+7. Eliminar secretos hardcodeados de `application-dev.yaml` y estandarizar `.env.example`.
+8. Agregar Dockerfile y convertir CI/deploy en pipeline ejecutable.
