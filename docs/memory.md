@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 79%.
-- Avance anterior registrado: 78%.
-- Delta de esta tarea: +1 punto porcentual por cerrar la evidencia automatizada de seguridad en ratings y actualizar la memoria operativa.
+- Avance estimado del proyecto Atleta: 80%.
+- Avance anterior registrado: 79%.
+- Delta de esta tarea: +1 punto porcentual por agregar evidencia automatizada contra suplantacion de UUID en endpoints sensibles de equipos, partidos, eventos y MVP.
 
 ## Proposito del repo
 
@@ -28,6 +28,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Observabilidad: Actuator, health check custom, metricas Micrometer/Prometheus y logging con MDC.
 - Testing: suite amplia de unit, integration, migration, property-based y seguridad en `src/test/java`.
 - `ApiContractSmokeTest` cubre contratos HTTP backend consumidos por el frontend para auth, teams, matches/MVP y ratings sin levantar base de datos.
+- `ApiContractSmokeTest` tambien verifica que creacion/cierre/asignacion/eventos/MVP usen el `sub` del JWT y que borrar equipo rechace un `actorUuid` ajeno.
 - `JwtAuthenticationIntegrationTest` verifica que `ratings/leaderboard` y `ratings/update` rechacen requests sin JWT, y que leaderboard acepte un token valido.
 
 ## Modulos reales detectados
@@ -75,7 +76,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ### Riesgos prioritarios
 
-- Alto: la mayoria de endpoints protegidos aceptan `actorUuid`, `playerUuid` o `atletaUuid` por request sin cruzarlo con el `sub` del JWT; un usuario autenticado podria operar sobre terceros si conoce IDs validos.
+- Alto: quedan endpoints protegidos que aceptan `actorUuid`, `playerUuid` o `atletaUuid` por request sin cruzarlo con el `sub` del JWT; ya existe evidencia de regresion para equipos, partidos, eventos y MVP.
 - Alto: `application-dev.yaml` trae credenciales locales hardcodeadas (`postgres` / `12345`).
 - Medio: `TeamService.storeTeamLogo` valida por `contentType` pero no inspecciona firma binaria ni antivirus, y expone archivos desde `/uploads/**`.
 - Medio: el pipeline de deploy es parcial; los pasos reales de despliegue siguen siendo `echo`.
@@ -102,7 +103,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Proximos pasos recomendados
 
-1. Introducir autorizacion de dominio por casos de uso sensibles: borrar equipo, cerrar partido, registrar evento, votar MVP.
+1. Completar autorizacion de dominio en endpoints sociales/perfil restantes que aun aceptan UUIDs de usuario desde request.
 2. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
 3. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
 4. Consolidar trust score en un solo servicio.

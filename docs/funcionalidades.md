@@ -60,6 +60,7 @@
   - `GET /api/v1/teams/by-creator/{creatorUuid}`
 - `Implementada` Miembros activos del equipo: `GET /api/v1/teams/{teamId}/members/active`
 - `Implementada` Archivado logico de equipo: `DELETE /api/v1/teams/{teamId}?actorUuid=...`
+- `Implementada` El archivado valida que `actorUuid` coincida con el `sub` JWT y responde 403 ante suplantacion.
 - `Parcial` No existen endpoints propios para editar equipo, reactivar archivo, remover miembro o cambiar roles.
 - `Recomendada` Gestion completa de membresias y admin de equipo.
 
@@ -97,6 +98,7 @@
   - `GET /api/v1/matches/by-player-or-creator/{playerUuid}`
   - `GET /api/v1/matches/by-team/{teamId}`
 - `Implementada` Cambiar estado: `PUT /api/v1/matches/{matchId}/status`
+- `Implementada` Cambio de estado usa el `sub` JWT como actor efectivo aunque el cliente envie otro `actorUuid`.
 - `Implementada` Agregar equipo al partido: `POST /api/v1/matches/{matchId}/teams/{teamId}?esLocal=...`
 - `Implementada` Agregar o quitar jugadores:
   - `POST /api/v1/matches/join`
@@ -108,10 +110,12 @@
   - `POST /api/v1/matches/events`
   - `PUT /api/v1/matches/events/{eventId}/confirm`
   - `GET /api/v1/matches/{matchId}/events`
+- `Implementada` Registro de eventos sobrescribe `registeredByUuid` con el `sub` JWT.
 - `Implementada` Vista previa de cierre: `POST /api/v1/matches/{matchId}/close/preview`
 - `Implementada` Votacion MVP:
   - `GET /api/v1/matches/{matchId}/mvp`
   - `POST /api/v1/matches/{matchId}/mvp/vote`
+- `Implementada` Votacion MVP usa el `sub` JWT como votante efectivo.
 - `Implementada` SSE de invitaciones: `GET /api/v1/matches/{matchId}/live`
 - `Parcial` Auto-start y auto-invalidacion existen, pero dependen de lecturas de partido; no hay scheduler.
 - `Parcial` Confirmacion dual de eventos existe en API, pero `registerEvent` ya cierra los eventos inmediatamente.
@@ -142,6 +146,7 @@
 
 - `Implementada parcial` Existe `ApiContractSmokeTest` con `@WebMvcTest` para contratos HTTP usados por frontend.
 - Cubre rutas principales de auth, teams, matches/MVP y ratings, validando status y campos JSON criticos.
+- Cubre regresiones de seguridad para no confiar en UUIDs de cliente en crear/cerrar partido, asignaciones, eventos, voto MVP y borrado de equipo.
 - Pendiente opcional: smoke E2E contra frontend y backend levantados con datos/credenciales estables.
 
 ## Reglas de negocio detectadas
@@ -172,6 +177,8 @@
 ## Consideraciones de seguridad
 
 - El backend autentica, pero no siempre autoriza por identidad real del token.
-- `ratings/**` no queda publico por defecto y tiene cobertura de integracion; sigue pendiente autorizacion fina por identidad/dominio en endpoints sensibles.
+- `ratings/**` no queda publico por defecto y tiene cobertura de integracion.
+- Equipos/partidos/eventos/MVP tienen evidencia de contrato para usar el JWT como identidad efectiva o rechazar UUIDs ajenos.
+- Sigue pendiente autorizacion fina por identidad/dominio en endpoints sociales, perfil y otros flujos secundarios.
 - En `dev` y `test`, Swagger y actuator quedan abiertos.
 - El upload de logos no valida contenido binario real.

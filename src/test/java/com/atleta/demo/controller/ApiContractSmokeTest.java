@@ -1,8 +1,10 @@
 package com.atleta.demo.controller;
 
+import com.atleta.demo.dto.request.CreateMatchEventRequest;
 import com.atleta.demo.dto.response.AthleteResponse;
 import com.atleta.demo.dto.response.LeaderboardEntryResponse;
 import com.atleta.demo.dto.response.MatchClosePreviewResponse;
+import com.atleta.demo.dto.response.MatchEventResponse;
 import com.atleta.demo.dto.response.MatchMvpResponse;
 import com.atleta.demo.dto.response.MatchResponse;
 import com.atleta.demo.dto.response.PlayerProfileResponse;
@@ -14,6 +16,7 @@ import com.atleta.demo.entity.Match;
 import com.atleta.demo.entity.PlayerProfile;
 import com.atleta.demo.entity.PlayerRating;
 import com.atleta.demo.entity.RatingHistory;
+import com.atleta.demo.enums.EventType;
 import com.atleta.demo.enums.GenderType;
 import com.atleta.demo.enums.MatchGenderCategory;
 import com.atleta.demo.enums.MatchMode;
@@ -33,6 +36,7 @@ import com.atleta.demo.service.RatingService;
 import com.atleta.demo.service.TeamService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -49,8 +53,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -302,6 +308,90 @@ class ApiContractSmokeTest {
     }
 
     @Test
+    void sensitiveRoutesUseJwtSubjectInsteadOfClientActorUuid() throws Exception {
+        MatchResponse match = matchResponse(42L);
+        MatchEventResponse event = matchEventResponse(500L);
+        MatchMvpResponse mvp = new MatchMvpResponse();
+        mvp.setMatchId(42L);
+
+        when(matchService.createMatch(any())).thenReturn(match);
+        when(matchService.changeMatchStatus(42L, MatchStatus.FINALIZADO, USER_ID)).thenReturn(match);
+        when(matchService.updateTeamAssignments(eq(42L), eq(USER_ID), any(), any())).thenReturn(match);
+        when(matchService.registerEvent(any())).thenReturn(event);
+        when(matchMvpService.vote(42L, USER_ID, OTHER_USER_ID)).thenReturn(mvp);
+
+        mockMvc.perform(post("/api/v1/matches")
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "creadorUuid", OTHER_USER_ID.toString(),
+                                "modalidad", "CINCO_VS_CINCO",
+                                "categoriaGenero", "MIXTO",
+                                "fechaHoraProgramada", "2026-05-07T20:00:00"
+                        ))))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<com.atleta.demo.dto.request.CreateMatchRequest> createMatchCaptor =
+                ArgumentCaptor.forClass(com.atleta.demo.dto.request.CreateMatchRequest.class);
+        verify(matchService).createMatch(createMatchCaptor.capture());
+        assertEquals(USER_ID, createMatchCaptor.getValue().getCreadorUuid());
+
+        mockMvc.perform(put("/api/v1/matches/{matchId}/status", 42L)
+                        .with(jwtFor(USER_ID))
+                        .param("status", "FINALIZADO")
+                        .param("actorUuid", OTHER_USER_ID.toString()))
+                .andExpect(status().isOk());
+        verify(matchService).changeMatchStatus(42L, MatchStatus.FINALIZADO, USER_ID);
+
+        mockMvc.perform(put("/api/v1/matches/{matchId}/teams/assignment", 42L)
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "actorUuid", OTHER_USER_ID.toString(),
+                                "homePlayerUuids", List.of(USER_ID.toString()),
+                                "awayPlayerUuids", List.of(OTHER_USER_ID.toString())
+                        ))))
+                .andExpect(status().isOk());
+        verify(matchService).updateTeamAssignments(eq(42L), eq(USER_ID), any(), any());
+
+        mockMvc.perform(post("/api/v1/matches/events")
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "matchId", 42,
+                                "playerUuid", OTHER_USER_ID.toString(),
+                                "teamId", 77,
+                                "eventType", "GOL",
+                                "registeredByUuid", OTHER_USER_ID.toString(),
+                                "minuto", 12
+                        ))))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<CreateMatchEventRequest> eventCaptor =
+                ArgumentCaptor.forClass(CreateMatchEventRequest.class);
+        verify(matchService).registerEvent(eventCaptor.capture());
+        assertEquals(USER_ID, eventCaptor.getValue().getRegisteredByUuid());
+
+        mockMvc.perform(post("/api/v1/matches/{matchId}/mvp/vote", 42L)
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("votedUserId", OTHER_USER_ID.toString()))))
+                .andExpect(status().isOk());
+        verify(matchMvpService).vote(42L, USER_ID, OTHER_USER_ID);
+    }
+
+    @Test
+    void teamDeleteRejectsActorUuidDifferentFromJwtSubject() throws Exception {
+        mockMvc.perform(delete("/api/v1/teams/{teamId}", 77L)
+                        .with(jwtFor(USER_ID))
+                        .param("actorUuid", OTHER_USER_ID.toString()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+
+        verify(teamService, never()).deleteTeam(any(), any());
+    }
+
+    @Test
     void ratingsRoutesKeepFrontendContract() throws Exception {
         PlayerProfile profile = playerProfile(USER_ID, "Demo10");
         PlayerRating rating = playerRating(profile);
@@ -376,6 +466,19 @@ class ApiContractSmokeTest {
         response.setFechaHoraProgramada(LocalDateTime.of(2026, 5, 7, 20, 0));
         response.setCreador(profileResponse(USER_ID, "Demo10"));
         response.setEstado(MatchStatus.CREADO);
+        response.setCreatedAt(LocalDateTime.now());
+        return response;
+    }
+
+    private MatchEventResponse matchEventResponse(Long id) {
+        MatchEventResponse response = new MatchEventResponse();
+        response.setId(id);
+        response.setPlayer(profileResponse(OTHER_USER_ID, "Rival9"));
+        response.setTeam(teamResponse(77L, "Atleta FC"));
+        response.setEventType(EventType.GOL);
+        response.setMinuto(12);
+        response.setConfirmedByLocal(false);
+        response.setConfirmedByVisitante(false);
         response.setCreatedAt(LocalDateTime.now());
         return response;
     }
