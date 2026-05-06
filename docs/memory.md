@@ -6,6 +6,12 @@ Backend monolitico en Java 21 con Spring Boot 3.3.2 orientado a gestionar identi
 
 El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y Flyway. La seguridad combina registro local con BCrypt, autenticacion Google OAuth y JWT firmado con HS256.
 
+## Avance porcentual
+
+- Avance estimado del proyecto Atleta: 79%.
+- Avance anterior registrado: 78%.
+- Delta de esta tarea: +1 punto porcentual por cerrar la evidencia automatizada de seguridad en ratings y actualizar la memoria operativa.
+
 ## Proposito del repo
 
 - Centralizar identidad y autenticacion de usuarios.
@@ -22,6 +28,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Observabilidad: Actuator, health check custom, metricas Micrometer/Prometheus y logging con MDC.
 - Testing: suite amplia de unit, integration, migration, property-based y seguridad en `src/test/java`.
 - `ApiContractSmokeTest` cubre contratos HTTP backend consumidos por el frontend para auth, teams, matches/MVP y ratings sin levantar base de datos.
+- `JwtAuthenticationIntegrationTest` verifica que `ratings/leaderboard` y `ratings/update` rechacen requests sin JWT, y que leaderboard acepte un token valido.
 
 ## Modulos reales detectados
 
@@ -54,6 +61,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Google OAuth validado contra `tokeninfo` remoto de Google.
 - CORS permitido solo para orígenes localhost conocidos.
 - Swagger y actuator completos quedan abiertos en `dev` y `test`.
+- `ratings/**` ya no queda publico por defecto: las reglas reales terminan en `anyRequest().authenticated()` y hay cobertura de integracion que lo confirma.
 
 ## Aprendizajes tecnicos relevantes
 
@@ -67,7 +75,6 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ### Riesgos prioritarios
 
-- Alto: `SecurityConfig` deja `"/api/v1/ratings/**"` completamente publico, incluyendo endpoints de escritura manual.
 - Alto: la mayoria de endpoints protegidos aceptan `actorUuid`, `playerUuid` o `atletaUuid` por request sin cruzarlo con el `sub` del JWT; un usuario autenticado podria operar sobre terceros si conoce IDs validos.
 - Alto: `application-dev.yaml` trae credenciales locales hardcodeadas (`postgres` / `12345`).
 - Medio: `TeamService.storeTeamLogo` valida por `contentType` pero no inspecciona firma binaria ni antivirus, y expone archivos desde `/uploads/**`.
@@ -95,11 +102,10 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Proximos pasos recomendados
 
-1. Cerrar la brecha de seguridad: exigir JWT valido en ratings y cruzar `actorUuid` con `Authentication`.
-2. Introducir autorizacion de dominio por casos de uso sensibles: borrar equipo, cerrar partido, registrar evento, votar MVP.
-3. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
-4. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
-5. Consolidar trust score en un solo servicio.
-6. Implementar scheduler para refresco de estados de partido.
-7. Eliminar secretos hardcodeados de `application-dev.yaml` y estandarizar `.env.example`.
-8. Agregar Dockerfile y convertir CI/deploy en pipeline ejecutable.
+1. Introducir autorizacion de dominio por casos de uso sensibles: borrar equipo, cerrar partido, registrar evento, votar MVP.
+2. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
+3. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
+4. Consolidar trust score en un solo servicio.
+5. Implementar scheduler para refresco de estados de partido.
+6. Eliminar secretos hardcodeados de `application-dev.yaml` y estandarizar `.env.example`.
+7. Agregar Dockerfile y convertir CI/deploy en pipeline ejecutable.

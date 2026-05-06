@@ -135,7 +135,7 @@
 - `Implementada` OVR completo: `GET /api/v1/ratings/player/{playerProfileId}/overall`
 - `Implementada` Leaderboard: `GET /api/v1/ratings/leaderboard`
 - `Implementada` Actualizacion automatica al finalizar partido desde `MatchService`.
-- `Parcial` La proteccion de seguridad es insuficiente: toda la ruta `/api/v1/ratings/**` esta abierta.
+- `Implementada` La ruta `/api/v1/ratings/**` requiere JWT por `SecurityConfig`; `JwtAuthenticationIntegrationTest` cubre lectura y escritura sin token.
 - `Recomendada` Versionado de formulas de rating y trazabilidad de reglas activas por fecha.
 
 ### Smoke de contratos HTTP backend
@@ -172,6 +172,6 @@
 ## Consideraciones de seguridad
 
 - El backend autentica, pero no siempre autoriza por identidad real del token.
-- `ratings/**` esta publico y debe considerarse riesgo alto.
+- `ratings/**` no queda publico por defecto y tiene cobertura de integracion; sigue pendiente autorizacion fina por identidad/dominio en endpoints sensibles.
 - En `dev` y `test`, Swagger y actuator quedan abiertos.
 - El upload de logos no valida contenido binario real.

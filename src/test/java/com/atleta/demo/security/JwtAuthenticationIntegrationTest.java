@@ -104,6 +104,29 @@ class JwtAuthenticationIntegrationTest {
     }
 
     @Test
+    void ratingsLeaderboardRejectsMissingToken() throws Exception {
+        mockMvc.perform(get("/api/v1/ratings/leaderboard"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void ratingsWriteEndpointRejectsMissingToken() throws Exception {
+        mockMvc.perform(post("/api/v1/ratings/update")
+                .contentType(APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void ratingsLeaderboardAcceptsValidToken() throws Exception {
+        String token = loginAndExtractToken();
+
+        mockMvc.perform(get("/api/v1/ratings/leaderboard")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk());
+    }
+
+    @Test
     void protectedEndpointRejectsInvalidToken() throws Exception {
         String token = loginAndExtractToken() + "tampered";
 

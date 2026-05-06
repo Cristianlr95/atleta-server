@@ -93,6 +93,7 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 - Google OAuth via `tokeninfo`.
 - JWT HS256 propio con `issuer`, `expiration` y secret configurable.
 - Security filter chain stateless.
+- Las rutas no publicas, incluyendo `/api/v1/ratings/**`, quedan bajo `anyRequest().authenticated()`.
 - CORS restringido a localhost en el codigo actual.
 - Actuator/Swagger abiertos en `dev` y `test`.
 
@@ -104,6 +105,7 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 - Naming del dominio en espanol, enums en espanol/ingles mixto.
 - Servicios grandes concentran mapping entity -> DTO dentro del mismo servicio.
 - Los contratos HTTP criticos se protegen con smoke MVC en `ApiContractSmokeTest`, usando controllers reales y servicios mockeados.
+- La proteccion JWT de ratings queda cubierta en `JwtAuthenticationIntegrationTest`.
 
 ## Puntos debiles de arquitectura
 
