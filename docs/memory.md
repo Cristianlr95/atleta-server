@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 82%.
-- Avance anterior registrado: 80%.
-- Delta de esta tarea: +2 puntos porcentuales por cerrar autorizacion JWT en ratings personales, consulta de invitaciones por partido y acciones sensibles de armado/cierre de partido, con smoke MVC de regresion.
+- Avance estimado del proyecto Atleta: 83%.
+- Avance anterior registrado: 82%.
+- Delta de esta tarea: +1 punto porcentual por estabilizar la suite completa tras el endurecimiento JWT, corrigiendo tests end-to-end, aislamiento de datos sociales/notificaciones y soporte de JWT en configuracion de test.
 
 ## Proposito del repo
 
@@ -27,6 +27,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Migraciones: 19 migraciones Flyway activas, desde esquema base hasta genero de atleta.
 - Observabilidad: Actuator, health check custom, metricas Micrometer/Prometheus y logging con MDC.
 - Testing: suite amplia de unit, integration, migration, property-based y seguridad en `src/test/java`.
+- `mvnw test` queda verde en backend despues de adaptar tests protegidos a JWT y limpiar tablas nuevas de social/notificaciones entre casos.
 - `ApiContractSmokeTest` cubre contratos HTTP backend consumidos por el frontend para auth, teams, matches/MVP y ratings sin levantar base de datos.
 - `ApiContractSmokeTest` tambien verifica que creacion/cierre/asignacion/eventos/MVP usen el `sub` del JWT, que borrar equipo rechace un `actorUuid` ajeno, que ratings personales rechacen `playerProfileId` de terceros y que las invitaciones por partido se consulten con visor autenticado.
 - `JwtAuthenticationIntegrationTest` verifica que `ratings/leaderboard` y `ratings/update` rechacen requests sin JWT, y que leaderboard acepte un token valido.
@@ -74,6 +75,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - El dominio de partido ya contempla ventanas temporales, validacion de cierre, MVP y categoria por genero.
 - Se detecta coexistencia de documentacion antigua y codigo nuevo; el codigo es la fuente confiable.
 - Los contratos FE-BE criticos ya tienen doble proteccion: smoke unitario en `atleta-app` para rutas cliente y smoke MVC en backend para rutas/respuestas principales.
+- Los tests de integracion legacy ya inyectan JWT real o `SecurityMockMvcRequestPostProcessors.jwt()` en endpoints protegidos, evitando falsos 500 por `@AuthenticationPrincipal Jwt` nulo.
 
 ## Errores, riesgos y hallazgos
 
@@ -112,5 +114,4 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 4. Consolidar trust score en un solo servicio.
 5. Implementar scheduler para refresco de estados de partido.
 6. Eliminar secretos hardcodeados de `application-dev.yaml` y estandarizar `.env.example`.
-7. Reparar aislamiento de tests de repositorio ante tablas nuevas de notificaciones/push.
-8. Agregar Dockerfile y convertir CI/deploy en pipeline ejecutable.
+7. Agregar Dockerfile y convertir CI/deploy en pipeline ejecutable.

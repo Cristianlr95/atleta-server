@@ -349,6 +349,7 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
@@ -383,6 +384,7 @@ public class MatchControllerIntegrationTest {
 
         // When & Then - Add team as local
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.matchTeams", hasSize(1)))
@@ -412,6 +414,7 @@ public class MatchControllerIntegrationTest {
 
         // Add team to match
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
@@ -457,6 +460,7 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
@@ -502,6 +506,7 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
@@ -595,6 +600,7 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
@@ -640,6 +646,7 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
