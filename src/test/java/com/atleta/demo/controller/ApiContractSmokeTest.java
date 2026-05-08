@@ -1,6 +1,8 @@
 package com.atleta.demo.controller;
 
 import com.atleta.demo.dto.request.CreateMatchEventRequest;
+import com.atleta.demo.dto.request.CreateMatchInviteRequest;
+import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
 import com.atleta.demo.dto.response.AthleteResponse;
 import com.atleta.demo.dto.response.LeaderboardEntryResponse;
 import com.atleta.demo.dto.response.MatchClosePreviewResponse;
@@ -416,6 +418,51 @@ class ApiContractSmokeTest {
                 .andExpect(jsonPath("$[0].matchId").value(42));
 
         verify(socialService).getMatchInvitesByMatch(42L, USER_ID);
+    }
+
+    @Test
+    void socialMatchInviteWritesUseJwtSubjectAsRequester() throws Exception {
+        SocialRequestResponse invite = new SocialRequestResponse();
+        invite.setId(801L);
+        invite.setType("MATCH_INVITE");
+        invite.setRequesterUuid(USER_ID);
+        invite.setTargetUuid(OTHER_USER_ID);
+        invite.setMatchId(42L);
+
+        when(socialService.createMatchInvite(any(CreateMatchInviteRequest.class))).thenReturn(invite);
+        when(socialService.createMatchInvitesBatch(any(CreateMatchInvitesBatchRequest.class))).thenReturn(List.of(invite));
+
+        mockMvc.perform(post("/api/v1/social/match-invites")
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "matchId", 42,
+                                "teamId", 77,
+                                "requesterUuid", OTHER_USER_ID.toString(),
+                                "targetUuid", OTHER_USER_ID.toString()
+                        ))))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<CreateMatchInviteRequest> inviteCaptor =
+                ArgumentCaptor.forClass(CreateMatchInviteRequest.class);
+        verify(socialService).createMatchInvite(inviteCaptor.capture());
+        assertEquals(USER_ID, inviteCaptor.getValue().getRequesterUuid());
+
+        mockMvc.perform(post("/api/v1/social/match-invites/batch")
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "matchId", 42,
+                                "teamId", 77,
+                                "requesterUuid", OTHER_USER_ID.toString(),
+                                "targetUuids", List.of(OTHER_USER_ID.toString())
+                        ))))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<CreateMatchInvitesBatchRequest> batchCaptor =
+                ArgumentCaptor.forClass(CreateMatchInvitesBatchRequest.class);
+        verify(socialService).createMatchInvitesBatch(batchCaptor.capture());
+        assertEquals(USER_ID, batchCaptor.getValue().getRequesterUuid());
     }
 
     @Test

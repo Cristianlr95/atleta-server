@@ -217,6 +217,8 @@ public class SocialService {
 
         PlayerProfile requester = getPlayer(request.getRequesterUuid());
         PlayerProfile target = getPlayer(request.getTargetUuid());
+        validateMatchInviteRequester(match, requester.getAtletaUuid());
+        validateTeamBelongsToMatch(match, resolvedTeam);
         boolean selfInvite = requester.getAtletaUuid().equals(target.getAtletaUuid());
 
         if (selfInvite) {
@@ -487,6 +489,36 @@ public class SocialService {
         boolean isMatchParticipant = matchPlayerRepository.findByMatchAndPlayerAtletaUuid(match, actorUuid).isPresent();
         if (!isMatchParticipant) {
             throw new AccessDeniedException("No puedes ver invitaciones de un partido ajeno");
+        }
+    }
+
+    private void validateMatchInviteRequester(Match match, UUID actorUuid) {
+        if (actorUuid == null) {
+            throw new AccessDeniedException("Se requiere usuario autenticado");
+        }
+
+        if (match.getCreador() != null && actorUuid.equals(match.getCreador().getAtletaUuid())) {
+            return;
+        }
+
+        boolean isMatchParticipant = matchPlayerRepository.findByMatchAndPlayerAtletaUuid(match, actorUuid).isPresent();
+        if (!isMatchParticipant) {
+            throw new AccessDeniedException("No puedes invitar jugadores a un partido ajeno");
+        }
+    }
+
+    private void validateTeamBelongsToMatch(Match match, Team team) {
+        if (team == null) {
+            return;
+        }
+
+        boolean belongsToMatch = match.getMatchTeams() != null && match.getMatchTeams().stream()
+                .anyMatch(matchTeam -> matchTeam.getTeam() != null
+                        && team.getId() != null
+                        && team.getId().equals(matchTeam.getTeam().getId()));
+
+        if (!belongsToMatch) {
+            throw new IllegalArgumentException("El equipo indicado no pertenece al partido");
         }
     }
 

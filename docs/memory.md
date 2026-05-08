@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 84%.
-- Avance anterior registrado: 83%.
-- Delta de esta tarea: +1 punto porcentual por corregir compose local/CI, usar el `ENTRYPOINT` del Dockerfile y exigir variables locales seguras via `.env`.
+- Avance estimado del proyecto Atleta: 85%.
+- Avance anterior registrado: 84%.
+- Delta de esta tarea: +1 punto porcentual por cerrar autorizacion de creacion de invitaciones de partido y validar que el equipo invitado pertenezca al match.
 
 ## Proposito del repo
 
@@ -29,7 +29,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Testing: suite amplia de unit, integration, migration, property-based y seguridad en `src/test/java`.
 - `mvnw test` queda verde en backend despues de adaptar tests protegidos a JWT y limpiar tablas nuevas de social/notificaciones entre casos.
 - `ApiContractSmokeTest` cubre contratos HTTP backend consumidos por el frontend para auth, teams, matches/MVP y ratings sin levantar base de datos.
-- `ApiContractSmokeTest` tambien verifica que creacion/cierre/asignacion/eventos/MVP usen el `sub` del JWT, que borrar equipo rechace un `actorUuid` ajeno, que ratings personales rechacen `playerProfileId` de terceros y que las invitaciones por partido se consulten con visor autenticado.
+- `ApiContractSmokeTest` tambien verifica que creacion/cierre/asignacion/eventos/MVP usen el `sub` del JWT, que borrar equipo rechace un `actorUuid` ajeno, que ratings personales rechacen `playerProfileId` de terceros y que las invitaciones por partido usen visor/requester autenticado.
 - `JwtAuthenticationIntegrationTest` verifica que `ratings/leaderboard` y `ratings/update` rechacen requests sin JWT, y que leaderboard acepte un token valido.
 
 ## Modulos reales detectados
@@ -67,6 +67,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Las rutas personales de ratings (`player/{playerProfileId}`, history, stats, overall e initialize-base) validan que el `playerProfileId` coincida con el `sub` del JWT.
 - La actualizacion manual de ratings via controller rechaza performances cuyo `playerProfileId` no coincide con el usuario autenticado.
 - La consulta de invitaciones por partido valida que el visor autenticado sea creador, participante o actor de alguna invitacion.
+- La creacion de invitaciones de partido valida que el requester autenticado sea creador o participante del partido, y rechaza `teamId` que no pertenezca al match.
 
 ## Aprendizajes tecnicos relevantes
 

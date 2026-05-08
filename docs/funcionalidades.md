@@ -81,6 +81,8 @@
   - `GET /api/v1/social/match-invites/{playerUuid}`
   - `GET /api/v1/social/match-invites/by-match/{matchId}`
 - `Implementada` La consulta de invitaciones por partido exige visor autenticado autorizado: creador, participante o actor de una invitacion del partido.
+- `Implementada` Crear invitaciones de partido exige requester autenticado autorizado: creador o participante del partido.
+- `Implementada` Crear invitaciones de partido rechaza `teamId` que no pertenezca al match.
 - `Implementada` Notificaciones:
   - `GET /api/v1/social/notifications/{playerUuid}`
   - `PUT /api/v1/social/notifications/{notificationId}/read`
@@ -152,7 +154,7 @@
 
 - `Implementada parcial` Existe `ApiContractSmokeTest` con `@WebMvcTest` para contratos HTTP usados por frontend.
 - Cubre rutas principales de auth, teams, matches/MVP y ratings, validando status y campos JSON criticos.
-- Cubre regresiones de seguridad para no confiar en UUIDs de cliente en crear/cerrar partido, asignaciones, eventos, voto MVP, borrado de equipo, ratings personales y consulta social de invitaciones por partido.
+- Cubre regresiones de seguridad para no confiar en UUIDs de cliente en crear/cerrar partido, asignaciones, eventos, voto MVP, borrado de equipo, ratings personales y consulta/creacion social de invitaciones por partido.
 - Pendiente opcional: smoke E2E contra frontend y backend levantados con datos/credenciales estables.
 
 ## Reglas de negocio detectadas
@@ -185,6 +187,7 @@
 - El backend autentica y los flujos principales ya autorizan por identidad real del token; quedan decisiones de privacidad/rol para lecturas globales y administracion fina.
 - `ratings/**` no queda publico por defecto y tiene cobertura de integracion.
 - Equipos/partidos/eventos/MVP/social por partido/ratings personales tienen evidencia de contrato para usar el JWT como identidad efectiva o rechazar UUIDs ajenos.
+- Las invitaciones de partido ya no pueden ser creadas por un usuario autenticado ajeno al match, aunque conozca el `matchId`.
 - Sigue pendiente autorizacion fina por rol de negocio en flujos secundarios y politicas de lectura publica.
 - En `dev` y `test`, Swagger y actuator quedan abiertos.
 - El upload de logos no valida contenido binario real.
