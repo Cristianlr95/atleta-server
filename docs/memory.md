@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 80%.
-- Avance anterior registrado: 79%.
-- Delta de esta tarea: +1 punto porcentual por agregar evidencia automatizada contra suplantacion de UUID en endpoints sensibles de equipos, partidos, eventos y MVP.
+- Avance estimado del proyecto Atleta: 82%.
+- Avance anterior registrado: 80%.
+- Delta de esta tarea: +2 puntos porcentuales por cerrar autorizacion JWT en ratings personales, consulta de invitaciones por partido y acciones sensibles de armado/cierre de partido, con smoke MVC de regresion.
 
 ## Proposito del repo
 
@@ -28,7 +28,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Observabilidad: Actuator, health check custom, metricas Micrometer/Prometheus y logging con MDC.
 - Testing: suite amplia de unit, integration, migration, property-based y seguridad en `src/test/java`.
 - `ApiContractSmokeTest` cubre contratos HTTP backend consumidos por el frontend para auth, teams, matches/MVP y ratings sin levantar base de datos.
-- `ApiContractSmokeTest` tambien verifica que creacion/cierre/asignacion/eventos/MVP usen el `sub` del JWT y que borrar equipo rechace un `actorUuid` ajeno.
+- `ApiContractSmokeTest` tambien verifica que creacion/cierre/asignacion/eventos/MVP usen el `sub` del JWT, que borrar equipo rechace un `actorUuid` ajeno, que ratings personales rechacen `playerProfileId` de terceros y que las invitaciones por partido se consulten con visor autenticado.
 - `JwtAuthenticationIntegrationTest` verifica que `ratings/leaderboard` y `ratings/update` rechacen requests sin JWT, y que leaderboard acepte un token valido.
 
 ## Modulos reales detectados
@@ -63,6 +63,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - CORS permitido solo para orígenes localhost conocidos.
 - Swagger y actuator completos quedan abiertos en `dev` y `test`.
 - `ratings/**` ya no queda publico por defecto: las reglas reales terminan en `anyRequest().authenticated()` y hay cobertura de integracion que lo confirma.
+- Las rutas personales de ratings (`player/{playerProfileId}`, history, stats, overall e initialize-base) validan que el `playerProfileId` coincida con el `sub` del JWT.
+- La actualizacion manual de ratings via controller rechaza performances cuyo `playerProfileId` no coincide con el usuario autenticado.
+- La consulta de invitaciones por partido valida que el visor autenticado sea creador, participante o actor de alguna invitacion.
 
 ## Aprendizajes tecnicos relevantes
 
@@ -76,7 +79,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ### Riesgos prioritarios
 
-- Alto: quedan endpoints protegidos que aceptan `actorUuid`, `playerUuid` o `atletaUuid` por request sin cruzarlo con el `sub` del JWT; ya existe evidencia de regresion para equipos, partidos, eventos y MVP.
+- Medio: quedan endpoints protegidos con parametros UUID heredados o rutas de lectura global que requieren decidir contrato publico vs privado; ratings personales, invitaciones por partido y acciones principales de partido ya tienen regresion basada en `sub` JWT.
 - Alto: `application-dev.yaml` trae credenciales locales hardcodeadas (`postgres` / `12345`).
 - Medio: `TeamService.storeTeamLogo` valida por `contentType` pero no inspecciona firma binaria ni antivirus, y expone archivos desde `/uploads/**`.
 - Medio: el pipeline de deploy es parcial; los pasos reales de despliegue siguen siendo `echo`.
@@ -93,7 +96,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Deuda tecnica detectada
 
-- Falta autorizacion por identidad del actor y por rol de negocio.
+- Falta completar autorizacion por rol de negocio en operaciones de administracion/lectura global; la autorizacion por identidad esta reforzada en flujos principales de equipos, partidos, eventos, MVP, social por partido y ratings personales.
 - Falta separar casos de uso grandes: `MatchService` y `RatingService` concentran demasiada responsabilidad.
 - Falta automatizacion real de estados de partido via scheduler o job dedicado.
 - Falta Dockerfile productivo.
@@ -103,10 +106,11 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Proximos pasos recomendados
 
-1. Completar autorizacion de dominio en endpoints sociales/perfil restantes que aun aceptan UUIDs de usuario desde request.
+1. Decidir contrato publico/privado para lecturas globales (`leaderboard`, busquedas, listados generales de partidos/equipos) y documentarlo como politica de privacidad.
 2. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
 3. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
 4. Consolidar trust score en un solo servicio.
 5. Implementar scheduler para refresco de estados de partido.
 6. Eliminar secretos hardcodeados de `application-dev.yaml` y estandarizar `.env.example`.
-7. Agregar Dockerfile y convertir CI/deploy en pipeline ejecutable.
+7. Reparar aislamiento de tests de repositorio ante tablas nuevas de notificaciones/push.
+8. Agregar Dockerfile y convertir CI/deploy en pipeline ejecutable.

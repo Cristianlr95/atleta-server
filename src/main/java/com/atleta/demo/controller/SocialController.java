@@ -147,8 +147,14 @@ public class SocialController {
 
     @GetMapping("/match-invites/by-match/{matchId}")
     @Operation(summary = "Listar invitaciones de partido por matchId")
-    public ResponseEntity<List<SocialRequestResponse>> getMatchInvitesByMatch(@PathVariable Long matchId) {
-        return ResponseEntity.ok(socialService.getMatchInvitesByMatch(matchId));
+    public ResponseEntity<List<SocialRequestResponse>> getMatchInvitesByMatch(
+            @PathVariable Long matchId,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ResponseEntity.ok(socialService.getMatchInvitesByMatch(
+                matchId,
+                AuthenticatedUserUtils.currentUserUuid(jwt)
+        ));
     }
 
     @GetMapping("/notifications/{playerUuid}")

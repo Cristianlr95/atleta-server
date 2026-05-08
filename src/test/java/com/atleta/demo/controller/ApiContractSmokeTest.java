@@ -8,6 +8,7 @@ import com.atleta.demo.dto.response.MatchEventResponse;
 import com.atleta.demo.dto.response.MatchMvpResponse;
 import com.atleta.demo.dto.response.MatchResponse;
 import com.atleta.demo.dto.response.PlayerProfileResponse;
+import com.atleta.demo.dto.response.SocialRequestResponse;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.dto.response.TeamResponse;
 import com.atleta.demo.config.TestConfig;
@@ -33,6 +34,7 @@ import com.atleta.demo.service.MatchLiveEventService;
 import com.atleta.demo.service.MatchMvpService;
 import com.atleta.demo.service.MatchService;
 import com.atleta.demo.service.RatingService;
+import com.atleta.demo.service.SocialService;
 import com.atleta.demo.service.TeamService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -71,6 +73,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         AthleteController.class,
         TeamController.class,
         MatchController.class,
+        SocialController.class,
         RatingController.class
 })
 @AutoConfigureMockMvc
@@ -109,6 +112,9 @@ class ApiContractSmokeTest {
 
     @MockBean
     private RatingService ratingService;
+
+    @MockBean
+    private SocialService socialService;
 
     @MockBean
     private PlayerProfileRepository playerProfileRepository;
@@ -233,7 +239,7 @@ class ApiContractSmokeTest {
         when(matchService.getMatchesByPlayerOrCreator(USER_ID)).thenReturn(List.of(match));
         when(matchService.changeMatchStatus(42L, MatchStatus.FINALIZADO, USER_ID)).thenReturn(match);
         when(matchService.updateTeamAssignments(eq(42L), eq(USER_ID), any(), any())).thenReturn(match);
-        when(matchService.getClosePreview(eq(42L), any())).thenReturn(preview);
+        when(matchService.getClosePreview(eq(42L), any(), eq(USER_ID))).thenReturn(preview);
         when(matchMvpService.getMvpState(42L, USER_ID)).thenReturn(mvp);
         when(matchMvpService.vote(42L, USER_ID, OTHER_USER_ID)).thenReturn(mvp);
 
@@ -284,6 +290,7 @@ class ApiContractSmokeTest {
                 .andExpect(jsonPath("$.id").value(42));
 
         mockMvc.perform(post("/api/v1/matches/{matchId}/close/preview", 42L)
+                        .with(jwtFor(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of(
                                 "finalScoreLocal", 2,
@@ -317,6 +324,7 @@ class ApiContractSmokeTest {
         when(matchService.createMatch(any())).thenReturn(match);
         when(matchService.changeMatchStatus(42L, MatchStatus.FINALIZADO, USER_ID)).thenReturn(match);
         when(matchService.updateTeamAssignments(eq(42L), eq(USER_ID), any(), any())).thenReturn(match);
+        when(matchService.getClosePreview(eq(42L), any(), eq(USER_ID))).thenReturn(new MatchClosePreviewResponse());
         when(matchService.registerEvent(any())).thenReturn(event);
         when(matchMvpService.vote(42L, USER_ID, OTHER_USER_ID)).thenReturn(mvp);
 
@@ -354,6 +362,16 @@ class ApiContractSmokeTest {
                 .andExpect(status().isOk());
         verify(matchService).updateTeamAssignments(eq(42L), eq(USER_ID), any(), any());
 
+        mockMvc.perform(post("/api/v1/matches/{matchId}/close/preview", 42L)
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "finalScoreLocal", 2,
+                                "finalScoreAway", 1
+                        ))))
+                .andExpect(status().isOk());
+        verify(matchService).getClosePreview(eq(42L), any(), eq(USER_ID));
+
         mockMvc.perform(post("/api/v1/matches/events")
                         .with(jwtFor(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -378,6 +396,26 @@ class ApiContractSmokeTest {
                         .content(json(Map.of("votedUserId", OTHER_USER_ID.toString()))))
                 .andExpect(status().isOk());
         verify(matchMvpService).vote(42L, USER_ID, OTHER_USER_ID);
+    }
+
+    @Test
+    void socialMatchInviteRoutesUseJwtSubjectAsViewer() throws Exception {
+        SocialRequestResponse invite = new SocialRequestResponse();
+        invite.setId(800L);
+        invite.setType("MATCH_INVITE");
+        invite.setRequesterUuid(USER_ID);
+        invite.setTargetUuid(OTHER_USER_ID);
+        invite.setMatchId(42L);
+
+        when(socialService.getMatchInvitesByMatch(42L, USER_ID)).thenReturn(List.of(invite));
+
+        mockMvc.perform(get("/api/v1/social/match-invites/by-match/{matchId}", 42L)
+                        .with(jwtFor(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(800))
+                .andExpect(jsonPath("$[0].matchId").value(42));
+
+        verify(socialService).getMatchInvitesByMatch(42L, USER_ID);
     }
 
     @Test
@@ -406,21 +444,25 @@ class ApiContractSmokeTest {
         when(ratingService.getLeaderboard(RoleType.ATAQUE, null)).thenReturn(List.of(leaderboardEntry));
         when(playerProfileRepository.findById(USER_ID)).thenReturn(Optional.of(profile));
 
-        mockMvc.perform(get("/api/v1/ratings/player/{playerProfileId}", USER_ID))
+        mockMvc.perform(get("/api/v1/ratings/player/{playerProfileId}", USER_ID)
+                        .with(jwtFor(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].playerProfileId").value(USER_ID.toString()))
                 .andExpect(jsonPath("$[0].roleType").value("ATAQUE"));
 
-        mockMvc.perform(get("/api/v1/ratings/player/{playerProfileId}/history", USER_ID))
+        mockMvc.perform(get("/api/v1/ratings/player/{playerProfileId}/history", USER_ID)
+                        .with(jwtFor(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].playerProfileId").value(USER_ID.toString()))
                 .andExpect(jsonPath("$[0].matchResult").value("GANADO"));
 
-        mockMvc.perform(post("/api/v1/ratings/player/{playerProfileId}/initialize-base", USER_ID))
+        mockMvc.perform(post("/api/v1/ratings/player/{playerProfileId}/initialize-base", USER_ID)
+                        .with(jwtFor(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].currentRating").value(72));
 
-        mockMvc.perform(get("/api/v1/ratings/player/{playerProfileId}/overall", USER_ID))
+        mockMvc.perform(get("/api/v1/ratings/player/{playerProfileId}/overall", USER_ID)
+                        .with(jwtFor(USER_ID)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.playerProfileId").value(USER_ID.toString()))
                 .andExpect(jsonPath("$.alias").value("Demo10"))
@@ -431,6 +473,41 @@ class ApiContractSmokeTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].playerProfileId").value(USER_ID.toString()))
                 .andExpect(jsonPath("$[0].alias").value("Demo10"));
+    }
+
+    @Test
+    void ratingPersonalRoutesRejectOtherPlayerUuid() throws Exception {
+        mockMvc.perform(get("/api/v1/ratings/player/{playerProfileId}", OTHER_USER_ID)
+                        .with(jwtFor(USER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+
+        mockMvc.perform(post("/api/v1/ratings/player/{playerProfileId}/initialize-base", OTHER_USER_ID)
+                        .with(jwtFor(USER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+
+        mockMvc.perform(post("/api/v1/ratings/update")
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "matchId", 42,
+                                "performances", List.of(Map.of(
+                                        "playerProfileId", OTHER_USER_ID.toString(),
+                                        "roleType", "ATAQUE",
+                                        "priorityLevel", "PRINCIPAL",
+                                        "goalsScored", 1,
+                                        "assistsMade", 0,
+                                        "goalsConceded", 0,
+                                        "wasMvp", false,
+                                        "matchResult", "GANADO"
+                                ))
+                        ))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+
+        verify(ratingService, never()).initializeBaseRatings(OTHER_USER_ID);
+        verify(ratingService, never()).updatePlayerRatings(eq(42L), any());
     }
 
     private String json(Object value) throws Exception {

@@ -17,6 +17,7 @@ import com.atleta.demo.exception.MatchNotFoundException;
 import com.atleta.demo.exception.PlayerNotFoundException;
 import com.atleta.demo.exception.RatingCalculationException;
 import com.atleta.demo.repository.PlayerProfileRepository;
+import com.atleta.demo.security.AuthenticatedUserUtils;
 import com.atleta.demo.service.RatingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -29,6 +30,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -80,7 +83,9 @@ public class RatingController {
         @ApiResponse(responseCode = "500", description = "Error interno en el cÃ¡lculo de calificaciones")
     })
     public ResponseEntity<String> updatePlayerRatings(
+            @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody UpdatePlayerRatingsRequest request) {
+        requireOnlyAuthenticatedPlayerPerformances(jwt, request);
         
         logger.info("Solicitud de actualizaciÃ³n manual de calificaciones para partido {} con {} jugadores", 
                    request.getMatchId(), request.getPerformances().size());
@@ -173,7 +178,9 @@ public class RatingController {
     })
     public ResponseEntity<List<PlayerRatingResponse>> getPlayerRatings(
             @Parameter(description = "UUID del perfil del jugador")
-            @PathVariable UUID playerProfileId) {
+            @PathVariable UUID playerProfileId,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId);
         
         logger.debug("Consultando calificaciones para jugador {}", playerProfileId);
         
@@ -215,7 +222,9 @@ public class RatingController {
     })
     public ResponseEntity<List<PlayerRatingResponse>> initializePlayerBaseRatings(
             @Parameter(description = "UUID del perfil del jugador")
-            @PathVariable UUID playerProfileId) {
+            @PathVariable UUID playerProfileId,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId);
 
         logger.info("Inicializando calificaciones base para jugador {}", playerProfileId);
 
@@ -246,7 +255,9 @@ public class RatingController {
             @Parameter(description = "UUID del perfil del jugador")
             @PathVariable UUID playerProfileId,
             @Parameter(description = "Tipo de rol a filtrar")
-            @PathVariable RoleType roleType) {
+            @PathVariable RoleType roleType,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId);
         
         logger.debug("Consultando calificaciones para jugador {} y rol {}", playerProfileId, roleType);
         
@@ -287,7 +298,9 @@ public class RatingController {
             @Parameter(description = "UUID del perfil del jugador")
             @PathVariable UUID playerProfileId,
             @Parameter(description = "Nivel de prioridad a filtrar")
-            @PathVariable PriorityLevel priorityLevel) {
+            @PathVariable PriorityLevel priorityLevel,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId);
         
         logger.debug("Consultando calificaciones para jugador {} y prioridad {}", playerProfileId, priorityLevel);
         
@@ -328,7 +341,9 @@ public class RatingController {
     })
     public ResponseEntity<List<RatingHistoryResponse>> getRatingHistory(
             @Parameter(description = "UUID del perfil del jugador")
-            @PathVariable UUID playerProfileId) {
+            @PathVariable UUID playerProfileId,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId);
         
         logger.debug("Consultando historial de calificaciones para jugador {}", playerProfileId);
         
@@ -368,7 +383,9 @@ public class RatingController {
             @Parameter(description = "UUID del perfil del jugador")
             @PathVariable UUID playerProfileId,
             @Parameter(description = "Tipo de rol a filtrar")
-            @PathVariable RoleType roleType) {
+            @PathVariable RoleType roleType,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId);
         
         logger.debug("Consultando historial para jugador {} y rol {}", playerProfileId, roleType);
         
@@ -411,7 +428,9 @@ public class RatingController {
             @Parameter(description = "Fecha de inicio del perÃ­odo (formato: yyyy-MM-ddTHH:mm:ss)")
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
             @Parameter(description = "Fecha de fin del perÃ­odo (formato: yyyy-MM-ddTHH:mm:ss)")
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId);
         
         logger.debug("Consultando historial para jugador {} entre {} y {}", playerProfileId, startDate, endDate);
         
@@ -449,7 +468,9 @@ public class RatingController {
     })
     public ResponseEntity<Object[]> getPlayerPerformanceStatistics(
             @Parameter(description = "UUID del perfil del jugador")
-            @PathVariable UUID playerProfileId) {
+            @PathVariable UUID playerProfileId,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId);
         
         logger.debug("Consultando estadÃ­sticas de rendimiento para jugador {}", playerProfileId);
         
@@ -480,7 +501,9 @@ public class RatingController {
             @Parameter(description = "UUID del perfil del jugador")
             @PathVariable UUID playerProfileId,
             @Parameter(description = "Tipo de rol a filtrar")
-            @PathVariable RoleType roleType) {
+            @PathVariable RoleType roleType,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId);
         
         logger.debug("Consultando estadÃ­sticas de rendimiento para jugador {} y rol {}", playerProfileId, roleType);
         
@@ -511,7 +534,9 @@ public class RatingController {
     })
     public ResponseEntity<PlayerOverallStatsResponse> getOverallRating(
             @Parameter(description = "UUID del perfil del jugador")
-            @PathVariable UUID playerProfileId) {
+            @PathVariable UUID playerProfileId,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId);
         
         logger.debug("Consultando OVR completo para jugador {}", playerProfileId);
         
@@ -573,6 +598,17 @@ public class RatingController {
             @RequestParam(required = false) RoleType roleType,
             @RequestParam(required = false) Integer limit) {
         return ResponseEntity.ok(ratingService.getLeaderboard(roleType, limit));
+    }
+
+    private void requireOnlyAuthenticatedPlayerPerformances(Jwt jwt, UpdatePlayerRatingsRequest request) {
+        if (request == null || request.getPerformances() == null) {
+            return;
+        }
+
+        request.getPerformances().stream()
+                .map(performance -> performance.getPlayerProfileId())
+                .filter(playerProfileId -> playerProfileId != null)
+                .forEach(playerProfileId -> AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId));
     }
 
     /**

@@ -194,11 +194,19 @@ public class MatchService {
     }
 
     public List<MatchPlayerResponse> importTeamPlayers(Long matchId, Long teamId) {
+        return importTeamPlayers(matchId, teamId, null);
+    }
+
+    public List<MatchPlayerResponse> importTeamPlayers(Long matchId, Long teamId, UUID actorUuid) {
         Match match = matchRepository.findById(matchId)
                 .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado: " + matchId));
 
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado: " + teamId));
+
+        if (actorUuid != null) {
+            validateResponsibleActor(match, actorUuid);
+        }
 
         if (!matchTeamRepository.existsByMatchAndTeam(match, team)) {
             throw new IllegalArgumentException("El equipo no participa en este partido");
@@ -242,11 +250,19 @@ public class MatchService {
      * Un partido debe tener exactamente 2 equipos.
      */
     public MatchResponse addTeamToMatch(Long matchId, Long teamId, Boolean esLocal) {
+        return addTeamToMatch(matchId, teamId, esLocal, null);
+    }
+
+    public MatchResponse addTeamToMatch(Long matchId, Long teamId, Boolean esLocal, UUID actorUuid) {
         Match match = matchRepository.findById(matchId)
                 .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado: " + matchId));
 
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado: " + teamId));
+
+        if (actorUuid != null) {
+            validateResponsibleActor(match, actorUuid);
+        }
 
         // Verificar que no haya más de 2 equipos
         long teamCount = matchTeamRepository.countByMatch(match);
@@ -333,8 +349,17 @@ public class MatchService {
 
     @Transactional(readOnly = true)
     public MatchClosePreviewResponse getClosePreview(Long matchId, MatchClosePreviewRequest request) {
+        return getClosePreview(matchId, request, null);
+    }
+
+    @Transactional(readOnly = true)
+    public MatchClosePreviewResponse getClosePreview(Long matchId, MatchClosePreviewRequest request, UUID actorUuid) {
         Match match = matchRepository.findById(matchId)
                 .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado: " + matchId));
+
+        if (actorUuid != null) {
+            validateResponsibleActor(match, actorUuid);
+        }
 
         List<MatchPlayer> players = matchPlayerRepository.findByMatch(match).stream()
                 .filter(item -> Boolean.TRUE.equals(item.getConfirmado()))
