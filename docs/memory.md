@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 83%.
-- Avance anterior registrado: 82%.
-- Delta de esta tarea: +1 punto porcentual por estabilizar la suite completa tras el endurecimiento JWT, corrigiendo tests end-to-end, aislamiento de datos sociales/notificaciones y soporte de JWT en configuracion de test.
+- Avance estimado del proyecto Atleta: 84%.
+- Avance anterior registrado: 83%.
+- Delta de esta tarea: +1 punto porcentual por corregir compose local/CI, usar el `ENTRYPOINT` del Dockerfile y exigir variables locales seguras via `.env`.
 
 ## Proposito del repo
 
@@ -82,10 +82,10 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 ### Riesgos prioritarios
 
 - Medio: quedan endpoints protegidos con parametros UUID heredados o rutas de lectura global que requieren decidir contrato publico vs privado; ratings personales, invitaciones por partido y acciones principales de partido ya tienen regresion basada en `sub` JWT.
-- Alto: `application-dev.yaml` trae credenciales locales hardcodeadas (`postgres` / `12345`).
+- Medio: `application-dev.yaml` mantiene defaults de desarrollo para usuario/base local, pero `docker-compose.yml` ya no levanta con `DB_PASSWORD` ausente o trivial por defecto.
 - Medio: `TeamService.storeTeamLogo` valida por `contentType` pero no inspecciona firma binaria ni antivirus, y expone archivos desde `/uploads/**`.
 - Medio: el pipeline de deploy es parcial; los pasos reales de despliegue siguen siendo `echo`.
-- Medio: `docker-compose.ci.yml` asume `build: .` pero el repo no tiene `Dockerfile`.
+- Bajo: Dockerfile y compose local/CI existen; falta validar el flujo con Docker instalado en el entorno de desarrollo/CI.
 
 ### Riesgos funcionales y de consistencia
 
@@ -101,8 +101,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Falta completar autorizacion por rol de negocio en operaciones de administracion/lectura global; la autorizacion por identidad esta reforzada en flujos principales de equipos, partidos, eventos, MVP, social por partido y ratings personales.
 - Falta separar casos de uso grandes: `MatchService` y `RatingService` concentran demasiada responsabilidad.
 - Falta automatizacion real de estados de partido via scheduler o job dedicado.
-- Falta Dockerfile productivo.
-- Falta CI/CD operativo de despliegue.
+- Falta consolidar y validar el flujo CI/CD completo de despliegue; Dockerfile y compose local/CI ya existen.
 - Falta estrategia centralizada de manejo de errores para todos los modulos sociales/equipos.
 - Falta normalizacion documental: hay varios `.md` desactualizados.
 
@@ -113,5 +112,5 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 3. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
 4. Consolidar trust score en un solo servicio.
 5. Implementar scheduler para refresco de estados de partido.
-6. Eliminar secretos hardcodeados de `application-dev.yaml` y estandarizar `.env.example`.
-7. Agregar Dockerfile y convertir CI/deploy en pipeline ejecutable.
+6. Mantener `.env.example` alineado con `docker-compose.yml` y exigir `DB_PASSWORD`/`JWT_SECRET` seguros en `.env` local.
+7. Convertir CI/deploy en pipeline ejecutable usando el Dockerfile y compose CI actuales.
