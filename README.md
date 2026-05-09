@@ -80,8 +80,9 @@ Si no existe `.env.example` en tu copia, crea `.env` con al menos:
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=atleta_dev
-DB_USERNAME=postgres
-DB_PASSWORD=postgres
+DB_USERNAME=atleta_dev
+DB_PASSWORD=change-me-local-password
+JWT_SECRET=replace-with-a-secure-secret-of-at-least-32-bytes
 SPRING_PROFILES_ACTIVE=dev
 ```
 
@@ -94,8 +95,9 @@ La API queda disponible en `http://localhost:8080`.
 $env:DB_HOST="localhost"
 $env:DB_PORT="5432"
 $env:DB_NAME="atleta_dev"
-$env:DB_USERNAME="postgres"
-$env:DB_PASSWORD="postgres"
+$env:DB_USERNAME="atleta_dev"
+$env:DB_PASSWORD="change-me-local-password"
+$env:JWT_SECRET="replace-with-a-secure-secret-of-at-least-32-bytes"
 .\mvnw.cmd spring-boot:run
 ```
 
@@ -104,8 +106,9 @@ $env:DB_PASSWORD="postgres"
 export DB_HOST=localhost
 export DB_PORT=5432
 export DB_NAME=atleta_dev
-export DB_USERNAME=postgres
-export DB_PASSWORD=postgres
+export DB_USERNAME=atleta_dev
+export DB_PASSWORD=change-me-local-password
+export JWT_SECRET=replace-with-a-secure-secret-of-at-least-32-bytes
 ./mvnw spring-boot:run
 ```
 

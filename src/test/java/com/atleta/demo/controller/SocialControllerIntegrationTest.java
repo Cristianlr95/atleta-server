@@ -2,6 +2,7 @@ package com.atleta.demo.controller;
 
 import com.atleta.demo.config.TestConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,12 @@ class SocialControllerIntegrationTest {
 
     private MockMvc mockMvc;
     private UUID playerUuid;
+
+    @AfterEach
+    void cleanSocialRows() {
+        jdbcTemplate.update("DELETE FROM push_notification_tokens");
+        jdbcTemplate.update("DELETE FROM notifications");
+    }
 
     @BeforeEach
     void setUp() {

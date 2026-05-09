@@ -55,6 +55,9 @@ public abstract class BaseIntegrationTest {
     private void cleanupDataTables() {
         // Clean in reverse dependency order - only clean tables that exist
         String[] tablesToClean = {
+            "push_notification_tokens", "notifications", "match_mvp_votes",
+            "match_invites", "team_invites", "friendships",
+            "rating_history", "player_ratings",
             "trust_logs", "player_history", "match_events", "match_players", 
             "match_teams", "matches", "team_members", "team_stats", "teams", 
             "player_positions", "player_profiles", "athletes"

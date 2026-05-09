@@ -2,9 +2,14 @@ package com.atleta.demo.controller;
 
 import com.atleta.demo.dto.request.*;
 import com.atleta.demo.entity.Athlete;
+import com.atleta.demo.entity.Match;
+import com.atleta.demo.entity.PlayerProfile;
 import com.atleta.demo.entity.Position;
 import com.atleta.demo.enums.GenderType;
+import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.repository.AthleteRepository;
+import com.atleta.demo.repository.MatchRepository;
+import com.atleta.demo.repository.PlayerProfileRepository;
 import com.atleta.demo.repository.PositionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +28,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import com.atleta.demo.config.TestConfig;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.*;
@@ -60,6 +66,12 @@ public class PlayerProfileControllerIntegrationTest {
 
     @Autowired
     private PositionRepository positionRepository;
+
+    @Autowired
+    private PlayerProfileRepository playerProfileRepository;
+
+    @Autowired
+    private MatchRepository matchRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -433,6 +445,46 @@ public class PlayerProfileControllerIntegrationTest {
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].cambio").value(15))
                 .andExpect(jsonPath("$[0].motivo").value("Excellent performance"));
+    }
+
+    @Test
+    void testTrustScoreHistory_IncludesMatchWhenRequestHasMatchId() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAtletaUuid(testAthleteUuid);
+        createRequest.setAlias("TrustMatchTest");
+
+        mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        PlayerProfile player = playerProfileRepository.findById(testAthleteUuid).orElseThrow();
+        Match match = new Match();
+        match.setCreador(player);
+        match.setModalidad(MatchMode.CINCO_VS_CINCO);
+        match.setFechaHoraProgramada(LocalDateTime.now().plusDays(1));
+        match = matchRepository.save(match);
+
+        UpdateTrustScoreRequest trustRequest = new UpdateTrustScoreRequest();
+        trustRequest.setPlayerUuid(testAthleteUuid);
+        trustRequest.setCambio(-5);
+        trustRequest.setMotivo("Late cancellation");
+        trustRequest.setMatchId(match.getId());
+
+        mockMvc.perform(put("/api/v1/player-profiles/trust-score")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(trustRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trustScore").value(95));
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/trust-history", testAthleteUuid)
+                .with(jwtFor(testAthleteUuid)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].cambio").value(-5))
+                .andExpect(jsonPath("$[0].match.id").value(match.getId()));
     }
 
     @Test

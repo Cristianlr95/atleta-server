@@ -19,6 +19,7 @@ import com.atleta.demo.enums.RequestStatus;
 import com.atleta.demo.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -216,6 +217,8 @@ public class SocialService {
 
         PlayerProfile requester = getPlayer(request.getRequesterUuid());
         PlayerProfile target = getPlayer(request.getTargetUuid());
+        validateMatchInviteRequester(match, requester.getAtletaUuid());
+        validateTeamBelongsToMatch(match, resolvedTeam);
         boolean selfInvite = requester.getAtletaUuid().equals(target.getAtletaUuid());
 
         if (selfInvite) {
@@ -349,10 +352,11 @@ public class SocialService {
     }
 
     @Transactional
-    public List<SocialRequestResponse> getMatchInvitesByMatch(Long matchId) {
+    public List<SocialRequestResponse> getMatchInvitesByMatch(Long matchId, UUID actorUuid) {
         purgeExpiredPendingMatchInvites();
-        matchRepository.findById(matchId)
+        Match match = matchRepository.findById(matchId)
                 .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado"));
+        validateMatchInviteViewer(match, actorUuid);
         return matchInviteRepository.findByMatchId(matchId).stream()
                 .map(this::toSocialResponse)
                 .toList();
@@ -465,6 +469,62 @@ public class SocialService {
         if (requesterUuid.equals(targetUuid)) {
             throw new IllegalArgumentException("No puedes enviarte solicitudes a ti mismo");
         }
+    }
+
+    private void validateMatchInviteViewer(Match match, UUID actorUuid) {
+        if (actorUuid == null) {
+            throw new AccessDeniedException("Se requiere usuario autenticado");
+        }
+
+        if (match.getCreador() != null && actorUuid.equals(match.getCreador().getAtletaUuid())) {
+            return;
+        }
+
+        boolean isInviteActor = matchInviteRepository.findByMatchId(match.getId()).stream()
+                .anyMatch(invite -> isInviteParticipant(invite, actorUuid));
+        if (isInviteActor) {
+            return;
+        }
+
+        boolean isMatchParticipant = matchPlayerRepository.findByMatchAndPlayerAtletaUuid(match, actorUuid).isPresent();
+        if (!isMatchParticipant) {
+            throw new AccessDeniedException("No puedes ver invitaciones de un partido ajeno");
+        }
+    }
+
+    private void validateMatchInviteRequester(Match match, UUID actorUuid) {
+        if (actorUuid == null) {
+            throw new AccessDeniedException("Se requiere usuario autenticado");
+        }
+
+        if (match.getCreador() != null && actorUuid.equals(match.getCreador().getAtletaUuid())) {
+            return;
+        }
+
+        boolean isMatchParticipant = matchPlayerRepository.findByMatchAndPlayerAtletaUuid(match, actorUuid).isPresent();
+        if (!isMatchParticipant) {
+            throw new AccessDeniedException("No puedes invitar jugadores a un partido ajeno");
+        }
+    }
+
+    private void validateTeamBelongsToMatch(Match match, Team team) {
+        if (team == null) {
+            return;
+        }
+
+        boolean belongsToMatch = match.getMatchTeams() != null && match.getMatchTeams().stream()
+                .anyMatch(matchTeam -> matchTeam.getTeam() != null
+                        && team.getId() != null
+                        && team.getId().equals(matchTeam.getTeam().getId()));
+
+        if (!belongsToMatch) {
+            throw new IllegalArgumentException("El equipo indicado no pertenece al partido");
+        }
+    }
+
+    private boolean isInviteParticipant(MatchInvite invite, UUID actorUuid) {
+        return (invite.getRequester() != null && actorUuid.equals(invite.getRequester().getAtletaUuid()))
+                || (invite.getTarget() != null && actorUuid.equals(invite.getTarget().getAtletaUuid()));
     }
 
     private String normalizeMessage(String message) {

@@ -15,7 +15,8 @@
 - `dev`, `staging` y `prod` usan PostgreSQL por variables de entorno.
 - CORS ahora sale de propiedades y en `staging`/`prod` exige origenes explicitos.
 - El backend expone `health` y `health/readiness` para probes.
-- Se agrego `Dockerfile`, `.dockerignore` y `docker-compose.yml` para desarrollo local.
+- Ya existen `Dockerfile`, `.dockerignore`, `docker-compose.yml` y `docker-compose.ci.yml`.
+- La tarea actual corrige compose local/CI para usar variables desde `.env`/`.env.example` sin secretos debiles por defecto.
 - Los handlers de error ahora evitan exponer detalles sensibles fuera de `dev`/`test`.
 
 ## Variables de entorno necesarias
@@ -27,8 +28,8 @@ SPRING_PROFILES_ACTIVE=dev
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=atleta_dev
-DB_USERNAME=postgres
-DB_PASSWORD=postgres
+DB_USERNAME=atleta_dev
+DB_PASSWORD=change-me-local-password
 JWT_SECRET=replace-with-a-secure-secret-of-at-least-32-bytes
 JWT_ISSUER=atleta-dev
 JWT_EXPIRATION=PT1H
@@ -106,6 +107,12 @@ cd atleta-server
 ```
 
 ### Opcion B: Docker Compose local
+
+Requisitos:
+
+- Copiar `.env.example` a `.env` antes de levantar los servicios.
+- Definir `DB_PASSWORD` y `JWT_SECRET` seguros; no usar valores triviales ni placeholders.
+- Mantener `.env.example` sincronizado cuando cambien variables requeridas por `docker-compose.yml`.
 
 ```powershell
 cd atleta-server

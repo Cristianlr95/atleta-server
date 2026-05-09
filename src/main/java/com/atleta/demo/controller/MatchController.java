@@ -275,14 +275,16 @@ public class MatchController {
             @PathVariable Long matchId,
             @Parameter(description = "ID del equipo")
             @PathVariable Long teamId,
+            @AuthenticationPrincipal Jwt jwt,
             @Parameter(description = "Indica si el equipo es local (true) o visitante (false)")
             @RequestParam Boolean esLocal) {
-        
-        logger.info("Agregando equipo {} al partido {} como {}", 
+        UUID authenticatedActorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+
+        logger.info("Agregando equipo {} al partido {} como {}",
                    teamId, matchId, esLocal ? "local" : "visitante");
-        
+
         try {
-            MatchResponse response = matchService.addTeamToMatch(matchId, teamId, esLocal);
+            MatchResponse response = matchService.addTeamToMatch(matchId, teamId, esLocal, authenticatedActorUuid);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             logger.warn("Error agregando equipo al partido: {}", e.getMessage());
@@ -346,12 +348,14 @@ public class MatchController {
             @Parameter(description = "ID del partido")
             @PathVariable Long matchId,
             @Parameter(description = "ID del equipo")
-            @PathVariable Long teamId) {
+            @PathVariable Long teamId,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID authenticatedActorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
 
         logger.info("Importando jugadores del equipo {} al partido {}", teamId, matchId);
 
         try {
-            List<MatchPlayerResponse> response = matchService.importTeamPlayers(matchId, teamId);
+            List<MatchPlayerResponse> response = matchService.importTeamPlayers(matchId, teamId, authenticatedActorUuid);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             logger.warn("Error importando jugadores del equipo: {}", e.getMessage());
@@ -588,10 +592,12 @@ public class MatchController {
             description = "Calcula XP estimada y OVR actual por jugador para confirmar cierre")
     public ResponseEntity<MatchClosePreviewResponse> getClosePreview(
             @PathVariable Long matchId,
+            @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody(required = false) MatchClosePreviewRequest request
     ) {
         try {
-            return ResponseEntity.ok(matchService.getClosePreview(matchId, request));
+            UUID authenticatedActorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+            return ResponseEntity.ok(matchService.getClosePreview(matchId, request, authenticatedActorUuid));
         } catch (IllegalArgumentException e) {
             logger.warn("Error generando preview de cierre para partido {}: {}", matchId, e.getMessage());
             if (e.getMessage().contains("no encontrado")) {

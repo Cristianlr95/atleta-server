@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -97,7 +98,8 @@ class EndToEndAtletaIntegrationTest extends BaseIntegrationTest {
         );
         UUID athleteUuid = createdAthlete.getAtletaUuid();
 
-        mockMvc.perform(get("/api/v1/athletes/{id}", athleteUuid))
+        mockMvc.perform(get("/api/v1/athletes/{id}", athleteUuid)
+                .with(jwtFor(athleteUuid)))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$.email").value("test.integration@atleta.com"))
@@ -109,11 +111,13 @@ class EndToEndAtletaIntegrationTest extends BaseIntegrationTest {
         createProfileRequest.setAlias("TestUser");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(athleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createProfileRequest)))
             .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/v1/player-profiles/{id}", athleteUuid))
+        mockMvc.perform(get("/api/v1/player-profiles/{id}", athleteUuid)
+                .with(jwtFor(athleteUuid)))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON))
             .andExpect(jsonPath("$.atletaUuid").value(athleteUuid.toString()))
@@ -126,6 +130,7 @@ class EndToEndAtletaIntegrationTest extends BaseIntegrationTest {
         createTeamRequest.setCreadorUuid(athleteUuid);
 
         MvcResult createTeamResult = mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(athleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createTeamRequest)))
             .andExpect(status().isCreated())
@@ -182,7 +187,8 @@ class EndToEndAtletaIntegrationTest extends BaseIntegrationTest {
             .andExpect(status().isConflict());
 
         UUID nonExistentUuid = UUID.randomUUID();
-        mockMvc.perform(get("/api/v1/athletes/{id}", nonExistentUuid))
+        mockMvc.perform(get("/api/v1/athletes/{id}", nonExistentUuid)
+                .with(jwtFor(nonExistentUuid)))
             .andExpect(status().isNotFound());
 
         CreateTeamRequest invalidCreatorRequest = new CreateTeamRequest();
@@ -190,6 +196,7 @@ class EndToEndAtletaIntegrationTest extends BaseIntegrationTest {
         invalidCreatorRequest.setCreadorUuid(nonExistentUuid);
 
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(nonExistentUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(invalidCreatorRequest)))
             .andExpect(status().isConflict());
@@ -215,6 +222,7 @@ class EndToEndAtletaIntegrationTest extends BaseIntegrationTest {
         validProfileRequest.setAlias("ValidCreator");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(validAthlete.getAtletaUuid()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(validProfileRequest)))
             .andExpect(status().isCreated());
@@ -224,6 +232,7 @@ class EndToEndAtletaIntegrationTest extends BaseIntegrationTest {
         firstTeamRequest.setCreadorUuid(validAthlete.getAtletaUuid());
 
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(validAthlete.getAtletaUuid()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(firstTeamRequest)))
             .andExpect(status().isCreated());
@@ -233,6 +242,7 @@ class EndToEndAtletaIntegrationTest extends BaseIntegrationTest {
         duplicateNameRequest.setCreadorUuid(validAthlete.getAtletaUuid());
 
         mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(validAthlete.getAtletaUuid()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(duplicateNameRequest)))
             .andExpect(status().isConflict());
@@ -272,5 +282,9 @@ class EndToEndAtletaIntegrationTest extends BaseIntegrationTest {
 
         mockMvc.perform(get("/swagger-ui.html"))
             .andExpect(status().is3xxRedirection());
+    }
+
+    private org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor jwtFor(UUID subject) {
+        return jwt().jwt(jwt -> jwt.subject(subject.toString()));
     }
 }

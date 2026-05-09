@@ -33,7 +33,6 @@ services:
       DB_NAME: atleta_test
     ports:
       - "8080:8080"
-    command: ["java", "-jar", "/app/server-atleta.jar"]
 
 volumes:
   postgres_ci_data:

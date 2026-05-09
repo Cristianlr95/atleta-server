@@ -36,7 +36,7 @@
   - `GET /api/v1/player-profiles/{atletaUuid}/trust-history`
   - `GET /api/v1/player-profiles/by-trust-score`
 - `Implementada` Busqueda por nombre de atleta: `GET /api/v1/player-profiles/search`
-- `Parcial` Trazabilidad completa de trust score con match asociado: el request acepta `matchId`, pero `PlayerProfileService` no lo persiste.
+- `Implementada` Trazabilidad de trust score con match asociado: si el request incluye `matchId`, se persiste en `trust_logs` y el historial devuelve `match.id`.
 - `Recomendada` Endpoints especificos para estadisticas avanzadas de trust score hoy encapsuladas solo en `TrustScoreService`.
 
 ### Catalogos
@@ -80,6 +80,9 @@
   - `PUT /api/v1/social/match-invites/{inviteId}/decision`
   - `GET /api/v1/social/match-invites/{playerUuid}`
   - `GET /api/v1/social/match-invites/by-match/{matchId}`
+- `Implementada` La consulta de invitaciones por partido exige visor autenticado autorizado: creador, participante o actor de una invitacion del partido.
+- `Implementada` Crear invitaciones de partido exige requester autenticado autorizado: creador o participante del partido.
+- `Implementada` Crear invitaciones de partido rechaza `teamId` que no pertenezca al match.
 - `Implementada` Notificaciones:
   - `GET /api/v1/social/notifications/{playerUuid}`
   - `PUT /api/v1/social/notifications/{notificationId}/read`
@@ -100,11 +103,13 @@
 - `Implementada` Cambiar estado: `PUT /api/v1/matches/{matchId}/status`
 - `Implementada` Cambio de estado usa el `sub` JWT como actor efectivo aunque el cliente envie otro `actorUuid`.
 - `Implementada` Agregar equipo al partido: `POST /api/v1/matches/{matchId}/teams/{teamId}?esLocal=...`
+- `Implementada` Agregar equipo al partido usa el `sub` JWT como actor responsable antes de delegar al servicio.
 - `Implementada` Agregar o quitar jugadores:
   - `POST /api/v1/matches/join`
   - `POST /api/v1/matches/{matchId}/teams/{teamId}/players/import`
   - `DELETE /api/v1/matches/{matchId}/players/{playerUuid}`
   - `PUT /api/v1/matches/{matchId}/players/{playerUuid}/confirm`
+- `Implementada` Importar jugadores activos del equipo al partido valida actor responsable desde JWT.
 - `Implementada` Asignacion home/away por jugador: `PUT /api/v1/matches/{matchId}/teams/assignment`
 - `Implementada` Eventos del partido:
   - `POST /api/v1/matches/events`
@@ -112,6 +117,7 @@
   - `GET /api/v1/matches/{matchId}/events`
 - `Implementada` Registro de eventos sobrescribe `registeredByUuid` con el `sub` JWT.
 - `Implementada` Vista previa de cierre: `POST /api/v1/matches/{matchId}/close/preview`
+- `Implementada` Vista previa de cierre valida creador/capitan responsable usando el `sub` JWT.
 - `Implementada` Votacion MVP:
   - `GET /api/v1/matches/{matchId}/mvp`
   - `POST /api/v1/matches/{matchId}/mvp/vote`
@@ -140,13 +146,15 @@
 - `Implementada` Leaderboard: `GET /api/v1/ratings/leaderboard`
 - `Implementada` Actualizacion automatica al finalizar partido desde `MatchService`.
 - `Implementada` La ruta `/api/v1/ratings/**` requiere JWT por `SecurityConfig`; `JwtAuthenticationIntegrationTest` cubre lectura y escritura sin token.
+- `Implementada` Las rutas personales de ratings validan que `playerProfileId` coincida con el `sub` JWT antes de consultar o mutar ratings/base/historial/estadisticas/OVR.
+- `Implementada` `POST /api/v1/ratings/update` rechaza performances de perfiles distintos al usuario autenticado desde el controller publico.
 - `Recomendada` Versionado de formulas de rating y trazabilidad de reglas activas por fecha.
 
 ### Smoke de contratos HTTP backend
 
 - `Implementada parcial` Existe `ApiContractSmokeTest` con `@WebMvcTest` para contratos HTTP usados por frontend.
 - Cubre rutas principales de auth, teams, matches/MVP y ratings, validando status y campos JSON criticos.
-- Cubre regresiones de seguridad para no confiar en UUIDs de cliente en crear/cerrar partido, asignaciones, eventos, voto MVP y borrado de equipo.
+- Cubre regresiones de seguridad para no confiar en UUIDs de cliente en crear/cerrar partido, asignaciones, eventos, voto MVP, borrado de equipo, ratings personales y consulta/creacion social de invitaciones por partido.
 - Pendiente opcional: smoke E2E contra frontend y backend levantados con datos/credenciales estables.
 
 ## Reglas de negocio detectadas
@@ -176,9 +184,10 @@
 
 ## Consideraciones de seguridad
 
-- El backend autentica, pero no siempre autoriza por identidad real del token.
+- El backend autentica y los flujos principales ya autorizan por identidad real del token; quedan decisiones de privacidad/rol para lecturas globales y administracion fina.
 - `ratings/**` no queda publico por defecto y tiene cobertura de integracion.
-- Equipos/partidos/eventos/MVP tienen evidencia de contrato para usar el JWT como identidad efectiva o rechazar UUIDs ajenos.
-- Sigue pendiente autorizacion fina por identidad/dominio en endpoints sociales, perfil y otros flujos secundarios.
+- Equipos/partidos/eventos/MVP/social por partido/ratings personales tienen evidencia de contrato para usar el JWT como identidad efectiva o rechazar UUIDs ajenos.
+- Las invitaciones de partido ya no pueden ser creadas por un usuario autenticado ajeno al match, aunque conozca el `matchId`.
+- Sigue pendiente autorizacion fina por rol de negocio en flujos secundarios y politicas de lectura publica.
 - En `dev` y `test`, Swagger y actuator quedan abiertos.
 - El upload de logos no valida contenido binario real.
