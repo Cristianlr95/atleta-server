@@ -44,6 +44,13 @@ logging:
 features:
   mvp-xp-bonus-enabled: ${MVP_XP_BONUS_ENABLED:true}
 
+atleta:
+  matches:
+    scheduler:
+      enabled: ${MATCH_STATUS_SCHEDULER_ENABLED:true}
+      initial-delay: ${MATCH_STATUS_SCHEDULER_INITIAL_DELAY:PT1M}
+      fixed-delay: ${MATCH_STATUS_SCHEDULER_FIXED_DELAY:PT5M}
+
 app:
   cors:
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:8100,http://localhost:4200,http://localhost:4201,http://localhost:3000}

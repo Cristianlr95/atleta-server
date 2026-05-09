@@ -58,5 +58,10 @@ management:
       export:
         enabled: false
 
+atleta:
+  matches:
+    scheduler:
+      enabled: false
+
 server:
   port: 0
