@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 85%.
-- Avance anterior registrado: 84%.
-- Delta de esta tarea: +1 punto porcentual por cerrar autorizacion de creacion de invitaciones de partido y validar que el equipo invitado pertenezca al match.
+- Avance estimado del proyecto Atleta: 86%.
+- Avance anterior registrado: 85%.
+- Delta de esta tarea: +1 punto porcentual por cerrar trazabilidad de `matchId` en trust score para perfil y exponer `match.id` en historial.
 
 ## Proposito del repo
 
@@ -31,6 +31,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - `ApiContractSmokeTest` cubre contratos HTTP backend consumidos por el frontend para auth, teams, matches/MVP y ratings sin levantar base de datos.
 - `ApiContractSmokeTest` tambien verifica que creacion/cierre/asignacion/eventos/MVP usen el `sub` del JWT, que borrar equipo rechace un `actorUuid` ajeno, que ratings personales rechacen `playerProfileId` de terceros y que las invitaciones por partido usen visor/requester autenticado.
 - `JwtAuthenticationIntegrationTest` verifica que `ratings/leaderboard` y `ratings/update` rechacen requests sin JWT, y que leaderboard acepte un token valido.
+- `PlayerProfileControllerIntegrationTest` verifica que `PUT /api/v1/player-profiles/trust-score` persiste `matchId` en `trust_logs` y que el historial devuelve `match.id`.
 
 ## Modulos reales detectados
 
@@ -93,7 +94,6 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - `TrustScoreService` y `PlayerProfileService.updateTrustScore(...)` duplican logica de trust score.
 - `DataInitializationService` y la migracion `V001` no comparten exactamente el mismo catalogo de posiciones.
 - `MatchService` implementa auto-start y auto-invalidation, pero no via scheduler; se ejecutan solo cuando se consultan partidos.
-- `PlayerProfileService` deja `matchId` del trust log sin asociar aun cuando el request lo trae.
 - `registerEvent` cierra eventos inmediatamente con confirmacion home/away para evitar bloqueos, reduciendo el valor real del flujo de confirmacion.
 - Existen docs antiguas que contradicen el codigo actual; por ejemplo, partes del README y de `src/main/resources/db/README.md`.
 

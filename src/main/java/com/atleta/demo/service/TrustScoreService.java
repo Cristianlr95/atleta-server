@@ -308,10 +308,23 @@ public class TrustScoreService {
             response.setPlayer(convertToPlayerProfileResponse(trustLog.getPlayer()));
         }
 
-        // Note: Match conversion simplified to avoid circular dependencies
-        // In a real implementation, you might want to create a simplified MatchResponse
-        // or handle this differently to avoid loading too much data
+        response.setMatch(convertToMinimalMatchResponse(trustLog.getMatch()));
 
+        return response;
+    }
+
+    private com.atleta.demo.dto.response.MatchResponse convertToMinimalMatchResponse(Match match) {
+        if (match == null) {
+            return null;
+        }
+
+        com.atleta.demo.dto.response.MatchResponse response = new com.atleta.demo.dto.response.MatchResponse();
+        response.setId(match.getId());
+        response.setModalidad(match.getModalidad());
+        response.setCategoriaGenero(match.getCategoriaGenero());
+        response.setFechaHoraProgramada(match.getFechaHoraProgramada());
+        response.setEstado(match.getEstado());
+        response.setCreatedAt(match.getCreatedAt());
         return response;
     }
 

@@ -36,7 +36,7 @@
   - `GET /api/v1/player-profiles/{atletaUuid}/trust-history`
   - `GET /api/v1/player-profiles/by-trust-score`
 - `Implementada` Busqueda por nombre de atleta: `GET /api/v1/player-profiles/search`
-- `Parcial` Trazabilidad completa de trust score con match asociado: el request acepta `matchId`, pero `PlayerProfileService` no lo persiste.
+- `Implementada` Trazabilidad de trust score con match asociado: si el request incluye `matchId`, se persiste en `trust_logs` y el historial devuelve `match.id`.
 - `Recomendada` Endpoints especificos para estadisticas avanzadas de trust score hoy encapsuladas solo en `TrustScoreService`.
 
 ### Catalogos
