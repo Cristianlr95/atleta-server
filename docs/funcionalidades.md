@@ -123,7 +123,7 @@
   - `POST /api/v1/matches/{matchId}/mvp/vote`
 - `Implementada` Votacion MVP usa el `sub` JWT como votante efectivo.
 - `Implementada` SSE de invitaciones: `GET /api/v1/matches/{matchId}/live`
-- `Parcial` Auto-start y auto-invalidacion existen, pero dependen de lecturas de partido; no hay scheduler.
+- `Implementada` Auto-start y auto-invalidacion se ejecutan tambien via scheduler configurable (`atleta.matches.scheduler.*`), no solo por lecturas de partido.
 - `Parcial` Confirmacion dual de eventos existe en API, pero `registerEvent` ya cierra los eventos inmediatamente.
 - `Recomendada` Endpoints explicitos para cancelacion/reprogramacion de partidos y auditoria de cierres.
 
