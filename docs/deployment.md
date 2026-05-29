@@ -113,6 +113,7 @@ Requisitos:
 - Copiar `.env.example` a `.env` antes de levantar los servicios.
 - Definir `DB_PASSWORD` y `JWT_SECRET` seguros; no usar valores triviales ni placeholders.
 - Mantener `.env.example` sincronizado cuando cambien variables requeridas por `docker-compose.yml`.
+- `EnvExampleContractTest` protege este contrato en CI/local: variables runtime criticas documentadas, secretos no triviales y fail-fast de `docker-compose.yml` para `DB_*`.
 
 ```powershell
 cd atleta-server

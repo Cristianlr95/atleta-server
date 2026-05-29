@@ -148,6 +148,7 @@
 - `Implementada` Leaderboard: `GET /api/v1/ratings/leaderboard`
 - `Implementada` Actualizacion automatica al finalizar partido desde `MatchService`.
 - `Implementada` La ruta `/api/v1/ratings/**` requiere JWT por `SecurityConfig`; `JwtAuthenticationIntegrationTest` cubre lectura y escritura sin token.
+- `Implementada` Leaderboard queda privado bajo JWT como parte de la politica de privacidad de lecturas globales.
 - `Implementada` Las rutas personales de ratings validan que `playerProfileId` coincida con el `sub` JWT antes de consultar o mutar ratings/base/historial/estadisticas/OVR.
 - `Implementada` `POST /api/v1/ratings/update` rechaza performances de perfiles distintos al usuario autenticado desde el controller publico.
 - `Recomendada` Versionado de formulas de rating y trazabilidad de reglas activas por fecha.
@@ -155,8 +156,10 @@
 ### Smoke de contratos HTTP backend
 
 - `Implementada parcial` Existe `ApiContractSmokeTest` con `@WebMvcTest` para contratos HTTP usados por frontend.
-- Cubre rutas principales de auth, teams, matches/MVP y ratings, validando status y campos JSON criticos.
-- Cubre regresiones de seguridad para no confiar en UUIDs de cliente en crear/cerrar partido, asignaciones, eventos, voto MVP, borrado de equipo, ratings personales y consulta/creacion social de invitaciones por partido.
+- Cubre rutas principales de auth, player profiles/trust score, teams, matches/MVP y ratings, validando status y campos JSON criticos.
+- Cubre regresiones de seguridad para no confiar en UUIDs de cliente en crear perfil, actualizar trust score, leer/mutar perfil personal, crear/cerrar partido, asignaciones, eventos, voto MVP, borrado de equipo, ratings personales y consulta/creacion social de invitaciones por partido.
+- `JwtAuthenticationIntegrationTest` fija como privadas bajo JWT las lecturas globales de posiciones, canchas, proximos partidos, busquedas de perfiles, rango de trust score y leaderboard.
+- `EnvExampleContractTest` valida que el despliegue local documente variables runtime criticas y no use secretos triviales en `.env.example`.
 - Pendiente opcional: smoke E2E contra frontend y backend levantados con datos/credenciales estables.
 
 ## Reglas de negocio detectadas
@@ -186,7 +189,7 @@
 
 ## Consideraciones de seguridad
 
-- El backend autentica y los flujos principales ya autorizan por identidad real del token; quedan decisiones de privacidad/rol para lecturas globales y administracion fina.
+- El backend autentica y los flujos principales ya autorizan por identidad real del token; las lecturas globales quedan privadas bajo JWT y resta afinar roles de negocio/administracion.
 - `ratings/**` no queda publico por defecto y tiene cobertura de integracion.
 - Equipos/partidos/eventos/MVP/social por partido/ratings personales tienen evidencia de contrato para usar el JWT como identidad efectiva o rechazar UUIDs ajenos.
 - Las invitaciones de partido ya no pueden ser creadas por un usuario autenticado ajeno al match, aunque conozca el `matchId`.

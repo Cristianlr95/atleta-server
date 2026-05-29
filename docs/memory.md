@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 88%.
-- Avance anterior registrado: 87%.
-- Delta de esta tarea: +1 punto porcentual por consolidar trust score en `TrustScoreService` como fuente unica, alinear el limite a 0..1000 y registrar deltas efectivos cuando el score se capea.
+- Avance estimado del proyecto Atleta: 91%.
+- Avance anterior registrado: 90%.
+- Delta de esta tarea: +1 punto porcentual por agregar contrato automatizado para `.env.example` y `docker-compose.yml`, evitando que falten variables runtime o secretos no triviales en despliegue local.
 
 ## Proposito del repo
 
@@ -28,9 +28,11 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Observabilidad: Actuator, health check custom, metricas Micrometer/Prometheus y logging con MDC.
 - Testing: suite amplia de unit, integration, migration, property-based y seguridad en `src/test/java`.
 - `mvnw test` queda verde en backend despues de adaptar tests protegidos a JWT y limpiar tablas nuevas de social/notificaciones entre casos.
-- `ApiContractSmokeTest` cubre contratos HTTP backend consumidos por el frontend para auth, teams, matches/MVP y ratings sin levantar base de datos.
-- `ApiContractSmokeTest` tambien verifica que creacion/cierre/asignacion/eventos/MVP usen el `sub` del JWT, que borrar equipo rechace un `actorUuid` ajeno, que ratings personales rechacen `playerProfileId` de terceros y que las invitaciones por partido usen visor/requester autenticado.
+- `ApiContractSmokeTest` cubre contratos HTTP backend consumidos por el frontend para auth, player profiles/trust score, teams, matches/MVP y ratings sin levantar base de datos.
+- `ApiContractSmokeTest` tambien verifica que creacion/cierre/asignacion/eventos/MVP usen el `sub` del JWT, que crear perfil/trust score usen el usuario autenticado, que rutas personales de perfil y ratings rechacen IDs de terceros, que borrar equipo rechace un `actorUuid` ajeno y que las invitaciones por partido usen visor/requester autenticado.
 - `JwtAuthenticationIntegrationTest` verifica que `ratings/leaderboard` y `ratings/update` rechacen requests sin JWT, y que leaderboard acepte un token valido.
+- `JwtAuthenticationIntegrationTest` tambien protege que lecturas globales (`positions`, `fields`, `matches/upcoming`, busquedas de perfiles y rango de trust score) rechacen requests sin JWT y acepten token valido.
+- `EnvExampleContractTest` valida que `.env.example` documente variables runtime criticas, que `DB_PASSWORD`/`JWT_SECRET` no sean triviales y que `docker-compose.yml` falle rapido si faltan variables de base de datos.
 - `PlayerProfileControllerIntegrationTest` verifica que `PUT /api/v1/player-profiles/trust-score` persiste `matchId` en `trust_logs` y que el historial devuelve `match.id`.
 - `MatchStatusSchedulerTest` verifica que el scheduler delega en `MatchService.refreshAutomatedMatchStates()`; el job queda deshabilitado en tests para evitar flakiness.
 - `TrustScoreServiceTest` cubre limites inferiores/superiores de trust score y que `trust_logs.cambio` guarde el delta efectivo; `PlayerProfileControllerIntegrationTest` valida que el endpoint usa el JWT aunque el body omita `playerUuid`.
@@ -67,6 +69,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - CORS permitido solo para orígenes localhost conocidos.
 - Swagger y actuator completos quedan abiertos en `dev` y `test`.
 - `ratings/**` ya no queda publico por defecto: las reglas reales terminan en `anyRequest().authenticated()` y hay cobertura de integracion que lo confirma.
+- Politica de privacidad vigente: solo registro/login/Google auth, health check y docs/actuator en dev/test son publicos; catalogos, busquedas, listados, leaderboard y recursos deportivos requieren JWT.
 - Las rutas personales de ratings (`player/{playerProfileId}`, history, stats, overall e initialize-base) validan que el `playerProfileId` coincida con el `sub` del JWT.
 - La actualizacion manual de ratings via controller rechaza performances cuyo `playerProfileId` no coincide con el usuario autenticado.
 - La consulta de invitaciones por partido valida que el visor autenticado sea creador, participante o actor de alguna invitacion.
@@ -85,8 +88,8 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ### Riesgos prioritarios
 
-- Medio: quedan endpoints protegidos con parametros UUID heredados o rutas de lectura global que requieren decidir contrato publico vs privado; ratings personales, invitaciones por partido y acciones principales de partido ya tienen regresion basada en `sub` JWT.
-- Medio: `application-dev.yaml` mantiene defaults de desarrollo para usuario/base local, pero `docker-compose.yml` ya no levanta con `DB_PASSWORD` ausente o trivial por defecto.
+- Medio: quedan endpoints protegidos con parametros UUID heredados y autorizacion fina por rol de negocio; la politica publico/privado para lecturas globales ya quedo fijada como privada bajo JWT.
+- Bajo: `application-dev.yaml` mantiene defaults de desarrollo para usuario/base local, pero `.env.example` y `docker-compose.yml` ya tienen contrato automatizado para variables runtime y secretos no triviales.
 - Medio: `TeamService.storeTeamLogo` valida por `contentType` pero no inspecciona firma binaria ni antivirus, y expone archivos desde `/uploads/**`.
 - Medio: el pipeline de deploy es parcial; los pasos reales de despliegue siguen siendo `echo`.
 - Bajo: Dockerfile y compose local/CI existen; falta validar el flujo con Docker instalado en el entorno de desarrollo/CI.
@@ -108,8 +111,8 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Proximos pasos recomendados
 
-1. Decidir contrato publico/privado para lecturas globales (`leaderboard`, busquedas, listados generales de partidos/equipos) y documentarlo como politica de privacidad.
-2. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
-3. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
-4. Mantener `.env.example` alineado con `docker-compose.yml` y exigir `DB_PASSWORD`/`JWT_SECRET` seguros en `.env` local.
-5. Convertir CI/deploy en pipeline ejecutable usando el Dockerfile y compose CI actuales.
+1. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
+2. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
+3. Convertir CI/deploy en pipeline ejecutable usando el Dockerfile y compose CI actuales.
+4. Completar autorizacion por rol de negocio en lecturas/administracion donde no baste con identidad JWT.
+5. Reducir docs heredadas contradictorias y mantener una fuente de verdad por flujo operativo.

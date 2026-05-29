@@ -110,6 +110,27 @@ class JwtAuthenticationIntegrationTest {
     }
 
     @Test
+    void globalReadEndpointsRejectMissingToken() throws Exception {
+        mockMvc.perform(get("/api/v1/positions"))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/v1/fields"))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/v1/matches/upcoming"))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/v1/player-profiles/search")
+                .param("nombre", "Secure"))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/v1/player-profiles/by-trust-score")
+                .param("minScore", "0")
+                .param("maxScore", "1000"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void ratingsWriteEndpointRejectsMissingToken() throws Exception {
         mockMvc.perform(post("/api/v1/ratings/update")
                 .contentType(APPLICATION_JSON)
@@ -123,6 +144,34 @@ class JwtAuthenticationIntegrationTest {
 
         mockMvc.perform(get("/api/v1/ratings/leaderboard")
                 .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void globalReadEndpointsAcceptValidToken() throws Exception {
+        String token = loginAndExtractToken();
+
+        mockMvc.perform(get("/api/v1/positions")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/fields")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/matches/upcoming")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/player-profiles/search")
+                .header("Authorization", "Bearer " + token)
+                .param("nombre", "Secure"))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/player-profiles/by-trust-score")
+                .header("Authorization", "Bearer " + token)
+                .param("minScore", "0")
+                .param("maxScore", "1000"))
             .andExpect(status().isOk());
     }
 
