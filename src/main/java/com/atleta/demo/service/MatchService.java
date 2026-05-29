@@ -61,6 +61,7 @@ public class MatchService {
     private final PlayerHistoryRepository playerHistoryRepository;
     private final RatingService ratingService;
     private final MatchStatusPolicy matchStatusPolicy;
+    private final MatchFinalScoreService matchFinalScoreService;
 
     public MatchService(MatchRepository matchRepository,
                         MatchTeamRepository matchTeamRepository,
@@ -73,7 +74,8 @@ public class MatchService {
                         PlayerPositionRepository playerPositionRepository,
                         PlayerHistoryRepository playerHistoryRepository,
                         RatingService ratingService,
-                        MatchStatusPolicy matchStatusPolicy) {
+                        MatchStatusPolicy matchStatusPolicy,
+                        MatchFinalScoreService matchFinalScoreService) {
         this.matchRepository = matchRepository;
         this.matchTeamRepository = matchTeamRepository;
         this.matchPlayerRepository = matchPlayerRepository;
@@ -86,6 +88,7 @@ public class MatchService {
         this.playerHistoryRepository = playerHistoryRepository;
         this.ratingService = ratingService;
         this.matchStatusPolicy = matchStatusPolicy;
+        this.matchFinalScoreService = matchFinalScoreService;
     }
 
     /**
@@ -550,7 +553,7 @@ public class MatchService {
                 return convertToResponse(match);
             }
             closePendingEventsForFinalization(match);
-            applyFinalScoreSnapshot(match);
+            matchFinalScoreService.applyFinalScoreSnapshot(match);
             persistPlayerHistoryForFinalization(match);
             match.setFinalizedAt(LocalDateTime.now());
             match.setValidationStatus(MatchValidationStatus.VALID);
@@ -1031,82 +1034,6 @@ public class MatchService {
 
         matchEventRepository.saveAll(pendingEvents);
         logger.info("Se cerraron {} eventos pendientes al finalizar partido {}", pendingEvents.size(), match.getId());
-    }
-
-    private void applyFinalScoreSnapshot(Match match) {
-        int localGoals = 0;
-        int awayGoals = 0;
-
-        List<MatchEvent> events = matchEventRepository.findByMatchOrderByCreatedAt(match);
-        for (MatchEvent event : events) {
-            if (event.getTipoEvento() != EventType.GOL || event.getPlayer() == null || !event.isFullyConfirmed()) {
-                continue;
-            }
-
-            MatchTeamSide eventSide = resolveEventTeamSide(match, event);
-            if (eventSide == MatchTeamSide.VISITA) {
-                awayGoals += 1;
-            } else {
-                localGoals += 1;
-            }
-        }
-
-        List<MatchTeam> teams = matchTeamRepository.findByMatch(match);
-        MatchTeam localTeam = teams.stream()
-                .filter(MatchTeam::getEsLocal)
-                .findFirst()
-                .orElse(null);
-        MatchTeam awayTeam = teams.stream()
-                .filter(mt -> !mt.getEsLocal())
-                .findFirst()
-                .orElse(null);
-
-        if (localTeam != null) {
-            localTeam.setGoles(localGoals);
-        }
-
-        if (awayTeam != null) {
-            awayTeam.setGoles(awayGoals);
-        }
-
-        if (localTeam != null || awayTeam != null) {
-            matchTeamRepository.saveAll(
-                    teams.stream()
-                            .filter(team -> team == localTeam || team == awayTeam)
-                            .collect(Collectors.toList())
-            );
-        }
-
-        match.setFinalScoreLocal(localGoals);
-        match.setFinalScoreAway(awayGoals);
-    }
-
-    private MatchTeamSide resolveEventTeamSide(Match match, MatchEvent event) {
-        if (event == null || event.getPlayer() == null) {
-            return MatchTeamSide.LOCAL;
-        }
-
-        MatchPlayer matchPlayer = matchPlayerRepository.findByMatchAndPlayer(match, event.getPlayer()).orElse(null);
-        if (matchPlayer != null) {
-            if (matchPlayer.getTeamSide() != null) {
-                return matchPlayer.getTeamSide();
-            }
-            if (matchPlayer.getTeam() != null) {
-                MatchTeamSide side = resolveTeamSide(match, matchPlayer.getTeam());
-                if (side != null) {
-                    return side;
-                }
-            }
-        }
-
-        if (event.getTeam() != null) {
-            MatchTeamSide side = resolveTeamSide(match, event.getTeam());
-            if (side != null) {
-                return side;
-            }
-        }
-
-        return MatchTeamSide.LOCAL;
     }
 
     private void persistPlayerHistoryForFinalization(Match match) {

@@ -68,6 +68,7 @@ class MatchServiceTest {
     private RatingService ratingService;
 
     private MatchStatusPolicy matchStatusPolicy;
+    private MatchFinalScoreService matchFinalScoreService;
 
     private MatchService matchService;
 
@@ -81,6 +82,11 @@ class MatchServiceTest {
     @BeforeEach
     void setUp() {
         matchStatusPolicy = new MatchStatusPolicy();
+        matchFinalScoreService = new MatchFinalScoreService(
+                matchEventRepository,
+                matchPlayerRepository,
+                matchTeamRepository
+        );
         matchService = new MatchService(
                 matchRepository,
                 matchTeamRepository,
@@ -93,7 +99,8 @@ class MatchServiceTest {
                 playerPositionRepository,
                 playerHistoryRepository,
                 ratingService,
-                matchStatusPolicy
+                matchStatusPolicy,
+                matchFinalScoreService
         );
 
         UUID playerId = UUID.randomUUID();

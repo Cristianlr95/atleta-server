@@ -22,6 +22,7 @@ import com.atleta.demo.repository.PlayerProfileRepository;
 import com.atleta.demo.repository.PositionRepository;
 import com.atleta.demo.repository.TeamMemberRepository;
 import com.atleta.demo.repository.TeamRepository;
+import com.atleta.demo.service.MatchFinalScoreService;
 import com.atleta.demo.service.MatchService;
 import com.atleta.demo.service.MatchStatusPolicy;
 import com.atleta.demo.service.RatingService;
@@ -99,7 +100,12 @@ class MatchRatingIntegrationTest {
                 playerPositionRepository,
                 playerHistoryRepository,
                 ratingService,
-                new MatchStatusPolicy()
+                new MatchStatusPolicy(),
+                new MatchFinalScoreService(
+                        matchEventRepository,
+                        matchPlayerRepository,
+                        matchTeamRepository
+                )
         );
 
         creator = new PlayerProfile();
