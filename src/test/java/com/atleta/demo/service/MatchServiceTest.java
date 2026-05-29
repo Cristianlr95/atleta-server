@@ -67,6 +67,8 @@ class MatchServiceTest {
     @Mock
     private RatingService ratingService;
 
+    private MatchStatusPolicy matchStatusPolicy;
+
     private MatchService matchService;
 
     private CreateMatchRequest validCreateRequest;
@@ -78,6 +80,7 @@ class MatchServiceTest {
 
     @BeforeEach
     void setUp() {
+        matchStatusPolicy = new MatchStatusPolicy();
         matchService = new MatchService(
                 matchRepository,
                 matchTeamRepository,
@@ -89,7 +92,8 @@ class MatchServiceTest {
                 teamMemberRepository,
                 playerPositionRepository,
                 playerHistoryRepository,
-                ratingService
+                ratingService,
+                matchStatusPolicy
         );
 
         UUID playerId = UUID.randomUUID();

@@ -60,6 +60,7 @@ public class MatchService {
     private final PlayerPositionRepository playerPositionRepository;
     private final PlayerHistoryRepository playerHistoryRepository;
     private final RatingService ratingService;
+    private final MatchStatusPolicy matchStatusPolicy;
 
     public MatchService(MatchRepository matchRepository,
                         MatchTeamRepository matchTeamRepository,
@@ -71,7 +72,8 @@ public class MatchService {
                         TeamMemberRepository teamMemberRepository,
                         PlayerPositionRepository playerPositionRepository,
                         PlayerHistoryRepository playerHistoryRepository,
-                        RatingService ratingService) {
+                        RatingService ratingService,
+                        MatchStatusPolicy matchStatusPolicy) {
         this.matchRepository = matchRepository;
         this.matchTeamRepository = matchTeamRepository;
         this.matchPlayerRepository = matchPlayerRepository;
@@ -83,6 +85,7 @@ public class MatchService {
         this.playerPositionRepository = playerPositionRepository;
         this.playerHistoryRepository = playerHistoryRepository;
         this.ratingService = ratingService;
+        this.matchStatusPolicy = matchStatusPolicy;
     }
 
     /**
@@ -525,18 +528,14 @@ public class MatchService {
                 .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado: " + matchId));
 
         // Validar transiciones de estado
-        validateStatusTransition(match.getEstado(), newStatus);
+        matchStatusPolicy.validateTransition(match.getEstado(), newStatus);
 
         if (newStatus == MatchStatus.INICIADO && (match.getMatchTeams() == null || match.getMatchTeams().isEmpty())) {
             throw new IllegalArgumentException("El partido debe tener al menos 1 equipo para iniciar");
         }
 
         if (newStatus == MatchStatus.INICIADO) {
-            if (match.getStartedAt() == null) {
-                match.setStartedAt(LocalDateTime.now());
-            }
-            match.setValidationStatus(MatchValidationStatus.PENDING);
-            match.setValidationReason(null);
+            matchStatusPolicy.markStarted(match, LocalDateTime.now());
         }
 
         if (newStatus == MatchStatus.FINALIZADO) {
@@ -559,8 +558,7 @@ public class MatchService {
         }
 
         if (newStatus == MatchStatus.INVALIDO) {
-            match.setValidationStatus(MatchValidationStatus.INVALID_STATE);
-            match.setValidationReason("Partido marcado como invalido manualmente");
+            matchStatusPolicy.markManualInvalid(match);
         }
 
         match.setEstado(newStatus);
@@ -913,25 +911,6 @@ public class MatchService {
     }
 
     // Métodos privados de utilidad
-
-    private void validateStatusTransition(MatchStatus currentStatus, MatchStatus newStatus) {
-        // Validar transiciones válidas de estado
-        switch (currentStatus) {
-            case CREADO:
-                if (newStatus != MatchStatus.INICIADO && newStatus != MatchStatus.INVALIDO) {
-                    throw new IllegalArgumentException("Desde CREADO solo se puede pasar a INICIADO o INVALIDO");
-                }
-                break;
-            case INICIADO:
-                if (newStatus != MatchStatus.FINALIZADO && newStatus != MatchStatus.INVALIDO) {
-                    throw new IllegalArgumentException("Desde INICIADO solo se puede pasar a FINALIZADO o INVALIDO");
-                }
-                break;
-            case FINALIZADO:
-            case INVALIDO:
-                throw new IllegalArgumentException("No se puede cambiar el estado desde " + currentStatus);
-        }
-    }
 
     private void updateMatchTeamGoals(MatchEvent event) {
         // Actualizar goles del equipo en el partido
@@ -1505,11 +1484,7 @@ public class MatchService {
     }
 
     private boolean isClosePending(Match match) {
-        if (match == null || match.getEstado() != MatchStatus.INICIADO || match.getStartedAt() == null) {
-            return false;
-        }
-
-        return LocalDateTime.now().isAfter(match.getStartedAt().plusHours(1));
+        return matchStatusPolicy.isClosePending(match, MATCH_PLAY_WINDOW_HOURS, LocalDateTime.now());
     }
 
     private MatchTeamSide resolveTeamSide(Match match, Team team) {

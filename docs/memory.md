@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 91%.
-- Avance anterior registrado: 90%.
-- Delta de esta tarea: +1 punto porcentual por agregar contrato automatizado para `.env.example` y `docker-compose.yml`, evitando que falten variables runtime o secretos no triviales en despliegue local.
+- Avance estimado del proyecto Atleta: 92%.
+- Avance anterior registrado: 91%.
+- Delta de esta tarea: +1 punto porcentual por iniciar la extraccion gradual de `MatchService`: reglas de transicion, metadata de inicio/invalidez y calculo de cierre pendiente viven ahora en `MatchStatusPolicy` con cobertura unitaria.
 
 ## Proposito del repo
 
@@ -35,6 +35,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - `EnvExampleContractTest` valida que `.env.example` documente variables runtime criticas, que `DB_PASSWORD`/`JWT_SECRET` no sean triviales y que `docker-compose.yml` falle rapido si faltan variables de base de datos.
 - `PlayerProfileControllerIntegrationTest` verifica que `PUT /api/v1/player-profiles/trust-score` persiste `matchId` en `trust_logs` y que el historial devuelve `match.id`.
 - `MatchStatusSchedulerTest` verifica que el scheduler delega en `MatchService.refreshAutomatedMatchStates()`; el job queda deshabilitado en tests para evitar flakiness.
+- `MatchStatusPolicyTest` cubre transiciones validas/invalidas, metadata de inicio/invalidez manual y ventana de cierre pendiente sin depender de repositorios.
 - `TrustScoreServiceTest` cubre limites inferiores/superiores de trust score y que `trust_logs.cambio` guarde el delta efectivo; `PlayerProfileControllerIntegrationTest` valida que el endpoint usa el JWT aunque el body omita `playerUuid`.
 
 ## Modulos reales detectados
@@ -103,7 +104,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 ## Deuda tecnica detectada
 
 - Falta completar autorizacion por rol de negocio en operaciones de administracion/lectura global; la autorizacion por identidad esta reforzada en flujos principales de equipos, partidos, eventos, MVP, social por partido y ratings personales.
-- Falta separar casos de uso grandes: `MatchService` y `RatingService` concentran demasiada responsabilidad.
+- Falta continuar separando casos de uso grandes: `MatchService` ya comenzo a extraer politica de estado, pero todavia concentra convocatoria, cierre, eventos y snapshots; `RatingService` tambien concentra demasiada responsabilidad.
 - Falta automatizacion real de estados de partido via scheduler o job dedicado.
 - Falta consolidar y validar el flujo CI/CD completo de despliegue; Dockerfile y compose local/CI ya existen.
 - Falta estrategia centralizada de manejo de errores para todos los modulos sociales/equipos.
@@ -111,8 +112,8 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Proximos pasos recomendados
 
-1. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
-2. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
+1. Continuar extraccion gradual de `MatchService`: mover cierre/snapshot final a un componente dedicado.
+2. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
 3. Convertir CI/deploy en pipeline ejecutable usando el Dockerfile y compose CI actuales.
 4. Completar autorizacion por rol de negocio en lecturas/administracion donde no baste con identidad JWT.
 5. Reducir docs heredadas contradictorias y mantener una fuente de verdad por flujo operativo.

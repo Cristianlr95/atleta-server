@@ -23,6 +23,7 @@ import com.atleta.demo.repository.PositionRepository;
 import com.atleta.demo.repository.TeamMemberRepository;
 import com.atleta.demo.repository.TeamRepository;
 import com.atleta.demo.service.MatchService;
+import com.atleta.demo.service.MatchStatusPolicy;
 import com.atleta.demo.service.RatingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -97,7 +98,8 @@ class MatchRatingIntegrationTest {
                 teamMemberRepository,
                 playerPositionRepository,
                 playerHistoryRepository,
-                ratingService
+                ratingService,
+                new MatchStatusPolicy()
         );
 
         creator = new PlayerProfile();
