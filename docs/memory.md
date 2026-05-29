@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 87%.
-- Avance anterior registrado: 86%.
-- Delta de esta tarea: +1 punto porcentual por ejecutar el refresco automatico de estados de partido via scheduler configurable y limpiar pruebas sin cobertura real.
+- Avance estimado del proyecto Atleta: 88%.
+- Avance anterior registrado: 87%.
+- Delta de esta tarea: +1 punto porcentual por consolidar trust score en `TrustScoreService` como fuente unica, alinear el limite a 0..1000 y registrar deltas efectivos cuando el score se capea.
 
 ## Proposito del repo
 
@@ -33,6 +33,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - `JwtAuthenticationIntegrationTest` verifica que `ratings/leaderboard` y `ratings/update` rechacen requests sin JWT, y que leaderboard acepte un token valido.
 - `PlayerProfileControllerIntegrationTest` verifica que `PUT /api/v1/player-profiles/trust-score` persiste `matchId` en `trust_logs` y que el historial devuelve `match.id`.
 - `MatchStatusSchedulerTest` verifica que el scheduler delega en `MatchService.refreshAutomatedMatchStates()`; el job queda deshabilitado en tests para evitar flakiness.
+- `TrustScoreServiceTest` cubre limites inferiores/superiores de trust score y que `trust_logs.cambio` guarde el delta efectivo; `PlayerProfileControllerIntegrationTest` valida que el endpoint usa el JWT aunque el body omita `playerUuid`.
 
 ## Modulos reales detectados
 
@@ -92,7 +93,6 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ### Riesgos funcionales y de consistencia
 
-- `TrustScoreService` y `PlayerProfileService.updateTrustScore(...)` duplican logica de trust score.
 - `DataInitializationService` y la migracion `V001` no comparten exactamente el mismo catalogo de posiciones.
 - `registerEvent` cierra eventos inmediatamente con confirmacion home/away para evitar bloqueos, reduciendo el valor real del flujo de confirmacion.
 - Existen docs antiguas que contradicen el codigo actual; por ejemplo, partes del README y de `src/main/resources/db/README.md`.
@@ -111,7 +111,5 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 1. Decidir contrato publico/privado para lecturas globales (`leaderboard`, busquedas, listados generales de partidos/equipos) y documentarlo como politica de privacidad.
 2. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
 3. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
-4. Consolidar trust score en un solo servicio.
-5. Implementar scheduler para refresco de estados de partido.
-6. Mantener `.env.example` alineado con `docker-compose.yml` y exigir `DB_PASSWORD`/`JWT_SECRET` seguros en `.env` local.
-7. Convertir CI/deploy en pipeline ejecutable usando el Dockerfile y compose CI actuales.
+4. Mantener `.env.example` alineado con `docker-compose.yml` y exigir `DB_PASSWORD`/`JWT_SECRET` seguros en `.env` local.
+5. Convertir CI/deploy en pipeline ejecutable usando el Dockerfile y compose CI actuales.

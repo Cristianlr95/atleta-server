@@ -44,7 +44,7 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 
 - Servicios orientados a dominio: `AthleteService`, `PlayerProfileService`, `TeamService`, `MatchService`, `SocialService`, `RatingService`
 - Servicios de apoyo: `JwtService`, `GoogleAuthService`, `MatchMvpService`, `MatchLiveEventService`, `XPService`
-- Servicios con deuda/duplicidad: `TrustScoreService`, `DataInitializationService`
+- Servicios con deuda/duplicidad: `DataInitializationService`
 
 ### Capa de persistencia
 
@@ -114,7 +114,7 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 - `MatchService` es un God Service: estado, cupos, eventos, score final, XP, historial, validaciones y refresh automatico.
 - `RatingService` mezcla inicializacion, calculo, historial, estadisticas y leaderboard.
 - Falta completar una capa transversal de autorizacion de dominio; equipos/partidos ya tienen cobertura de identidad JWT en casos sensibles, pero otros modulos aun dependen de validaciones puntuales.
-- Trust score esta repartido en dos servicios distintos.
+- Trust score queda centralizado en `TrustScoreService`; `PlayerProfileService` delega actualizacion e historial para evitar duplicidad de reglas.
 - La automatizacion temporal depende de lecturas, no de scheduler ni job dedicado.
 - Hay incoherencias entre docs heredadas, migraciones antiguas y el codigo vigente.
 
@@ -123,7 +123,5 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 1. Separar `MatchService` en submodulos: convocatoria, arbitraje/eventos, cierre, validacion automatica.
 2. Introducir autorizacion basada en principal JWT y policies de dominio.
 3. Agregar smoke E2E contra FE+BE levantados si se estabiliza seed/credenciales de prueba.
-4. Consolidar trust score en una sola API interna.
-5. Extraer mappers DTO dedicados para bajar acoplamiento.
-6. Introducir jobs programados para expiracion y auto-start.
-7. Versionar formulas de rating/XP para evitar cambios silenciosos en el dominio.
+4. Extraer mappers DTO dedicados para bajar acoplamiento.
+5. Versionar formulas de rating/XP para evitar cambios silenciosos en el dominio.

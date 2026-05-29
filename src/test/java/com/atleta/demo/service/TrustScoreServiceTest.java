@@ -8,6 +8,7 @@ import com.atleta.demo.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.ArgumentMatchers;
@@ -187,6 +188,71 @@ class TrustScoreServiceTest {
         verify(matchRepository).findById(validRequest.getMatchId());
         verify(trustLogRepository).save(any(TrustLog.class));
         verify(playerProfileRepository).save(samplePlayer);
+    }
+
+    @Test
+    void updateTrustScore_WhenChangeExceedsMaximum_ShouldCapAtOneThousand() {
+        validRequest.setCambio(950);
+        validRequest.setMatchId(null);
+        samplePlayer.setTrustScore(100);
+
+        when(playerProfileRepository.findById(validRequest.getPlayerUuid())).thenReturn(Optional.of(samplePlayer));
+        when(trustLogRepository.save(any(TrustLog.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(playerProfileRepository.save(any(PlayerProfile.class))).thenReturn(samplePlayer);
+
+        TrustLogResponse response = trustScoreService.updateTrustScore(validRequest, null);
+
+        ArgumentCaptor<TrustLog> trustLogCaptor = ArgumentCaptor.forClass(TrustLog.class);
+        verify(trustLogRepository).save(trustLogCaptor.capture());
+        assertEquals(1000, samplePlayer.getTrustScore());
+        assertEquals(900, trustLogCaptor.getValue().getCambio());
+        assertEquals(1000, trustLogCaptor.getValue().getTrustScoreNuevo());
+        assertEquals(1000, response.getPlayer().getTrustScore());
+        assertEquals(900, response.getCambio());
+    }
+
+    @Test
+    void updateTrustScore_WhenChangeGoesBelowMinimum_ShouldCapAtZero() {
+        validRequest.setCambio(-250);
+        validRequest.setMatchId(null);
+        samplePlayer.setTrustScore(100);
+
+        when(playerProfileRepository.findById(validRequest.getPlayerUuid())).thenReturn(Optional.of(samplePlayer));
+        when(trustLogRepository.save(any(TrustLog.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(playerProfileRepository.save(any(PlayerProfile.class))).thenReturn(samplePlayer);
+
+        trustScoreService.updateTrustScore(validRequest, null);
+
+        ArgumentCaptor<TrustLog> trustLogCaptor = ArgumentCaptor.forClass(TrustLog.class);
+        verify(trustLogRepository).save(trustLogCaptor.capture());
+        assertEquals(0, samplePlayer.getTrustScore());
+        assertEquals(-100, trustLogCaptor.getValue().getCambio());
+        assertEquals(0, trustLogCaptor.getValue().getTrustScoreNuevo());
+    }
+
+    @Test
+    void updateTrustScoreAutomatic_WhenChangeExceedsMaximum_ShouldPersistEffectiveChange() {
+        UUID playerUuid = samplePlayer.getAtletaUuid();
+        Long matchId = 1L;
+        samplePlayer.setTrustScore(995);
+
+        when(playerProfileRepository.findById(playerUuid)).thenReturn(Optional.of(samplePlayer));
+        when(matchRepository.findById(matchId)).thenReturn(Optional.of(sampleMatch));
+        when(trustLogRepository.save(any(TrustLog.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(playerProfileRepository.save(any(PlayerProfile.class))).thenReturn(samplePlayer);
+
+        TrustLogResponse response = trustScoreService.updateTrustScoreAutomatic(
+                playerUuid,
+                matchId,
+                10,
+                "Bonus capped at maximum"
+        );
+
+        ArgumentCaptor<TrustLog> trustLogCaptor = ArgumentCaptor.forClass(TrustLog.class);
+        verify(trustLogRepository).save(trustLogCaptor.capture());
+        assertEquals(5, trustLogCaptor.getValue().getCambio());
+        assertEquals(5, response.getCambio());
+        assertEquals(1000, samplePlayer.getTrustScore());
     }
 
     @Test

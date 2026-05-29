@@ -40,21 +40,18 @@ public class PlayerProfileService {
     private final AthleteRepository athleteRepository;
     private final PlayerPositionRepository playerPositionRepository;
     private final PositionRepository positionRepository;
-    private final TrustLogRepository trustLogRepository;
-    private final MatchRepository matchRepository;
+    private final TrustScoreService trustScoreService;
 
     public PlayerProfileService(PlayerProfileRepository playerProfileRepository,
                                AthleteRepository athleteRepository,
                                PlayerPositionRepository playerPositionRepository,
                                PositionRepository positionRepository,
-                               TrustLogRepository trustLogRepository,
-                               MatchRepository matchRepository) {
+                               TrustScoreService trustScoreService) {
         this.playerProfileRepository = playerProfileRepository;
         this.athleteRepository = athleteRepository;
         this.playerPositionRepository = playerPositionRepository;
         this.positionRepository = positionRepository;
-        this.trustLogRepository = trustLogRepository;
-        this.matchRepository = matchRepository;
+        this.trustScoreService = trustScoreService;
     }
 
     /**
@@ -254,42 +251,12 @@ public class PlayerProfileService {
         logger.info("Actualizando trust score del jugador: {} con cambio: {}", 
                    request.getPlayerUuid(), request.getCambio());
 
-        PlayerProfile player = playerProfileRepository.findById(request.getPlayerUuid())
+        trustScoreService.updateTrustScore(request, null);
+        PlayerProfile updatedPlayer = playerProfileRepository.findById(request.getPlayerUuid())
                 .orElseThrow(() -> new IllegalArgumentException("No se encontró jugador con UUID: " + request.getPlayerUuid()));
 
-        Match match = null;
-        if (request.getMatchId() != null) {
-            match = matchRepository.findById(request.getMatchId())
-                    .orElseThrow(() -> new IllegalArgumentException("No se encontró partido con ID: " + request.getMatchId()));
-        }
-
-        // Calcular nuevo trust score
-        Integer currentTrustScore = player.getTrustScore();
-        Integer newTrustScore = currentTrustScore + request.getCambio();
-
-        // Asegurar que el trust score esté en rango válido (0-1000)
-        newTrustScore = Math.max(0, Math.min(1000, newTrustScore));
-
-        // Requisito 2.5: Registrar el cambio en trust_logs
-        TrustLog trustLog = new TrustLog(
-                player,
-                match,
-                request.getCambio(),
-                currentTrustScore,
-                newTrustScore,
-                request.getMotivo(),
-                null
-        );
-
-        // Actualizar trust score del jugador
-        player.setTrustScore(newTrustScore);
-
-        // Guardar cambios
-        trustLogRepository.save(trustLog);
-        PlayerProfile updatedPlayer = playerProfileRepository.save(player);
-
-        logger.info("Trust score actualizado exitosamente para jugador: {} (anterior: {}, nuevo: {})", 
-                   request.getPlayerUuid(), currentTrustScore, newTrustScore);
+        logger.info("Trust score actualizado exitosamente para jugador: {} (nuevo: {})",
+                   request.getPlayerUuid(), updatedPlayer.getTrustScore());
 
         return convertToResponse(updatedPlayer);
     }
@@ -304,10 +271,7 @@ public class PlayerProfileService {
     public List<TrustLogResponse> getTrustScoreHistory(UUID atletaUuid) {
         logger.debug("Obteniendo historial de trust score del jugador: {}", atletaUuid);
 
-        return trustLogRepository.findByPlayerAtletaUuidOrderByCreatedAtDesc(atletaUuid)
-                .stream()
-                .map(this::convertToTrustLogResponse)
-                .collect(Collectors.toList());
+        return trustScoreService.getTrustHistory(atletaUuid);
     }
 
     /**
@@ -417,44 +381,4 @@ public class PlayerProfileService {
         );
     }
 
-    /**
-     * Convierte una entidad TrustLog a TrustLogResponse.
-     * 
-     * @param trustLog Entidad a convertir
-     * @return DTO de respuesta
-     */
-    private TrustLogResponse convertToTrustLogResponse(TrustLog trustLog) {
-        // Crear respuesta básica del jugador para evitar recursión
-        PlayerProfileResponse playerResponse = new PlayerProfileResponse(
-                trustLog.getPlayer().getAtletaUuid(),
-                trustLog.getPlayer().getAlias(),
-                trustLog.getPlayer().getAthlete() != null ? trustLog.getPlayer().getAthlete().getGenero() : null,
-                trustLog.getPlayer().getTrustScore(),
-                trustLog.getPlayer().getCreatedAt()
-        );
-
-        return new TrustLogResponse(
-                trustLog.getId(),
-                playerResponse,
-                convertToMinimalMatchResponse(trustLog.getMatch()),
-                trustLog.getCambio(),
-                trustLog.getMotivo(),
-                trustLog.getCreatedAt()
-        );
-    }
-
-    private com.atleta.demo.dto.response.MatchResponse convertToMinimalMatchResponse(Match match) {
-        if (match == null) {
-            return null;
-        }
-
-        com.atleta.demo.dto.response.MatchResponse response = new com.atleta.demo.dto.response.MatchResponse();
-        response.setId(match.getId());
-        response.setModalidad(match.getModalidad());
-        response.setCategoriaGenero(match.getCategoriaGenero());
-        response.setFechaHoraProgramada(match.getFechaHoraProgramada());
-        response.setEstado(match.getEstado());
-        response.setCreatedAt(match.getCreatedAt());
-        return response;
-    }
 }
