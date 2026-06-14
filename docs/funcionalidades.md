@@ -106,6 +106,8 @@
 - `Implementada` Cambio de estado usa el `sub` JWT como actor efectivo aunque el cliente envie otro `actorUuid`.
 - `Implementada` Reglas puras de transicion de estado y metadata de inicio/invalidez aisladas en `MatchStatusPolicy` con tests unitarios.
 - `Implementada` Snapshot de marcador final aislado en `MatchFinalScoreService`: cuenta goles confirmados por lado y sincroniza `MatchTeam` + `Match`.
+- `Implementada` Persistencia de historial/XP post-partido aislada en `MatchPlayerHistoryService`: crea `PlayerHistory`, calcula resultado por jugador y suma XP a la posicion usada.
+- `Implementada` Cierre automatico de eventos pendientes aislado en `MatchPendingEventClosureService`: confirma home/away y suma goles nuevos al equipo cuando corresponde.
 - `Implementada` Agregar equipo al partido: `POST /api/v1/matches/{matchId}/teams/{teamId}?esLocal=...`
 - `Implementada` Agregar equipo al partido usa el `sub` JWT como actor responsable antes de delegar al servicio.
 - `Implementada` Agregar o quitar jugadores:

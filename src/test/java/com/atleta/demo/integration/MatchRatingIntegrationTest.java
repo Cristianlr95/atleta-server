@@ -23,6 +23,8 @@ import com.atleta.demo.repository.PositionRepository;
 import com.atleta.demo.repository.TeamMemberRepository;
 import com.atleta.demo.repository.TeamRepository;
 import com.atleta.demo.service.MatchFinalScoreService;
+import com.atleta.demo.service.MatchPendingEventClosureService;
+import com.atleta.demo.service.MatchPlayerHistoryService;
 import com.atleta.demo.service.MatchService;
 import com.atleta.demo.service.MatchStatusPolicy;
 import com.atleta.demo.service.RatingService;
@@ -98,12 +100,22 @@ class MatchRatingIntegrationTest {
                 positionRepository,
                 teamMemberRepository,
                 playerPositionRepository,
-                playerHistoryRepository,
                 ratingService,
                 new MatchStatusPolicy(),
                 new MatchFinalScoreService(
                         matchEventRepository,
                         matchPlayerRepository,
+                        matchTeamRepository
+                ),
+                new MatchPlayerHistoryService(
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        matchTeamRepository,
+                        playerHistoryRepository,
+                        playerPositionRepository
+                ),
+                new MatchPendingEventClosureService(
+                        matchEventRepository,
                         matchTeamRepository
                 )
         );

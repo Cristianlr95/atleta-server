@@ -69,6 +69,8 @@ class MatchServiceTest {
 
     private MatchStatusPolicy matchStatusPolicy;
     private MatchFinalScoreService matchFinalScoreService;
+    private MatchPlayerHistoryService matchPlayerHistoryService;
+    private MatchPendingEventClosureService matchPendingEventClosureService;
 
     private MatchService matchService;
 
@@ -87,6 +89,17 @@ class MatchServiceTest {
                 matchPlayerRepository,
                 matchTeamRepository
         );
+        matchPlayerHistoryService = new MatchPlayerHistoryService(
+                matchPlayerRepository,
+                matchEventRepository,
+                matchTeamRepository,
+                playerHistoryRepository,
+                playerPositionRepository
+        );
+        matchPendingEventClosureService = new MatchPendingEventClosureService(
+                matchEventRepository,
+                matchTeamRepository
+        );
         matchService = new MatchService(
                 matchRepository,
                 matchTeamRepository,
@@ -97,10 +110,11 @@ class MatchServiceTest {
                 positionRepository,
                 teamMemberRepository,
                 playerPositionRepository,
-                playerHistoryRepository,
                 ratingService,
                 matchStatusPolicy,
-                matchFinalScoreService
+                matchFinalScoreService,
+                matchPlayerHistoryService,
+                matchPendingEventClosureService
         );
 
         UUID playerId = UUID.randomUUID();

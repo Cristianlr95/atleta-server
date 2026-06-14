@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 93%.
-- Avance anterior registrado: 92%.
-- Delta de esta tarea: +1 punto porcentual por continuar la extraccion gradual de `MatchService`: el snapshot de marcador final vive ahora en `MatchFinalScoreService` con cobertura unitaria.
+- Avance estimado del proyecto Atleta: 95%.
+- Avance anterior registrado: 94%.
+- Delta de esta tarea: +1 punto porcentual por extraer el cierre automatico de eventos pendientes a `MatchPendingEventClosureService`, reutilizando tambien la actualizacion de goles de equipo.
 
 ## Proposito del repo
 
@@ -37,6 +37,8 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - `MatchStatusSchedulerTest` verifica que el scheduler delega en `MatchService.refreshAutomatedMatchStates()`; el job queda deshabilitado en tests para evitar flakiness.
 - `MatchStatusPolicyTest` cubre transiciones validas/invalidas, metadata de inicio/invalidez manual y ventana de cierre pendiente sin depender de repositorios.
 - `MatchFinalScoreServiceTest` cubre el conteo de goles confirmados por lado y la persistencia del snapshot de marcador en `MatchTeam`/`Match`.
+- `MatchPlayerHistoryServiceTest` cubre generacion de `PlayerHistory`, resultado del jugador y acumulacion de XP por posicion al finalizar partido.
+- `MatchPendingEventClosureServiceTest` cubre confirmacion automatica home/away de eventos pendientes y aplicacion de goles nuevos al marcador del equipo.
 - `TrustScoreServiceTest` cubre limites inferiores/superiores de trust score y que `trust_logs.cambio` guarde el delta efectivo; `PlayerProfileControllerIntegrationTest` valida que el endpoint usa el JWT aunque el body omita `playerUuid`.
 
 ## Modulos reales detectados
@@ -105,7 +107,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 ## Deuda tecnica detectada
 
 - Falta completar autorizacion por rol de negocio en operaciones de administracion/lectura global; la autorizacion por identidad esta reforzada en flujos principales de equipos, partidos, eventos, MVP, social por partido y ratings personales.
-- Falta continuar separando casos de uso grandes: `MatchService` ya comenzo a extraer politica de estado y snapshot final, pero todavia concentra convocatoria, cierre de eventos, historial y ratings; `RatingService` tambien concentra demasiada responsabilidad.
+- Falta continuar separando casos de uso grandes: `MatchService` ya delega politica de estado, snapshot final, historial/XP y cierre de eventos pendientes, pero todavia concentra convocatoria, consultas y ratings; `RatingService` tambien concentra demasiada responsabilidad.
 - Falta automatizacion real de estados de partido via scheduler o job dedicado.
 - Falta consolidar y validar el flujo CI/CD completo de despliegue; Dockerfile y compose local/CI ya existen.
 - Falta estrategia centralizada de manejo de errores para todos los modulos sociales/equipos.
@@ -113,7 +115,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Proximos pasos recomendados
 
-1. Continuar extraccion gradual de `MatchService`: mover persistencia de historial/XP post-partido a un componente dedicado.
+1. Continuar extraccion gradual de `MatchService`: separar convocatoria/equipos/jugadores en un componente dedicado.
 2. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
 3. Convertir CI/deploy en pipeline ejecutable usando el Dockerfile y compose CI actuales.
 4. Completar autorizacion por rol de negocio en lecturas/administracion donde no baste con identidad JWT.

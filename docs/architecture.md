@@ -43,7 +43,7 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 ### Capa de negocio
 
 - Servicios orientados a dominio: `AthleteService`, `PlayerProfileService`, `TeamService`, `MatchService`, `SocialService`, `RatingService`
-- Servicios de apoyo: `JwtService`, `GoogleAuthService`, `MatchMvpService`, `MatchLiveEventService`, `MatchStatusPolicy`, `MatchFinalScoreService`, `XPService`
+- Servicios de apoyo: `JwtService`, `GoogleAuthService`, `MatchMvpService`, `MatchLiveEventService`, `MatchStatusPolicy`, `MatchFinalScoreService`, `MatchPlayerHistoryService`, `MatchPendingEventClosureService`, `XPService`
 - Servicios con deuda/duplicidad: `DataInitializationService`
 
 ### Capa de persistencia
@@ -114,7 +114,7 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 
 ## Puntos debiles de arquitectura
 
-- `MatchService` sigue siendo un God Service, aunque las reglas puras de estado ya se movieron a `MatchStatusPolicy` y el snapshot final a `MatchFinalScoreService`; aun concentra cupos, eventos, XP, historial, validaciones y refresh automatico.
+- `MatchService` sigue siendo grande, aunque las reglas puras de estado ya se movieron a `MatchStatusPolicy`, el snapshot final a `MatchFinalScoreService`, el historial/XP post-partido a `MatchPlayerHistoryService` y el cierre automatico de eventos a `MatchPendingEventClosureService`; aun concentra cupos, convocatoria, consultas y refresh automatico.
 - `RatingService` mezcla inicializacion, calculo, historial, estadisticas y leaderboard.
 - Falta completar una capa transversal de autorizacion de dominio; equipos/partidos/perfil ya tienen cobertura de identidad JWT en casos sensibles y las lecturas globales son privadas, pero otros modulos aun dependen de validaciones puntuales.
 - Trust score queda centralizado en `TrustScoreService`; `PlayerProfileService` delega actualizacion e historial para evitar duplicidad de reglas.

@@ -11,7 +11,6 @@ import com.atleta.demo.enums.MatchStatus;
 import com.atleta.demo.enums.MatchValidationStatus;
 import com.atleta.demo.enums.EventType;
 import com.atleta.demo.enums.MatchResultType;
-import com.atleta.demo.enums.MatchResult;
 import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.enums.MatchGenderCategory;
 import com.atleta.demo.enums.PlayerRole;
@@ -58,10 +57,11 @@ public class MatchService {
     private final TeamMemberRepository teamMemberRepository;
     private final PositionRepository positionRepository;
     private final PlayerPositionRepository playerPositionRepository;
-    private final PlayerHistoryRepository playerHistoryRepository;
     private final RatingService ratingService;
     private final MatchStatusPolicy matchStatusPolicy;
     private final MatchFinalScoreService matchFinalScoreService;
+    private final MatchPlayerHistoryService matchPlayerHistoryService;
+    private final MatchPendingEventClosureService matchPendingEventClosureService;
 
     public MatchService(MatchRepository matchRepository,
                         MatchTeamRepository matchTeamRepository,
@@ -72,10 +72,11 @@ public class MatchService {
                         PositionRepository positionRepository,
                         TeamMemberRepository teamMemberRepository,
                         PlayerPositionRepository playerPositionRepository,
-                        PlayerHistoryRepository playerHistoryRepository,
                         RatingService ratingService,
                         MatchStatusPolicy matchStatusPolicy,
-                        MatchFinalScoreService matchFinalScoreService) {
+                        MatchFinalScoreService matchFinalScoreService,
+                        MatchPlayerHistoryService matchPlayerHistoryService,
+                        MatchPendingEventClosureService matchPendingEventClosureService) {
         this.matchRepository = matchRepository;
         this.matchTeamRepository = matchTeamRepository;
         this.matchPlayerRepository = matchPlayerRepository;
@@ -85,10 +86,11 @@ public class MatchService {
         this.positionRepository = positionRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.playerPositionRepository = playerPositionRepository;
-        this.playerHistoryRepository = playerHistoryRepository;
         this.ratingService = ratingService;
         this.matchStatusPolicy = matchStatusPolicy;
         this.matchFinalScoreService = matchFinalScoreService;
+        this.matchPlayerHistoryService = matchPlayerHistoryService;
+        this.matchPendingEventClosureService = matchPendingEventClosureService;
     }
 
     /**
@@ -476,7 +478,7 @@ public class MatchService {
         event = matchEventRepository.save(event);
 
         if (event.isGol()) {
-            updateMatchTeamGoals(event);
+            matchPendingEventClosureService.applyGoalToTeamScore(event);
         }
         return convertToMatchEventResponse(event);
     }
@@ -511,7 +513,7 @@ public class MatchService {
 
         // Si está completamente confirmado, actualizar estadísticas (Requisito 8.5)
         if (event.isFullyConfirmed() && event.isGol()) {
-            updateMatchTeamGoals(event);
+            matchPendingEventClosureService.applyGoalToTeamScore(event);
         }
 
         return convertToMatchEventResponse(event);
@@ -552,9 +554,9 @@ public class MatchService {
                 match = matchRepository.save(match);
                 return convertToResponse(match);
             }
-            closePendingEventsForFinalization(match);
+            matchPendingEventClosureService.closePendingEventsForFinalization(match);
             matchFinalScoreService.applyFinalScoreSnapshot(match);
-            persistPlayerHistoryForFinalization(match);
+            matchPlayerHistoryService.persistForFinalization(match);
             match.setFinalizedAt(LocalDateTime.now());
             match.setValidationStatus(MatchValidationStatus.VALID);
             match.setValidationReason(null);
@@ -915,15 +917,6 @@ public class MatchService {
 
     // Métodos privados de utilidad
 
-    private void updateMatchTeamGoals(MatchEvent event) {
-        // Actualizar goles del equipo en el partido
-        MatchTeam matchTeam = matchTeamRepository.findByMatchAndTeam(event.getMatch(), event.getTeam())
-                .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado en el partido"));
-
-        matchTeam.incrementarGoles();
-        matchTeamRepository.save(matchTeam);
-    }
-
     private Map<UUID, Integer> buildPersistedGoalsMap(Match match) {
         Map<UUID, Integer> goalsByPlayer = new HashMap<>();
         List<MatchEvent> events = matchEventRepository.findByMatchOrderByCreatedAt(match);
@@ -1009,117 +1002,6 @@ public class MatchService {
         if (!pendingEvents.isEmpty()) {
             throw new IllegalArgumentException("No se puede finalizar: hay eventos pendientes de confirmacion");
         }
-    }
-
-    private void closePendingEventsForFinalization(Match match) {
-        List<MatchEvent> pendingEvents = matchEventRepository.findPendingEventsByMatch(match);
-        if (pendingEvents.isEmpty()) {
-            return;
-        }
-
-        for (MatchEvent event : pendingEvents) {
-            boolean wasFullyConfirmed = event.isFullyConfirmed();
-
-            if (!Boolean.TRUE.equals(event.getConfirmedByHome())) {
-                event.confirmByHome();
-            }
-            if (!Boolean.TRUE.equals(event.getConfirmedByAway())) {
-                event.confirmByAway();
-            }
-
-            if (!wasFullyConfirmed && event.isFullyConfirmed() && event.isGol()) {
-                updateMatchTeamGoals(event);
-            }
-        }
-
-        matchEventRepository.saveAll(pendingEvents);
-        logger.info("Se cerraron {} eventos pendientes al finalizar partido {}", pendingEvents.size(), match.getId());
-    }
-
-    private void persistPlayerHistoryForFinalization(Match match) {
-        List<MatchPlayer> players = matchPlayerRepository.findByMatch(match);
-        if (players.isEmpty()) {
-            return;
-        }
-        int createdHistoryRows = 0;
-
-        int finalLocal = match.getFinalScoreLocal() != null ? match.getFinalScoreLocal() : 0;
-        int finalAway = match.getFinalScoreAway() != null ? match.getFinalScoreAway() : 0;
-
-        Map<UUID, Integer> goalsByPlayer = new HashMap<>();
-        Map<UUID, Integer> assistsByPlayer = new HashMap<>();
-        List<MatchEvent> events = matchEventRepository.findByMatchOrderByCreatedAt(match);
-        for (MatchEvent event : events) {
-            if (event.getTipoEvento() != EventType.GOL || event.getPlayer() == null || !event.isFullyConfirmed()) {
-                continue;
-            }
-
-            UUID scorerUuid = event.getPlayer().getAtletaUuid();
-            goalsByPlayer.merge(scorerUuid, 1, Integer::sum);
-
-            if (event.getAssistPlayer() != null) {
-                UUID assistUuid = event.getAssistPlayer().getAtletaUuid();
-                assistsByPlayer.merge(assistUuid, 1, Integer::sum);
-            }
-        }
-
-        for (MatchPlayer matchPlayer : players) {
-            if (!Boolean.TRUE.equals(matchPlayer.getConfirmado()) || matchPlayer.getPlayer() == null) {
-                continue;
-            }
-
-            PlayerProfile player = matchPlayer.getPlayer();
-            if (playerHistoryRepository.findByMatchAndPlayer(match, player).isPresent()) {
-                continue;
-            }
-
-            if (matchPlayer.getTeam() == null || matchPlayer.getPosition() == null) {
-                logger.warn("Se omite historial del jugador {} en partido {} por datos incompletos", player.getAtletaUuid(), match.getId());
-                continue;
-            }
-
-            MatchTeamSide side = matchPlayer.getTeamSide() != null
-                    ? matchPlayer.getTeamSide()
-                    : resolveTeamSide(match, matchPlayer.getTeam());
-
-            MatchResult result = resolvePlayerResult(side, finalLocal, finalAway);
-            int goals = goalsByPlayer.getOrDefault(player.getAtletaUuid(), 0);
-            int assists = assistsByPlayer.getOrDefault(player.getAtletaUuid(), 0);
-            int xp = estimateXpForPlayer(matchPlayer, goals, finalLocal, finalAway, side != null ? side : MatchTeamSide.LOCAL);
-
-            PlayerHistory history = new PlayerHistory(
-                    match,
-                    player,
-                    matchPlayer.getTeam(),
-                    matchPlayer.getPosition(),
-                    goals,
-                    assists,
-                    result,
-                    xp
-            );
-            playerHistoryRepository.save(history);
-            createdHistoryRows += 1;
-
-            playerPositionRepository.findByPlayerAndPosition(player, matchPlayer.getPosition())
-                    .ifPresent(playerPosition -> {
-                        playerPosition.addXp(xp);
-                        playerPositionRepository.save(playerPosition);
-                    });
-        }
-        logger.info("Historial de jugadores persistido para partido {}: {} filas nuevas", match.getId(), createdHistoryRows);
-    }
-
-    private MatchResult resolvePlayerResult(MatchTeamSide side, int finalLocal, int finalAway) {
-        if (finalLocal == finalAway) {
-            return MatchResult.EMPATE;
-        }
-
-        boolean localWon = finalLocal > finalAway;
-        if (side == MatchTeamSide.VISITA) {
-            return localWon ? MatchResult.DERROTA : MatchResult.VICTORIA;
-        }
-
-        return localWon ? MatchResult.VICTORIA : MatchResult.DERROTA;
     }
 
     private int playersPerTeamByModality(MatchMode modality) {
@@ -1520,7 +1402,7 @@ public class MatchService {
             if (hasMinimumConfirmedPlayers(match)) {
                 continue;
             }
-            if (!playerHistoryRepository.findByMatch(match).isEmpty()) {
+            if (matchPlayerHistoryService.hasHistoryRows(match)) {
                 continue;
             }
             match.setEstado(MatchStatus.INVALIDO);
