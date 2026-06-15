@@ -43,7 +43,7 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 ### Capa de negocio
 
 - Servicios orientados a dominio: `AthleteService`, `PlayerProfileService`, `TeamService`, `MatchService`, `SocialService`, `RatingService`
-- Servicios de apoyo: `JwtService`, `GoogleAuthService`, `MatchMvpService`, `MatchLiveEventService`, `MatchStatusPolicy`, `MatchFinalScoreService`, `MatchPlayerHistoryService`, `MatchPendingEventClosureService`, `XPService`
+- Servicios de apoyo: `JwtService`, `GoogleAuthService`, `MatchMvpService`, `MatchLiveEventService`, `MatchStatusPolicy`, `MatchFinalScoreService`, `MatchPlayerHistoryService`, `MatchPendingEventClosureService`, `MatchRosterPolicy`, `MatchPostMatchRatingService`, `MatchAutomatedStatusService`, `MatchResponseMapper`, `MatchQueryService`, `XPService`
 - Servicios con deuda/duplicidad: `DataInitializationService`
 
 ### Capa de persistencia
@@ -105,7 +105,7 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 - Uso mixto de `UUID` para usuario y `Long` para agregados.
 - DTOs separados en `dto/request` y `dto/response`.
 - Naming del dominio en espanol, enums en espanol/ingles mixto.
-- Servicios grandes concentran mapping entity -> DTO dentro del mismo servicio.
+- El mapping principal de partidos se centraliza en `MatchResponseMapper`; otros servicios aun mezclan mapping entity -> DTO.
 - Los contratos HTTP criticos se protegen con smoke MVC en `ApiContractSmokeTest`, usando controllers reales y servicios mockeados.
 - Ese smoke MVC incluye regresiones para evitar suplantacion de UUIDs de cliente en perfil/trust score, `actorUuid`/`registeredByUuid` en crear partido, cambiar estado, asignar equipos, registrar eventos, votar MVP y borrar equipo.
 - La proteccion JWT de ratings queda cubierta en `JwtAuthenticationIntegrationTest`.
@@ -114,17 +114,17 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 
 ## Puntos debiles de arquitectura
 
-- `MatchService` sigue siendo grande, aunque las reglas puras de estado ya se movieron a `MatchStatusPolicy`, el snapshot final a `MatchFinalScoreService`, el historial/XP post-partido a `MatchPlayerHistoryService` y el cierre automatico de eventos a `MatchPendingEventClosureService`; aun concentra cupos, convocatoria, consultas y refresh automatico.
+- `MatchService` sigue siendo el orquestador principal de comandos, pero ya delega reglas puras de estado, snapshot final, historial/XP, cierre automatico de eventos, politica de convocatoria/equipos, rating post-partido, automatizacion de estados, armado de respuestas y consultas/listados.
 - `RatingService` mezcla inicializacion, calculo, historial, estadisticas y leaderboard.
 - Falta completar una capa transversal de autorizacion de dominio; equipos/partidos/perfil ya tienen cobertura de identidad JWT en casos sensibles y las lecturas globales son privadas, pero otros modulos aun dependen de validaciones puntuales.
 - Trust score queda centralizado en `TrustScoreService`; `PlayerProfileService` delega actualizacion e historial para evitar duplicidad de reglas.
-- La automatizacion temporal depende de lecturas, no de scheduler ni job dedicado.
+- La automatizacion temporal tiene scheduler configurable y servicio dedicado; las lecturas siguen invocando refresh para mantener consistencia oportunista.
 - Hay incoherencias entre docs heredadas, migraciones antiguas y el codigo vigente.
 
 ## Mejoras sugeridas
 
-1. Separar `MatchService` en submodulos: convocatoria, arbitraje/eventos, cierre/snapshot final, validacion automatica.
+1. Validar flujos completos con backend y frontend levantados contra seed estable.
 2. Introducir autorizacion basada en principal JWT y policies de dominio.
 3. Agregar smoke E2E contra FE+BE levantados si se estabiliza seed/credenciales de prueba.
-4. Extraer mappers DTO dedicados para bajar acoplamiento.
+4. Extraer mappers DTO dedicados restantes para bajar acoplamiento fuera del modulo de partidos.
 5. Versionar formulas de rating/XP para evitar cambios silenciosos en el dominio.

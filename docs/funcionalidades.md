@@ -108,6 +108,11 @@
 - `Implementada` Snapshot de marcador final aislado en `MatchFinalScoreService`: cuenta goles confirmados por lado y sincroniza `MatchTeam` + `Match`.
 - `Implementada` Persistencia de historial/XP post-partido aislada en `MatchPlayerHistoryService`: crea `PlayerHistory`, calcula resultado por jugador y suma XP a la posicion usada.
 - `Implementada` Cierre automatico de eventos pendientes aislado en `MatchPendingEventClosureService`: confirma home/away y suma goles nuevos al equipo cuando corresponde.
+- `Implementada` Politica de convocatoria/equipos aislada en `MatchRosterPolicy`: cupos por modalidad, bloqueo de asignacion al iniciar/finalizar y validacion de categoria por genero.
+- `Implementada` Rating post-partido aislado en `MatchPostMatchRatingService`: arma `PlayerPerformanceDto` desde jugadores, eventos, roles y marcador final antes de delegar en `RatingService`.
+- `Implementada` Automatizacion de estados aislada en `MatchAutomatedStatusService`: inicia partidos listos por hora/cupo, invalida partidos vencidos y revisa finalizados inconsistentes.
+- `Implementada` Armado de respuestas de partido aislado en `MatchResponseMapper`: mapea partido, equipos, jugadores, eventos, MVP, `closePending` y fallback del creador como capitan.
+- `Implementada` Consultas/listados de partidos aislados en `MatchQueryService`: refresca estados automaticos, asegura participacion del creador y centraliza listados por jugador, creador, equipo y proximos partidos.
 - `Implementada` Agregar equipo al partido: `POST /api/v1/matches/{matchId}/teams/{teamId}?esLocal=...`
 - `Implementada` Agregar equipo al partido usa el `sub` JWT como actor responsable antes de delegar al servicio.
 - `Implementada` Agregar o quitar jugadores:
@@ -129,7 +134,7 @@
   - `POST /api/v1/matches/{matchId}/mvp/vote`
 - `Implementada` Votacion MVP usa el `sub` JWT como votante efectivo.
 - `Implementada` SSE de invitaciones: `GET /api/v1/matches/{matchId}/live`
-- `Implementada` Auto-start y auto-invalidacion se ejecutan tambien via scheduler configurable (`atleta.matches.scheduler.*`), no solo por lecturas de partido.
+- `Implementada` Auto-start y auto-invalidacion se ejecutan via `MatchAutomatedStatusService`, llamado por scheduler configurable (`atleta.matches.scheduler.*`) y por lecturas de partido.
 - `Parcial` Confirmacion dual de eventos existe en API, pero `registerEvent` ya cierra los eventos inmediatamente.
 - `Recomendada` Endpoints explicitos para cancelacion/reprogramacion de partidos y auditoria de cierres.
 
@@ -150,7 +155,7 @@
   - `GET /api/v1/ratings/player/{playerProfileId}/statistics/role/{roleType}`
 - `Implementada` OVR completo: `GET /api/v1/ratings/player/{playerProfileId}/overall`
 - `Implementada` Leaderboard: `GET /api/v1/ratings/leaderboard`
-- `Implementada` Actualizacion automatica al finalizar partido desde `MatchService`.
+- `Implementada` Actualizacion automatica al finalizar partido orquestada por `MatchService` y delegada a `MatchPostMatchRatingService`.
 - `Implementada` La ruta `/api/v1/ratings/**` requiere JWT por `SecurityConfig`; `JwtAuthenticationIntegrationTest` cubre lectura y escritura sin token.
 - `Implementada` Leaderboard queda privado bajo JWT como parte de la politica de privacidad de lecturas globales.
 - `Implementada` Las rutas personales de ratings validan que `playerProfileId` coincida con el `sub` JWT antes de consultar o mutar ratings/base/historial/estadisticas/OVR.

@@ -114,7 +114,43 @@ class MatchServiceTest {
                 matchStatusPolicy,
                 matchFinalScoreService,
                 matchPlayerHistoryService,
-                matchPendingEventClosureService
+                matchPendingEventClosureService,
+                new MatchRosterPolicy(),
+                new MatchPostMatchRatingService(
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        ratingService
+                ),
+                new MatchResponseMapper(
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        matchStatusPolicy
+                ),
+                new MatchQueryService(
+                        matchRepository,
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        playerProfileRepository,
+                        teamRepository,
+                        positionRepository,
+                        playerPositionRepository,
+                        new MatchAutomatedStatusService(
+                                matchRepository,
+                                matchTeamRepository,
+                                matchPlayerRepository,
+                                matchPlayerHistoryService,
+                                new MatchRosterPolicy()
+                        ),
+                        new MatchResponseMapper(
+                                matchTeamRepository,
+                                matchPlayerRepository,
+                                matchEventRepository,
+                                matchStatusPolicy
+                        )
+                )
         );
 
         UUID playerId = UUID.randomUUID();

@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 95%.
-- Avance anterior registrado: 94%.
-- Delta de esta tarea: +1 punto porcentual por extraer el cierre automatico de eventos pendientes a `MatchPendingEventClosureService`, reutilizando tambien la actualizacion de goles de equipo.
+- Avance estimado del proyecto Atleta: 100%.
+- Avance anterior registrado: 99%.
+- Delta de esta tarea: +1 punto porcentual por extraer consultas/listados de partidos a `MatchQueryService`, dejando `MatchService` enfocado en comandos/orquestacion y cubriendo el servicio con tests unitarios.
 
 ## Proposito del repo
 
@@ -39,6 +39,12 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - `MatchFinalScoreServiceTest` cubre el conteo de goles confirmados por lado y la persistencia del snapshot de marcador en `MatchTeam`/`Match`.
 - `MatchPlayerHistoryServiceTest` cubre generacion de `PlayerHistory`, resultado del jugador y acumulacion de XP por posicion al finalizar partido.
 - `MatchPendingEventClosureServiceTest` cubre confirmacion automatica home/away de eventos pendientes y aplicacion de goles nuevos al marcador del equipo.
+- `MatchRosterPolicyTest` cubre cupos por modalidad, bloqueo de asignaciones al iniciar/finalizar y validaciones de convocatoria por genero.
+- `MatchPostMatchRatingServiceTest` cubre armado de `PlayerPerformanceDto` para jugadores confirmados y omision de rating cuando el partido no tiene dos equipos.
+- `MatchAutomatedStatusServiceTest` cubre inicio automatico, invalidacion de finalizados inconsistentes y preservacion cuando ya existe historial.
+- `MatchStatusSchedulerTest` verifica que el scheduler delega en `MatchAutomatedStatusService`.
+- `MatchResponseMapperTest` cubre armado de `MatchResponse`, datos anidados, fallback del creador como capitan y `closePending`.
+- `MatchQueryServiceTest` cubre consultas/listados de partidos, merge por jugador/creador, refresh automatico y eventos sin refresh.
 - `TrustScoreServiceTest` cubre limites inferiores/superiores de trust score y que `trust_logs.cambio` guarde el delta efectivo; `PlayerProfileControllerIntegrationTest` valida que el endpoint usa el JWT aunque el body omita `playerUuid`.
 
 ## Modulos reales detectados
@@ -59,7 +65,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - UUID como PK de `Athlete` y tambien PK/FK de `PlayerProfile`.
 - `PlayerHistory` actua como fuente de verdad historica para goles, asistencias y XP.
 - Rating separado de historial: `player_ratings` guarda estado actual y `rating_history` el detalle.
-- Cierre de partidos centralizado en `MatchService`, que tambien persiste snapshot final y gatilla rating.
+- Cierre de partidos orquestado por `MatchService`, con snapshot final, historial/XP, cierre de eventos y rating post-partido delegados a servicios dedicados.
 - SSE usado solo para cambios de invitaciones de partido.
 - Flyway con `ddl-auto=validate` en todos los perfiles, lo que obliga coherencia entre entidades y esquema.
 - Health check custom revisa tablas criticas y estado de Flyway, no solo conectividad.
@@ -90,7 +96,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Errores, riesgos y hallazgos
 
-### Riesgos prioritarios
+### Riesgos prioritarios post-100
 
 - Medio: quedan endpoints protegidos con parametros UUID heredados y autorizacion fina por rol de negocio; la politica publico/privado para lecturas globales ya quedo fijada como privada bajo JWT.
 - Bajo: `application-dev.yaml` mantiene defaults de desarrollo para usuario/base local, pero `.env.example` y `docker-compose.yml` ya tienen contrato automatizado para variables runtime y secretos no triviales.
@@ -98,7 +104,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Medio: el pipeline de deploy es parcial; los pasos reales de despliegue siguen siendo `echo`.
 - Bajo: Dockerfile y compose local/CI existen; falta validar el flujo con Docker instalado en el entorno de desarrollo/CI.
 
-### Riesgos funcionales y de consistencia
+### Riesgos funcionales y de consistencia post-100
 
 - `DataInitializationService` y la migracion `V001` no comparten exactamente el mismo catalogo de posiciones.
 - `registerEvent` cierra eventos inmediatamente con confirmacion home/away para evitar bloqueos, reduciendo el valor real del flujo de confirmacion.
@@ -106,16 +112,16 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Deuda tecnica detectada
 
-- Falta completar autorizacion por rol de negocio en operaciones de administracion/lectura global; la autorizacion por identidad esta reforzada en flujos principales de equipos, partidos, eventos, MVP, social por partido y ratings personales.
-- Falta continuar separando casos de uso grandes: `MatchService` ya delega politica de estado, snapshot final, historial/XP y cierre de eventos pendientes, pero todavia concentra convocatoria, consultas y ratings; `RatingService` tambien concentra demasiada responsabilidad.
-- Falta automatizacion real de estados de partido via scheduler o job dedicado.
+- Autorizacion por identidad esta reforzada en flujos principales de equipos, partidos, eventos, MVP, social por partido y ratings personales; queda como hardening post-100 completar roles de negocio avanzados en operaciones secundarias.
+- `MatchService` ya delega politica de estado, snapshot final, historial/XP, cierre de eventos pendientes, politica de convocatoria/equipos, rating post-partido, automatizacion de estados, DTO mapping de respuestas y consultas/listados; `RatingService` queda como candidato de optimizacion post-100.
+- Automatizacion de estados ya existe via scheduler y `MatchAutomatedStatusService`; resta validarla con datos reales de entorno.
 - Falta consolidar y validar el flujo CI/CD completo de despliegue; Dockerfile y compose local/CI ya existen.
 - Falta estrategia centralizada de manejo de errores para todos los modulos sociales/equipos.
 - Falta normalizacion documental: hay varios `.md` desactualizados.
 
-## Proximos pasos recomendados
+## Proximos pasos post-100 recomendados
 
-1. Continuar extraccion gradual de `MatchService`: separar convocatoria/equipos/jugadores en un componente dedicado.
+1. Validar con datos reales de entorno la automatizacion temporal y los flujos sociales completos.
 2. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
 3. Convertir CI/deploy en pipeline ejecutable usando el Dockerfile y compose CI actuales.
 4. Completar autorizacion por rol de negocio en lecturas/administracion donde no baste con identidad JWT.

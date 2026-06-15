@@ -16,10 +16,10 @@ public class MatchStatusScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(MatchStatusScheduler.class);
 
-    private final MatchService matchService;
+    private final MatchAutomatedStatusService matchAutomatedStatusService;
 
-    public MatchStatusScheduler(MatchService matchService) {
-        this.matchService = matchService;
+    public MatchStatusScheduler(MatchAutomatedStatusService matchAutomatedStatusService) {
+        this.matchAutomatedStatusService = matchAutomatedStatusService;
     }
 
     @Scheduled(
@@ -28,6 +28,6 @@ public class MatchStatusScheduler {
     )
     public void refreshAutomatedMatchStates() {
         logger.debug("Refrescando estados automaticos de partidos por scheduler");
-        matchService.refreshAutomatedMatchStates();
+        matchAutomatedStatusService.refreshAutomatedMatchStates();
     }
 }

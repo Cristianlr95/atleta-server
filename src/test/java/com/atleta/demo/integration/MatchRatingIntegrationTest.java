@@ -22,9 +22,14 @@ import com.atleta.demo.repository.PlayerProfileRepository;
 import com.atleta.demo.repository.PositionRepository;
 import com.atleta.demo.repository.TeamMemberRepository;
 import com.atleta.demo.repository.TeamRepository;
+import com.atleta.demo.service.MatchAutomatedStatusService;
 import com.atleta.demo.service.MatchFinalScoreService;
 import com.atleta.demo.service.MatchPendingEventClosureService;
 import com.atleta.demo.service.MatchPlayerHistoryService;
+import com.atleta.demo.service.MatchPostMatchRatingService;
+import com.atleta.demo.service.MatchQueryService;
+import com.atleta.demo.service.MatchResponseMapper;
+import com.atleta.demo.service.MatchRosterPolicy;
 import com.atleta.demo.service.MatchService;
 import com.atleta.demo.service.MatchStatusPolicy;
 import com.atleta.demo.service.RatingService;
@@ -117,6 +122,48 @@ class MatchRatingIntegrationTest {
                 new MatchPendingEventClosureService(
                         matchEventRepository,
                         matchTeamRepository
+                ),
+                new MatchRosterPolicy(),
+                new MatchPostMatchRatingService(
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        ratingService
+                ),
+                new MatchResponseMapper(
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        new MatchStatusPolicy()
+                ),
+                new MatchQueryService(
+                        matchRepository,
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        playerProfileRepository,
+                        teamRepository,
+                        positionRepository,
+                        playerPositionRepository,
+                        new MatchAutomatedStatusService(
+                                matchRepository,
+                                matchTeamRepository,
+                                matchPlayerRepository,
+                                new MatchPlayerHistoryService(
+                                        matchPlayerRepository,
+                                        matchEventRepository,
+                                        matchTeamRepository,
+                                        playerHistoryRepository,
+                                        playerPositionRepository
+                                ),
+                                new MatchRosterPolicy()
+                        ),
+                        new MatchResponseMapper(
+                                matchTeamRepository,
+                                matchPlayerRepository,
+                                matchEventRepository,
+                                new MatchStatusPolicy()
+                        )
                 )
         );
 
