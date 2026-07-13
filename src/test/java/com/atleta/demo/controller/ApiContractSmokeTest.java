@@ -1,18 +1,23 @@
 package com.atleta.demo.controller;
 
+import com.atleta.demo.dto.request.CreatePlayerProfileRequest;
 import com.atleta.demo.dto.request.CreateMatchEventRequest;
 import com.atleta.demo.dto.request.CreateMatchInviteRequest;
 import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
+import com.atleta.demo.dto.request.UpdateTrustScoreRequest;
 import com.atleta.demo.dto.response.AthleteResponse;
 import com.atleta.demo.dto.response.LeaderboardEntryResponse;
 import com.atleta.demo.dto.response.MatchClosePreviewResponse;
 import com.atleta.demo.dto.response.MatchEventResponse;
 import com.atleta.demo.dto.response.MatchMvpResponse;
 import com.atleta.demo.dto.response.MatchResponse;
+import com.atleta.demo.dto.response.PlayerPositionResponse;
 import com.atleta.demo.dto.response.PlayerProfileResponse;
+import com.atleta.demo.dto.response.PositionResponse;
 import com.atleta.demo.dto.response.SocialRequestResponse;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.dto.response.TeamResponse;
+import com.atleta.demo.dto.response.TrustLogResponse;
 import com.atleta.demo.config.TestConfig;
 import com.atleta.demo.entity.Athlete;
 import com.atleta.demo.entity.Match;
@@ -35,6 +40,7 @@ import com.atleta.demo.service.JwtService;
 import com.atleta.demo.service.MatchLiveEventService;
 import com.atleta.demo.service.MatchMvpService;
 import com.atleta.demo.service.MatchService;
+import com.atleta.demo.service.PlayerProfileService;
 import com.atleta.demo.service.RatingService;
 import com.atleta.demo.service.SocialService;
 import com.atleta.demo.service.TeamService;
@@ -76,7 +82,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         TeamController.class,
         MatchController.class,
         SocialController.class,
-        RatingController.class
+        RatingController.class,
+        PlayerProfileController.class
 })
 @AutoConfigureMockMvc
 @Import(TestConfig.class)
@@ -117,6 +124,9 @@ class ApiContractSmokeTest {
 
     @MockBean
     private SocialService socialService;
+
+    @MockBean
+    private PlayerProfileService playerProfileService;
 
     @MockBean
     private PlayerProfileRepository playerProfileRepository;
@@ -170,6 +180,126 @@ class ApiContractSmokeTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.atletaUuid").value(USER_ID.toString()))
                 .andExpect(jsonPath("$.accessToken").value("jwt-token"));
+    }
+
+    @Test
+    void playerProfileRoutesKeepFrontendContract() throws Exception {
+        PlayerProfileResponse profile = profileResponse(USER_ID, "Demo10");
+        PlayerPositionResponse position = new PlayerPositionResponse(
+                7L,
+                new PositionResponse(9L, "Delantero"),
+                1,
+                120
+        );
+        TrustLogResponse trustLog = new TrustLogResponse(
+                11L,
+                profile,
+                matchResponse(42L),
+                10,
+                "Good behavior",
+                LocalDateTime.now()
+        );
+
+        when(playerProfileService.createPlayerProfile(any())).thenReturn(profile);
+        when(playerProfileService.findByAtletaUuid(USER_ID)).thenReturn(Optional.of(profile));
+        when(playerProfileService.updateAlias(USER_ID, "Demo11")).thenReturn(profile);
+        when(playerProfileService.getPlayerPositions(USER_ID)).thenReturn(List.of(position));
+        when(playerProfileService.updateTrustScore(any())).thenReturn(profile);
+        when(playerProfileService.getTrustScoreHistory(USER_ID)).thenReturn(List.of(trustLog));
+
+        mockMvc.perform(post("/api/v1/player-profiles")
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "atletaUuid", OTHER_USER_ID.toString(),
+                                "alias", "Demo10",
+                                "genero", "MASCULINO"
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.atletaUuid").value(USER_ID.toString()))
+                .andExpect(jsonPath("$.alias").value("Demo10"))
+                .andExpect(jsonPath("$.trustScore").value(100));
+
+        ArgumentCaptor<CreatePlayerProfileRequest> createProfileCaptor =
+                ArgumentCaptor.forClass(CreatePlayerProfileRequest.class);
+        verify(playerProfileService).createPlayerProfile(createProfileCaptor.capture());
+        assertEquals(USER_ID, createProfileCaptor.getValue().getAtletaUuid());
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}", USER_ID)
+                        .with(jwtFor(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.atletaUuid").value(USER_ID.toString()));
+
+        mockMvc.perform(put("/api/v1/player-profiles/{atletaUuid}", USER_ID)
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("alias", "Demo11"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.atletaUuid").value(USER_ID.toString()));
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/positions", USER_ID)
+                        .with(jwtFor(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(7))
+                .andExpect(jsonPath("$[0].position.id").value(9))
+                .andExpect(jsonPath("$[0].prioridad").value(1));
+
+        mockMvc.perform(put("/api/v1/player-profiles/trust-score")
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "cambio", 10,
+                                "motivo", "Good behavior",
+                                "matchId", 42
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.atletaUuid").value(USER_ID.toString()))
+                .andExpect(jsonPath("$.trustScore").value(100));
+
+        ArgumentCaptor<UpdateTrustScoreRequest> trustScoreCaptor =
+                ArgumentCaptor.forClass(UpdateTrustScoreRequest.class);
+        verify(playerProfileService).updateTrustScore(trustScoreCaptor.capture());
+        assertEquals(USER_ID, trustScoreCaptor.getValue().getPlayerUuid());
+        assertEquals(10, trustScoreCaptor.getValue().getCambio());
+        assertEquals("Good behavior", trustScoreCaptor.getValue().getMotivo());
+        assertEquals(42L, trustScoreCaptor.getValue().getMatchId());
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/trust-history", USER_ID)
+                        .with(jwtFor(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(11))
+                .andExpect(jsonPath("$[0].player.atletaUuid").value(USER_ID.toString()))
+                .andExpect(jsonPath("$[0].cambio").value(10));
+    }
+
+    @Test
+    void playerProfilePersonalRoutesRejectOtherUserUuid() throws Exception {
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}", OTHER_USER_ID)
+                        .with(jwtFor(USER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+
+        mockMvc.perform(put("/api/v1/player-profiles/{atletaUuid}", OTHER_USER_ID)
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("alias", "Rival9"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/positions", OTHER_USER_ID)
+                        .with(jwtFor(USER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/trust-history", OTHER_USER_ID)
+                        .with(jwtFor(USER_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+
+        verify(playerProfileService, never()).findByAtletaUuid(OTHER_USER_ID);
+        verify(playerProfileService, never()).updateAlias(eq(OTHER_USER_ID), any());
+        verify(playerProfileService, never()).getPlayerPositions(OTHER_USER_ID);
+        verify(playerProfileService, never()).getTrustScoreHistory(OTHER_USER_ID);
     }
 
     @Test

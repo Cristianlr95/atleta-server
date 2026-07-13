@@ -43,8 +43,8 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 ### Capa de negocio
 
 - Servicios orientados a dominio: `AthleteService`, `PlayerProfileService`, `TeamService`, `MatchService`, `SocialService`, `RatingService`
-- Servicios de apoyo: `JwtService`, `GoogleAuthService`, `MatchMvpService`, `MatchLiveEventService`, `XPService`
-- Servicios con deuda/duplicidad: `TrustScoreService`, `DataInitializationService`
+- Servicios de apoyo: `JwtService`, `GoogleAuthService`, `MatchMvpService`, `MatchLiveEventService`, `MatchStatusPolicy`, `MatchFinalScoreService`, `MatchPlayerHistoryService`, `MatchPendingEventClosureService`, `MatchRosterPolicy`, `MatchPostMatchRatingService`, `MatchAutomatedStatusService`, `MatchResponseMapper`, `MatchQueryService`, `XPService`
+- Servicios con deuda/duplicidad: `DataInitializationService`
 
 ### Capa de persistencia
 
@@ -94,6 +94,7 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 - JWT HS256 propio con `issuer`, `expiration` y secret configurable.
 - Security filter chain stateless.
 - Las rutas no publicas, incluyendo `/api/v1/ratings/**`, quedan bajo `anyRequest().authenticated()`.
+- Politica publica minima: registro, login, auth Google y health check. Swagger/actuator completos solo se abren en `dev`/`test`; catalogos, busquedas, listados deportivos y leaderboard requieren JWT.
 - En controllers sensibles de equipos/partidos, la identidad efectiva se deriva del `sub` JWT; los UUIDs enviados por cliente se sobrescriben o se rechazan si intentan operar como otro usuario.
 - CORS restringido a localhost en el codigo actual.
 - Actuator/Swagger abiertos en `dev` y `test`.
@@ -104,26 +105,26 @@ Monolito modular por capas. No hay hexagonal real en el codigo ejecutable, aunqu
 - Uso mixto de `UUID` para usuario y `Long` para agregados.
 - DTOs separados en `dto/request` y `dto/response`.
 - Naming del dominio en espanol, enums en espanol/ingles mixto.
-- Servicios grandes concentran mapping entity -> DTO dentro del mismo servicio.
+- El mapping principal de partidos se centraliza en `MatchResponseMapper`; otros servicios aun mezclan mapping entity -> DTO.
 - Los contratos HTTP criticos se protegen con smoke MVC en `ApiContractSmokeTest`, usando controllers reales y servicios mockeados.
-- Ese smoke MVC incluye regresiones para evitar suplantacion de `actorUuid`/`registeredByUuid` en crear partido, cambiar estado, asignar equipos, registrar eventos, votar MVP y borrar equipo.
+- Ese smoke MVC incluye regresiones para evitar suplantacion de UUIDs de cliente en perfil/trust score, `actorUuid`/`registeredByUuid` en crear partido, cambiar estado, asignar equipos, registrar eventos, votar MVP y borrar equipo.
 - La proteccion JWT de ratings queda cubierta en `JwtAuthenticationIntegrationTest`.
+- La proteccion JWT de lecturas globales queda cubierta en `JwtAuthenticationIntegrationTest`.
+- El contrato de variables runtime entre `.env.example` y `docker-compose.yml` queda cubierto por `EnvExampleContractTest`.
 
 ## Puntos debiles de arquitectura
 
-- `MatchService` es un God Service: estado, cupos, eventos, score final, XP, historial, validaciones y refresh automatico.
+- `MatchService` sigue siendo el orquestador principal de comandos, pero ya delega reglas puras de estado, snapshot final, historial/XP, cierre automatico de eventos, politica de convocatoria/equipos, rating post-partido, automatizacion de estados, armado de respuestas y consultas/listados.
 - `RatingService` mezcla inicializacion, calculo, historial, estadisticas y leaderboard.
-- Falta completar una capa transversal de autorizacion de dominio; equipos/partidos ya tienen cobertura de identidad JWT en casos sensibles, pero otros modulos aun dependen de validaciones puntuales.
-- Trust score esta repartido en dos servicios distintos.
-- La automatizacion temporal depende de lecturas, no de scheduler ni job dedicado.
+- Falta completar una capa transversal de autorizacion de dominio; equipos/partidos/perfil ya tienen cobertura de identidad JWT en casos sensibles y las lecturas globales son privadas, pero otros modulos aun dependen de validaciones puntuales.
+- Trust score queda centralizado en `TrustScoreService`; `PlayerProfileService` delega actualizacion e historial para evitar duplicidad de reglas.
+- La automatizacion temporal tiene scheduler configurable y servicio dedicado; las lecturas siguen invocando refresh para mantener consistencia oportunista.
 - Hay incoherencias entre docs heredadas, migraciones antiguas y el codigo vigente.
 
 ## Mejoras sugeridas
 
-1. Separar `MatchService` en submodulos: convocatoria, arbitraje/eventos, cierre, validacion automatica.
+1. Validar flujos completos con backend y frontend levantados contra seed estable.
 2. Introducir autorizacion basada en principal JWT y policies de dominio.
 3. Agregar smoke E2E contra FE+BE levantados si se estabiliza seed/credenciales de prueba.
-4. Consolidar trust score en una sola API interna.
-5. Extraer mappers DTO dedicados para bajar acoplamiento.
-6. Introducir jobs programados para expiracion y auto-start.
-7. Versionar formulas de rating/XP para evitar cambios silenciosos en el dominio.
+4. Extraer mappers DTO dedicados restantes para bajar acoplamiento fuera del modulo de partidos.
+5. Versionar formulas de rating/XP para evitar cambios silenciosos en el dominio.

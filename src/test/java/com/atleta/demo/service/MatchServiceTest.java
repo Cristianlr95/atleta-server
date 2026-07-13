@@ -67,6 +67,11 @@ class MatchServiceTest {
     @Mock
     private RatingService ratingService;
 
+    private MatchStatusPolicy matchStatusPolicy;
+    private MatchFinalScoreService matchFinalScoreService;
+    private MatchPlayerHistoryService matchPlayerHistoryService;
+    private MatchPendingEventClosureService matchPendingEventClosureService;
+
     private MatchService matchService;
 
     private CreateMatchRequest validCreateRequest;
@@ -78,6 +83,23 @@ class MatchServiceTest {
 
     @BeforeEach
     void setUp() {
+        matchStatusPolicy = new MatchStatusPolicy();
+        matchFinalScoreService = new MatchFinalScoreService(
+                matchEventRepository,
+                matchPlayerRepository,
+                matchTeamRepository
+        );
+        matchPlayerHistoryService = new MatchPlayerHistoryService(
+                matchPlayerRepository,
+                matchEventRepository,
+                matchTeamRepository,
+                playerHistoryRepository,
+                playerPositionRepository
+        );
+        matchPendingEventClosureService = new MatchPendingEventClosureService(
+                matchEventRepository,
+                matchTeamRepository
+        );
         matchService = new MatchService(
                 matchRepository,
                 matchTeamRepository,
@@ -88,8 +110,47 @@ class MatchServiceTest {
                 positionRepository,
                 teamMemberRepository,
                 playerPositionRepository,
-                playerHistoryRepository,
-                ratingService
+                ratingService,
+                matchStatusPolicy,
+                matchFinalScoreService,
+                matchPlayerHistoryService,
+                matchPendingEventClosureService,
+                new MatchRosterPolicy(),
+                new MatchPostMatchRatingService(
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        ratingService
+                ),
+                new MatchResponseMapper(
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        matchStatusPolicy
+                ),
+                new MatchQueryService(
+                        matchRepository,
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        playerProfileRepository,
+                        teamRepository,
+                        positionRepository,
+                        playerPositionRepository,
+                        new MatchAutomatedStatusService(
+                                matchRepository,
+                                matchTeamRepository,
+                                matchPlayerRepository,
+                                matchPlayerHistoryService,
+                                new MatchRosterPolicy()
+                        ),
+                        new MatchResponseMapper(
+                                matchTeamRepository,
+                                matchPlayerRepository,
+                                matchEventRepository,
+                                matchStatusPolicy
+                        )
+                )
         );
 
         UUID playerId = UUID.randomUUID();

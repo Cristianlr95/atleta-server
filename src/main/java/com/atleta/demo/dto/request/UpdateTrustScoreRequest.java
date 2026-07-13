@@ -15,7 +15,6 @@ public class UpdateTrustScoreRequest {
     /**
      * UUID del jugador cuyo trust score se actualizará
      */
-    @NotNull(message = "El UUID del jugador es obligatorio")
     private UUID playerUuid;
 
     /**

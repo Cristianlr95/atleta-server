@@ -8,12 +8,12 @@ import static org.mockito.Mockito.verify;
 class MatchStatusSchedulerTest {
 
     @Test
-    void refreshAutomatedMatchStates_DelegatesToMatchService() {
-        MatchService matchService = mock(MatchService.class);
-        MatchStatusScheduler scheduler = new MatchStatusScheduler(matchService);
+    void refreshAutomatedMatchStates_DelegatesToAutomatedStatusService() {
+        MatchAutomatedStatusService service = mock(MatchAutomatedStatusService.class);
+        MatchStatusScheduler scheduler = new MatchStatusScheduler(service);
 
         scheduler.refreshAutomatedMatchStates();
 
-        verify(matchService).refreshAutomatedMatchStates();
+        verify(service).refreshAutomatedMatchStates();
     }
 }

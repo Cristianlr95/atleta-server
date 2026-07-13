@@ -401,7 +401,6 @@ public class PlayerProfileControllerIntegrationTest {
 
         // When - Update trust score
         UpdateTrustScoreRequest trustRequest = new UpdateTrustScoreRequest();
-        trustRequest.setPlayerUuid(testAthleteUuid);
         trustRequest.setCambio(10);
         trustRequest.setMotivo("Good behavior");
 
@@ -412,6 +411,56 @@ public class PlayerProfileControllerIntegrationTest {
                 .content(objectMapper.writeValueAsString(trustRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.trustScore").value(110));
+    }
+
+    @Test
+    void testUpdateTrustScore_UsesJwtSubjectWhenBodyOmitsPlayerUuid() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAtletaUuid(testAthleteUuid);
+        createRequest.setAlias("TrustJwtSubjectTest");
+
+        mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(put("/api/v1/player-profiles/trust-score")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "cambio": 10,
+                          "motivo": "Good behavior without body uuid"
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trustScore").value(110));
+    }
+
+    @Test
+    void testUpdateTrustScore_CapsAtMaximum() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAtletaUuid(testAthleteUuid);
+        createRequest.setAlias("TrustCapTest");
+
+        mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        UpdateTrustScoreRequest trustRequest = new UpdateTrustScoreRequest();
+        trustRequest.setPlayerUuid(testAthleteUuid);
+        trustRequest.setCambio(950);
+        trustRequest.setMotivo("Sustained reliability");
+
+        mockMvc.perform(put("/api/v1/player-profiles/trust-score")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(trustRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trustScore").value(1000));
     }
 
     @Test

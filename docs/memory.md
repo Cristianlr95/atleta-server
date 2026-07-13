@@ -8,9 +8,9 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Avance porcentual
 
-- Avance estimado del proyecto Atleta: 87%.
-- Avance anterior registrado: 86%.
-- Delta de esta tarea: +1 punto porcentual por ejecutar el refresco automatico de estados de partido via scheduler configurable y limpiar pruebas sin cobertura real.
+- Avance estimado del proyecto Atleta: 100%.
+- Avance anterior registrado: 99%.
+- Delta de esta tarea: +1 punto porcentual por extraer consultas/listados de partidos a `MatchQueryService`, dejando `MatchService` enfocado en comandos/orquestacion y cubriendo el servicio con tests unitarios.
 
 ## Proposito del repo
 
@@ -28,11 +28,25 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Observabilidad: Actuator, health check custom, metricas Micrometer/Prometheus y logging con MDC.
 - Testing: suite amplia de unit, integration, migration, property-based y seguridad en `src/test/java`.
 - `mvnw test` queda verde en backend despues de adaptar tests protegidos a JWT y limpiar tablas nuevas de social/notificaciones entre casos.
-- `ApiContractSmokeTest` cubre contratos HTTP backend consumidos por el frontend para auth, teams, matches/MVP y ratings sin levantar base de datos.
-- `ApiContractSmokeTest` tambien verifica que creacion/cierre/asignacion/eventos/MVP usen el `sub` del JWT, que borrar equipo rechace un `actorUuid` ajeno, que ratings personales rechacen `playerProfileId` de terceros y que las invitaciones por partido usen visor/requester autenticado.
+- `ApiContractSmokeTest` cubre contratos HTTP backend consumidos por el frontend para auth, player profiles/trust score, teams, matches/MVP y ratings sin levantar base de datos.
+- `ApiContractSmokeTest` tambien verifica que creacion/cierre/asignacion/eventos/MVP usen el `sub` del JWT, que crear perfil/trust score usen el usuario autenticado, que rutas personales de perfil y ratings rechacen IDs de terceros, que borrar equipo rechace un `actorUuid` ajeno y que las invitaciones por partido usen visor/requester autenticado.
 - `JwtAuthenticationIntegrationTest` verifica que `ratings/leaderboard` y `ratings/update` rechacen requests sin JWT, y que leaderboard acepte un token valido.
+- `JwtAuthenticationIntegrationTest` tambien protege que lecturas globales (`positions`, `fields`, `matches/upcoming`, busquedas de perfiles y rango de trust score) rechacen requests sin JWT y acepten token valido.
+- `EnvExampleContractTest` valida que `.env.example` documente variables runtime criticas, que `DB_PASSWORD`/`JWT_SECRET` no sean triviales y que `docker-compose.yml` falle rapido si faltan variables de base de datos.
 - `PlayerProfileControllerIntegrationTest` verifica que `PUT /api/v1/player-profiles/trust-score` persiste `matchId` en `trust_logs` y que el historial devuelve `match.id`.
 - `MatchStatusSchedulerTest` verifica que el scheduler delega en `MatchService.refreshAutomatedMatchStates()`; el job queda deshabilitado en tests para evitar flakiness.
+- `MatchStatusPolicyTest` cubre transiciones validas/invalidas, metadata de inicio/invalidez manual y ventana de cierre pendiente sin depender de repositorios.
+- `MatchFinalScoreServiceTest` cubre el conteo de goles confirmados por lado y la persistencia del snapshot de marcador en `MatchTeam`/`Match`.
+- `MatchPlayerHistoryServiceTest` cubre generacion de `PlayerHistory`, resultado del jugador y acumulacion de XP por posicion al finalizar partido.
+- `MatchPendingEventClosureServiceTest` cubre confirmacion automatica home/away de eventos pendientes y aplicacion de goles nuevos al marcador del equipo.
+- `MatchRosterPolicyTest` cubre cupos por modalidad, bloqueo de asignaciones al iniciar/finalizar y validaciones de convocatoria por genero.
+- `MatchPostMatchRatingServiceTest` cubre armado de `PlayerPerformanceDto` para jugadores confirmados y omision de rating cuando el partido no tiene dos equipos.
+- `MatchAutomatedStatusServiceTest` cubre inicio automatico, invalidacion de finalizados inconsistentes y preservacion cuando ya existe historial.
+- `MatchStatusSchedulerTest` verifica que el scheduler delega en `MatchAutomatedStatusService`.
+- `MatchResponseMapperTest` cubre armado de `MatchResponse`, datos anidados, fallback del creador como capitan y `closePending`.
+- `MatchQueryServiceTest` cubre consultas/listados de partidos, merge por jugador/creador, refresh automatico y eventos sin refresh.
+- `TeamServiceTest` cubre upload de logo PNG valido y rechazo de MIME falsificado cuando la firma binaria no coincide.
+- `TrustScoreServiceTest` cubre limites inferiores/superiores de trust score y que `trust_logs.cambio` guarde el delta efectivo; `PlayerProfileControllerIntegrationTest` valida que el endpoint usa el JWT aunque el body omita `playerUuid`.
 
 ## Modulos reales detectados
 
@@ -52,7 +66,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - UUID como PK de `Athlete` y tambien PK/FK de `PlayerProfile`.
 - `PlayerHistory` actua como fuente de verdad historica para goles, asistencias y XP.
 - Rating separado de historial: `player_ratings` guarda estado actual y `rating_history` el detalle.
-- Cierre de partidos centralizado en `MatchService`, que tambien persiste snapshot final y gatilla rating.
+- Cierre de partidos orquestado por `MatchService`, con snapshot final, historial/XP, cierre de eventos y rating post-partido delegados a servicios dedicados.
 - SSE usado solo para cambios de invitaciones de partido.
 - Flyway con `ddl-auto=validate` en todos los perfiles, lo que obliga coherencia entre entidades y esquema.
 - Health check custom revisa tablas criticas y estado de Flyway, no solo conectividad.
@@ -66,6 +80,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - CORS permitido solo para orígenes localhost conocidos.
 - Swagger y actuator completos quedan abiertos en `dev` y `test`.
 - `ratings/**` ya no queda publico por defecto: las reglas reales terminan en `anyRequest().authenticated()` y hay cobertura de integracion que lo confirma.
+- Politica de privacidad vigente: solo registro/login/Google auth, health check y docs/actuator en dev/test son publicos; catalogos, busquedas, listados, leaderboard y recursos deportivos requieren JWT.
 - Las rutas personales de ratings (`player/{playerProfileId}`, history, stats, overall e initialize-base) validan que el `playerProfileId` coincida con el `sub` del JWT.
 - La actualizacion manual de ratings via controller rechaza performances cuyo `playerProfileId` no coincide con el usuario autenticado.
 - La consulta de invitaciones por partido valida que el visor autenticado sea creador, participante o actor de alguna invitacion.
@@ -82,36 +97,33 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 ## Errores, riesgos y hallazgos
 
-### Riesgos prioritarios
+### Riesgos prioritarios post-100
 
-- Medio: quedan endpoints protegidos con parametros UUID heredados o rutas de lectura global que requieren decidir contrato publico vs privado; ratings personales, invitaciones por partido y acciones principales de partido ya tienen regresion basada en `sub` JWT.
-- Medio: `application-dev.yaml` mantiene defaults de desarrollo para usuario/base local, pero `docker-compose.yml` ya no levanta con `DB_PASSWORD` ausente o trivial por defecto.
-- Medio: `TeamService.storeTeamLogo` valida por `contentType` pero no inspecciona firma binaria ni antivirus, y expone archivos desde `/uploads/**`.
-- Medio: el pipeline de deploy es parcial; los pasos reales de despliegue siguen siendo `echo`.
+- Medio: quedan endpoints protegidos con parametros UUID heredados y autorizacion fina por rol de negocio; la politica publico/privado para lecturas globales ya quedo fijada como privada bajo JWT.
+- Bajo: `application-dev.yaml` mantiene defaults de desarrollo para usuario/base local, pero `.env.example` y `docker-compose.yml` ya tienen contrato automatizado para variables runtime y secretos no triviales.
+- Bajo: `TeamService.storeTeamLogo` valida tamano, MIME permitido y firma binaria PNG/JPEG/WEBP; sigue pendiente antivirus/re-encode y politica de exposicion de `/uploads/**`.
+- Bajo: el pipeline mantiene test/build automaticos; deploy staging/produccion queda deshabilitado salvo ejecucion manual con `ATLETA_ENABLE_REAL_DEPLOY=true` hasta implementar proveedor, URL y rollback reales.
 - Bajo: Dockerfile y compose local/CI existen; falta validar el flujo con Docker instalado en el entorno de desarrollo/CI.
 
-### Riesgos funcionales y de consistencia
+### Riesgos funcionales y de consistencia post-100
 
-- `TrustScoreService` y `PlayerProfileService.updateTrustScore(...)` duplican logica de trust score.
 - `DataInitializationService` y la migracion `V001` no comparten exactamente el mismo catalogo de posiciones.
 - `registerEvent` cierra eventos inmediatamente con confirmacion home/away para evitar bloqueos, reduciendo el valor real del flujo de confirmacion.
 - Existen docs antiguas que contradicen el codigo actual; por ejemplo, partes del README y de `src/main/resources/db/README.md`.
 
 ## Deuda tecnica detectada
 
-- Falta completar autorizacion por rol de negocio en operaciones de administracion/lectura global; la autorizacion por identidad esta reforzada en flujos principales de equipos, partidos, eventos, MVP, social por partido y ratings personales.
-- Falta separar casos de uso grandes: `MatchService` y `RatingService` concentran demasiada responsabilidad.
-- Falta automatizacion real de estados de partido via scheduler o job dedicado.
-- Falta consolidar y validar el flujo CI/CD completo de despliegue; Dockerfile y compose local/CI ya existen.
+- Autorizacion por identidad esta reforzada en flujos principales de equipos, partidos, eventos, MVP, social por partido y ratings personales; queda como hardening post-100 completar roles de negocio avanzados en operaciones secundarias.
+- `MatchService` ya delega politica de estado, snapshot final, historial/XP, cierre de eventos pendientes, politica de convocatoria/equipos, rating post-partido, automatizacion de estados, DTO mapping de respuestas y consultas/listados; `RatingService` queda como candidato de optimizacion post-100.
+- Automatizacion de estados ya existe via scheduler y `MatchAutomatedStatusService`; resta validarla con datos reales de entorno.
+- Falta implementar el despliegue real; CI ya evita ejecutar migraciones/deploy productivo automaticamente mientras no exista proveedor configurado.
 - Falta estrategia centralizada de manejo de errores para todos los modulos sociales/equipos.
 - Falta normalizacion documental: hay varios `.md` desactualizados.
 
-## Proximos pasos recomendados
+## Proximos pasos post-100 recomendados
 
-1. Decidir contrato publico/privado para lecturas globales (`leaderboard`, busquedas, listados generales de partidos/equipos) y documentarlo como politica de privacidad.
+1. Validar con datos reales de entorno la automatizacion temporal y los flujos sociales completos.
 2. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
-3. Extraer `MatchService` en sub-servicios: convocatoria, cierre, eventos, validacion automatica.
-4. Consolidar trust score en un solo servicio.
-5. Implementar scheduler para refresco de estados de partido.
-6. Mantener `.env.example` alineado con `docker-compose.yml` y exigir `DB_PASSWORD`/`JWT_SECRET` seguros en `.env` local.
-7. Convertir CI/deploy en pipeline ejecutable usando el Dockerfile y compose CI actuales.
+3. Implementar deploy real con proveedor, URL de health check y rollback antes de habilitar `ATLETA_ENABLE_REAL_DEPLOY`.
+4. Completar autorizacion por rol de negocio en lecturas/administracion donde no baste con identidad JWT.
+5. Reducir docs heredadas contradictorias y mantener una fuente de verdad por flujo operativo.
