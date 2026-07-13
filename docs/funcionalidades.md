@@ -56,7 +56,7 @@
 ### Equipos
 
 - `Implementada` Crear equipo: `POST /api/v1/teams`
-- `Implementada` Upload de logo: `POST /api/v1/teams/logo`
+- `Implementada` Upload de logo: `POST /api/v1/teams/logo`, con limite de tamano, MIME permitido y validacion de firma binaria PNG/JPEG/WEBP.
 - `Implementada` Listado por jugador o creador:
   - `GET /api/v1/teams/by-player/{playerUuid}`
   - `GET /api/v1/teams/by-creator/{creatorUuid}`
@@ -204,4 +204,4 @@
 - Las invitaciones de partido ya no pueden ser creadas por un usuario autenticado ajeno al match, aunque conozca el `matchId`.
 - Sigue pendiente autorizacion fina por rol de negocio en flujos secundarios y politicas de lectura publica.
 - En `dev` y `test`, Swagger y actuator quedan abiertos.
-- El upload de logos no valida contenido binario real.
+- El upload de logos valida firma binaria real; queda como hardening futuro re-encode/antivirus.

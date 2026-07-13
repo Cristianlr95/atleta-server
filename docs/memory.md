@@ -45,6 +45,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - `MatchStatusSchedulerTest` verifica que el scheduler delega en `MatchAutomatedStatusService`.
 - `MatchResponseMapperTest` cubre armado de `MatchResponse`, datos anidados, fallback del creador como capitan y `closePending`.
 - `MatchQueryServiceTest` cubre consultas/listados de partidos, merge por jugador/creador, refresh automatico y eventos sin refresh.
+- `TeamServiceTest` cubre upload de logo PNG valido y rechazo de MIME falsificado cuando la firma binaria no coincide.
 - `TrustScoreServiceTest` cubre limites inferiores/superiores de trust score y que `trust_logs.cambio` guarde el delta efectivo; `PlayerProfileControllerIntegrationTest` valida que el endpoint usa el JWT aunque el body omita `playerUuid`.
 
 ## Modulos reales detectados
@@ -100,8 +101,8 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 - Medio: quedan endpoints protegidos con parametros UUID heredados y autorizacion fina por rol de negocio; la politica publico/privado para lecturas globales ya quedo fijada como privada bajo JWT.
 - Bajo: `application-dev.yaml` mantiene defaults de desarrollo para usuario/base local, pero `.env.example` y `docker-compose.yml` ya tienen contrato automatizado para variables runtime y secretos no triviales.
-- Medio: `TeamService.storeTeamLogo` valida por `contentType` pero no inspecciona firma binaria ni antivirus, y expone archivos desde `/uploads/**`.
-- Medio: el pipeline de deploy es parcial; los pasos reales de despliegue siguen siendo `echo`.
+- Bajo: `TeamService.storeTeamLogo` valida tamano, MIME permitido y firma binaria PNG/JPEG/WEBP; sigue pendiente antivirus/re-encode y politica de exposicion de `/uploads/**`.
+- Bajo: el pipeline mantiene test/build automaticos; deploy staging/produccion queda deshabilitado salvo ejecucion manual con `ATLETA_ENABLE_REAL_DEPLOY=true` hasta implementar proveedor, URL y rollback reales.
 - Bajo: Dockerfile y compose local/CI existen; falta validar el flujo con Docker instalado en el entorno de desarrollo/CI.
 
 ### Riesgos funcionales y de consistencia post-100
@@ -115,7 +116,7 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 - Autorizacion por identidad esta reforzada en flujos principales de equipos, partidos, eventos, MVP, social por partido y ratings personales; queda como hardening post-100 completar roles de negocio avanzados en operaciones secundarias.
 - `MatchService` ya delega politica de estado, snapshot final, historial/XP, cierre de eventos pendientes, politica de convocatoria/equipos, rating post-partido, automatizacion de estados, DTO mapping de respuestas y consultas/listados; `RatingService` queda como candidato de optimizacion post-100.
 - Automatizacion de estados ya existe via scheduler y `MatchAutomatedStatusService`; resta validarla con datos reales de entorno.
-- Falta consolidar y validar el flujo CI/CD completo de despliegue; Dockerfile y compose local/CI ya existen.
+- Falta implementar el despliegue real; CI ya evita ejecutar migraciones/deploy productivo automaticamente mientras no exista proveedor configurado.
 - Falta estrategia centralizada de manejo de errores para todos los modulos sociales/equipos.
 - Falta normalizacion documental: hay varios `.md` desactualizados.
 
@@ -123,6 +124,6 @@ El repositorio implementa una API REST sobre PostgreSQL usando Spring Data JPA y
 
 1. Validar con datos reales de entorno la automatizacion temporal y los flujos sociales completos.
 2. Agregar smoke E2E opcional contra frontend y backend levantados cuando existan credenciales/seed estables.
-3. Convertir CI/deploy en pipeline ejecutable usando el Dockerfile y compose CI actuales.
+3. Implementar deploy real con proveedor, URL de health check y rollback antes de habilitar `ATLETA_ENABLE_REAL_DEPLOY`.
 4. Completar autorizacion por rol de negocio en lecturas/administracion donde no baste con identidad JWT.
 5. Reducir docs heredadas contradictorias y mantener una fuente de verdad por flujo operativo.

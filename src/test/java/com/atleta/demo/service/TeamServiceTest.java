@@ -9,7 +9,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -148,6 +151,44 @@ class TeamServiceTest {
         verify(teamRepository).existsByNombre(validCreateRequest.getNombre());
         verify(playerProfileRepository).findById(validCreateRequest.getCreadorUuid());
         verify(teamRepository, never()).saveAndFlush(any(Team.class));
+    }
+
+    @Test
+    void storeTeamLogo_ValidPng_ShouldStoreFile() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "logo.png",
+                "image/png",
+                new byte[] {
+                        (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+                        0x00, 0x00, 0x00, 0x0D
+                }
+        );
+
+        String storedPath = teamService.storeTeamLogo(file);
+
+        assertTrue(storedPath.startsWith("/uploads/team-logos/"));
+        assertTrue(storedPath.endsWith(".png"));
+        Path created = Path.of(storedPath.substring(1));
+        assertTrue(Files.exists(created));
+        Files.deleteIfExists(created);
+    }
+
+    @Test
+    void storeTeamLogo_SpoofedContentType_ShouldThrowException() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "logo.png",
+                "image/png",
+                "not-an-image".getBytes()
+        );
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> teamService.storeTeamLogo(file)
+        );
+
+        assertEquals("El contenido del logo no coincide con una imagen valida", exception.getMessage());
     }
 
 }
