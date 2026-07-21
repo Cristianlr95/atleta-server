@@ -1,6 +1,7 @@
 package com.atleta.demo.controller;
 
 import com.atleta.demo.dto.request.CreateMatchRequest;
+import com.atleta.demo.dto.request.CreateMatchOrchestratedRequest;
 import com.atleta.demo.dto.request.JoinMatchRequest;
 import com.atleta.demo.dto.request.CreateMatchEventRequest;
 import com.atleta.demo.dto.request.MatchClosePreviewRequest;
@@ -8,6 +9,7 @@ import com.atleta.demo.dto.request.UpdateMatchTeamAssignmentsRequest;
 import com.atleta.demo.dto.request.VoteMatchMvpRequest;
 import com.atleta.demo.dto.response.MatchClosePreviewResponse;
 import com.atleta.demo.dto.response.MatchResponse;
+import com.atleta.demo.dto.response.OrchestratedMatchCreationResponse;
 import com.atleta.demo.dto.response.MatchPlayerResponse;
 import com.atleta.demo.dto.response.MatchEventResponse;
 import com.atleta.demo.dto.response.MatchMvpResponse;
@@ -16,6 +18,7 @@ import com.atleta.demo.security.AuthenticatedUserUtils;
 import com.atleta.demo.service.MatchLiveEventService;
 import com.atleta.demo.service.MatchMvpService;
 import com.atleta.demo.service.MatchService;
+import com.atleta.demo.service.OrchestratedMatchCreationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -33,6 +36,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -66,15 +70,18 @@ public class MatchController {
     private final MatchService matchService;
     private final MatchLiveEventService matchLiveEventService;
     private final MatchMvpService matchMvpService;
+    private final OrchestratedMatchCreationService orchestratedMatchCreationService;
 
     public MatchController(
             MatchService matchService,
             MatchLiveEventService matchLiveEventService,
-            MatchMvpService matchMvpService
+            MatchMvpService matchMvpService,
+            OrchestratedMatchCreationService orchestratedMatchCreationService
     ) {
         this.matchService = matchService;
         this.matchLiveEventService = matchLiveEventService;
         this.matchMvpService = matchMvpService;
+        this.orchestratedMatchCreationService = orchestratedMatchCreationService;
     }
 
     /**
@@ -364,6 +371,38 @@ public class MatchController {
             } else {
                 return ResponseEntity.badRequest().build();
             }
+        }
+    }
+
+    @PostMapping("/orchestrated")
+    @Operation(
+            summary = "Crear partido completo de forma idempotente",
+            description = "Crea partido, equipo local e invitaciones en una sola transaccion retry-safe"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Comando aplicado o reproducido exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Datos o Idempotency-Key invalidos"),
+        @ApiResponse(responseCode = "403", description = "El usuario no puede usar el equipo")
+    })
+    public ResponseEntity<?> createMatchOrchestrated(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody CreateMatchOrchestratedRequest request
+    ) {
+        UUID actorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+        request.getMatch().setCreadorUuid(actorUuid);
+        try {
+            OrchestratedMatchCreationResponse response = orchestratedMatchCreationService.create(
+                    request,
+                    actorUuid,
+                    idempotencyKey
+            );
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "errorCode", "MATCH_CREATION_FAILED",
+                    "message", exception.getMessage()
+            ));
         }
     }
 
