@@ -1,6 +1,7 @@
 package com.atleta.demo.config;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import com.atleta.demo.security.ActiveSessionTokenValidator;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -42,15 +43,18 @@ public class SecurityConfig {
     private final Environment environment;
     private final JwtProperties jwtProperties;
     private final AppCorsProperties corsProperties;
+    private final ActiveSessionTokenValidator activeSessionTokenValidator;
 
     public SecurityConfig(
         Environment environment,
         JwtProperties jwtProperties,
-        AppCorsProperties corsProperties
+        AppCorsProperties corsProperties,
+        ActiveSessionTokenValidator activeSessionTokenValidator
     ) {
         this.environment = environment;
         this.jwtProperties = jwtProperties;
         this.corsProperties = corsProperties;
+        this.activeSessionTokenValidator = activeSessionTokenValidator;
     }
 
     @Bean
@@ -85,6 +89,9 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/athletes/register").permitAll()
                     .requestMatchers("/api/v1/athletes/login").permitAll()
                     .requestMatchers("/api/v1/athletes/auth/google").permitAll()
+                    .requestMatchers("/api/v1/athletes/auth/refresh").permitAll()
+                    .requestMatchers("/api/v1/athletes/auth/logout").permitAll()
+                    .requestMatchers("/api/v1/athletes/password-reset/**").permitAll()
                     .requestMatchers("/actuator/health").permitAll()
                     .requestMatchers("/actuator/health/**").permitAll()
                     .anyRequest().authenticated();
@@ -122,7 +129,8 @@ public class SecurityConfig {
         NimbusJwtDecoder jwtDecoder = NimbusJwtDecoder.withSecretKey(jwtSigningKey).build();
         OAuth2TokenValidator<Jwt> defaultValidator = JwtValidators.createDefaultWithIssuer(jwtProperties.getIssuer());
         OAuth2TokenValidator<Jwt> timestampValidator = new JwtTimestampValidator(Duration.ofSeconds(30));
-        jwtDecoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(defaultValidator, timestampValidator));
+        jwtDecoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+            defaultValidator, timestampValidator, activeSessionTokenValidator));
         return jwtDecoder;
     }
 

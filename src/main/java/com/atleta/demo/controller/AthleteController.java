@@ -4,6 +4,9 @@ import com.atleta.demo.dto.request.ChangePasswordRequest;
 import com.atleta.demo.dto.request.CreateAthleteRequest;
 import com.atleta.demo.dto.request.GoogleAuthRequest;
 import com.atleta.demo.dto.request.LoginRequest;
+import com.atleta.demo.dto.request.PasswordResetConfirmRequest;
+import com.atleta.demo.dto.request.PasswordResetRequest;
+import com.atleta.demo.dto.request.RefreshTokenRequest;
 import com.atleta.demo.dto.request.UpdateAthleteRequest;
 import com.atleta.demo.dto.response.AthleteResponse;
 import com.atleta.demo.dto.response.AuthResponse;
@@ -11,7 +14,7 @@ import com.atleta.demo.entity.Athlete;
 import com.atleta.demo.security.AuthenticatedUserUtils;
 import com.atleta.demo.service.AthleteService;
 import com.atleta.demo.service.GoogleAuthService;
-import com.atleta.demo.service.JwtService;
+import com.atleta.demo.service.SessionLifecycleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -47,16 +50,16 @@ public class AthleteController {
 
     private final AthleteService athleteService;
     private final GoogleAuthService googleAuthService;
-    private final JwtService jwtService;
+    private final SessionLifecycleService sessionLifecycleService;
 
     public AthleteController(
             AthleteService athleteService,
             GoogleAuthService googleAuthService,
-            JwtService jwtService
+            SessionLifecycleService sessionLifecycleService
     ) {
         this.athleteService = athleteService;
         this.googleAuthService = googleAuthService;
-        this.jwtService = jwtService;
+        this.sessionLifecycleService = sessionLifecycleService;
     }
 
     @PostMapping("/register")
@@ -95,16 +98,7 @@ public class AthleteController {
 
         if (athleteOpt.isPresent()) {
             Athlete athlete = athleteOpt.get();
-            String accessToken = jwtService.generateToken(athlete);
-
-            AuthResponse response = new AuthResponse(
-                    athlete.getAtletaUuid(),
-                    athlete.getEmail(),
-                    athlete.getNombre(),
-                    athlete.getGenero(),
-                    athlete.getAuthProvider(),
-                    accessToken
-            );
+            AuthResponse response = sessionLifecycleService.createSession(athlete);
 
             logger.info("Login exitoso para email: {}", request.getEmail());
             return ResponseEntity.ok(response);
@@ -127,16 +121,7 @@ public class AthleteController {
 
         try {
             Athlete athlete = googleAuthService.authenticateWithGoogle(request.getIdToken());
-            String accessToken = jwtService.generateToken(athlete);
-
-            AuthResponse response = new AuthResponse(
-                    athlete.getAtletaUuid(),
-                    athlete.getEmail(),
-                    athlete.getNombre(),
-                    athlete.getGenero(),
-                    athlete.getAuthProvider(),
-                    accessToken
-            );
+            AuthResponse response = sessionLifecycleService.createSession(athlete);
 
             logger.info("Autenticacion con Google exitosa para email: {}", athlete.getEmail());
             return ResponseEntity.ok(response);
@@ -146,6 +131,45 @@ public class AthleteController {
         } catch (Exception e) {
             logger.error("Error inesperado en autenticacion con Google", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/auth/refresh")
+    @Operation(summary = "Rotar sesion", description = "Revoca el refresh token usado y emite un nuevo par de tokens")
+    public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        try {
+            return ResponseEntity.ok(sessionLifecycleService.rotateRefreshToken(request.getRefreshToken()));
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+    }
+
+    @PostMapping("/auth/logout")
+    @Operation(summary = "Revocar sesion", description = "Revoca remotamente la sesion asociada al refresh token")
+    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshTokenRequest request) {
+        sessionLifecycleService.revoke(request.getRefreshToken());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/password-reset/request")
+    @Operation(summary = "Solicitar recuperacion", description = "Envia un enlace de un solo uso sin revelar si el email existe")
+    public ResponseEntity<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+        try {
+            sessionLifecycleService.requestPasswordReset(request.getEmail());
+        } catch (RuntimeException exception) {
+            logger.error("No se pudo entregar la recuperacion de contrasena", exception);
+        }
+        return ResponseEntity.accepted().build();
+    }
+
+    @PostMapping("/password-reset/confirm")
+    @Operation(summary = "Confirmar recuperacion", description = "Consume el token y revoca todas las sesiones previas")
+    public ResponseEntity<Void> confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
+        try {
+            sessionLifecycleService.confirmPasswordReset(request.getToken(), request.getNewPassword());
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().build();
         }
     }
 
