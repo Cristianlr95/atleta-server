@@ -1,6 +1,8 @@
 package com.atleta.demo.service;
 
 import com.atleta.demo.dto.request.CreateMatchInviteRequest;
+import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
+import com.atleta.demo.dto.response.MatchInviteDeliveryResponse;
 import com.atleta.demo.entity.Match;
 import com.atleta.demo.entity.MatchInvite;
 import com.atleta.demo.entity.MatchPlayer;
@@ -32,6 +34,7 @@ import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -198,6 +201,62 @@ class SocialServiceTest {
         when(matchInviteRepository.save(any(MatchInvite.class))).thenReturn(savedInvite);
 
         assertEquals(901L, socialService.createMatchInvite(request).getId());
+    }
+
+    @Test
+    void createMatchInvitesBatchDetailed_reportsPartialFailureWithoutHidingSuccessfulDelivery() {
+        UUID missingUuid = UUID.randomUUID();
+        CreateMatchInvitesBatchRequest request = new CreateMatchInvitesBatchRequest();
+        request.setMatchId(match.getId());
+        request.setTeamId(matchTeam.getId());
+        request.setRequesterUuid(creatorUuid);
+        request.setTargetUuids(List.of(targetUuid, missingUuid));
+        request.setMessage("sumate");
+
+        MatchInvite savedInvite = new MatchInvite(match, matchTeam, creator, target, "sumate");
+        savedInvite.setId(902L);
+
+        when(matchRepository.findById(match.getId())).thenReturn(Optional.of(match));
+        when(teamRepository.findById(matchTeam.getId())).thenReturn(Optional.of(matchTeam));
+        when(playerProfileRepository.findById(creatorUuid)).thenReturn(Optional.of(creator));
+        when(playerProfileRepository.findById(targetUuid)).thenReturn(Optional.of(target));
+        when(playerProfileRepository.findById(missingUuid)).thenReturn(Optional.empty());
+        when(matchInviteRepository.findTopByMatchAndTargetOrderByCreatedAtDesc(match, target))
+                .thenReturn(Optional.empty());
+        when(matchInviteRepository.existsByMatchAndTargetAndStatus(match, target, RequestStatus.PENDIENTE))
+                .thenReturn(false);
+        when(matchInviteRepository.save(any(MatchInvite.class))).thenReturn(savedInvite);
+
+        List<MatchInviteDeliveryResponse> result = socialService.createMatchInvitesBatchDetailed(request);
+
+        assertEquals(2, result.size());
+        assertEquals(MatchInviteDeliveryResponse.DeliveryStatus.SENT, result.get(0).getStatus());
+        assertEquals(902L, result.get(0).getInvitation().getId());
+        assertEquals(MatchInviteDeliveryResponse.DeliveryStatus.FAILED, result.get(1).getStatus());
+        org.junit.jupiter.api.Assertions.assertTrue(result.get(1).getMessage().startsWith("Jugador no encontrado"));
+    }
+
+    @Test
+    void createMatchInvitesBatchDetailed_retryDoesNotDuplicatePendingInvitation() {
+        CreateMatchInvitesBatchRequest request = new CreateMatchInvitesBatchRequest();
+        request.setMatchId(match.getId());
+        request.setTeamId(matchTeam.getId());
+        request.setRequesterUuid(creatorUuid);
+        request.setTargetUuids(List.of(targetUuid));
+
+        MatchInvite pending = new MatchInvite(match, matchTeam, creator, target, "sumate");
+        pending.setId(903L);
+
+        when(matchRepository.findById(match.getId())).thenReturn(Optional.of(match));
+        when(playerProfileRepository.findById(targetUuid)).thenReturn(Optional.of(target));
+        when(matchInviteRepository.findTopByMatchAndTargetOrderByCreatedAtDesc(match, target))
+                .thenReturn(Optional.of(pending));
+
+        List<MatchInviteDeliveryResponse> result = socialService.createMatchInvitesBatchDetailed(request);
+
+        assertEquals(MatchInviteDeliveryResponse.DeliveryStatus.ALREADY_SENT, result.get(0).getStatus());
+        assertEquals(903L, result.get(0).getInvitation().getId());
+        verify(matchInviteRepository, never()).save(any(MatchInvite.class));
     }
 
     private CreateMatchInviteRequest validInviteRequest(UUID requesterUuid, UUID targetUuid, Long teamId) {

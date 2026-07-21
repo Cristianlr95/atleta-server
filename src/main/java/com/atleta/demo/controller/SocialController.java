@@ -3,6 +3,7 @@ package com.atleta.demo.controller;
 import com.atleta.demo.dto.request.CreateFriendRequest;
 import com.atleta.demo.dto.request.CreateMatchInviteRequest;
 import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
+import com.atleta.demo.dto.response.MatchInviteDeliveryResponse;
 import com.atleta.demo.dto.request.CreateTeamInviteRequest;
 import com.atleta.demo.dto.request.RegisterPushTokenRequest;
 import com.atleta.demo.dto.request.RespondRequestDecision;
@@ -122,6 +123,17 @@ public class SocialController {
     ) {
         request.setRequesterUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
         return ResponseEntity.status(HttpStatus.CREATED).body(socialService.createMatchInvitesBatch(request));
+    }
+
+    @PostMapping("/match-invites/batch/detailed")
+    @Operation(summary = "Enviar invitaciones de partido con resultado por destinatario")
+    public ResponseEntity<List<MatchInviteDeliveryResponse>> createMatchInvitesBatchDetailed(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody CreateMatchInvitesBatchRequest request
+    ) {
+        request.setRequesterUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(socialService.createMatchInvitesBatchDetailed(request));
     }
 
     @PutMapping("/match-invites/{inviteId}/decision")
