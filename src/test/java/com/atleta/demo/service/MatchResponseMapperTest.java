@@ -11,6 +11,7 @@ import com.atleta.demo.entity.Team;
 import com.atleta.demo.enums.EventType;
 import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.enums.MatchStatus;
+import com.atleta.demo.enums.MatchType;
 import com.atleta.demo.enums.MatchTeamSide;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.repository.MatchEventRepository;
@@ -68,6 +69,7 @@ class MatchResponseMapperTest {
         Match match = new Match(MatchMode.CINCO_VS_CINCO, LocalDateTime.now().plusDays(1), creator);
         match.setId(10L);
         match.setEstado(MatchStatus.INICIADO);
+        match.setMatchType(MatchType.POINTS);
         match.setStartedAt(LocalDateTime.now().minusHours(2));
 
         Team local = team(1L, "Local", creator);
@@ -99,6 +101,7 @@ class MatchResponseMapperTest {
 
         assertEquals(10L, response.getId());
         assertEquals(MatchStatus.INICIADO, response.getEstado());
+        assertEquals(MatchType.POINTS, response.getMatchType());
         assertTrue(response.getClosePending());
         assertEquals("Creador", response.getCreador().getAlias());
         assertEquals(1, response.getMatchTeams().size());

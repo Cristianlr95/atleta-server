@@ -3,6 +3,7 @@ package com.atleta.demo.entity;
 import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.enums.MatchGenderCategory;
 import com.atleta.demo.enums.MatchStatus;
+import com.atleta.demo.enums.MatchType;
 import com.atleta.demo.enums.MatchValidationStatus;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMax;
@@ -39,6 +40,13 @@ public class Match extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "categoria_genero", nullable = false, length = 20)
     private MatchGenderCategory categoriaGenero = MatchGenderCategory.MIXTO;
+
+    /**
+     * Competitive context selected when the match is created.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "match_type", nullable = false, length = 20)
+    private MatchType matchType = MatchType.FRIENDLY;
 
     /**
      * Fecha y hora programada para el partido
@@ -199,6 +207,14 @@ public class Match extends BaseEntity {
 
     public void setCategoriaGenero(MatchGenderCategory categoriaGenero) {
         this.categoriaGenero = categoriaGenero != null ? categoriaGenero : MatchGenderCategory.MIXTO;
+    }
+
+    public MatchType getMatchType() {
+        return matchType;
+    }
+
+    public void setMatchType(MatchType matchType) {
+        this.matchType = matchType != null ? matchType : MatchType.FRIENDLY;
     }
 
     public LocalDateTime getFechaHoraProgramada() {
@@ -407,6 +423,7 @@ public class Match extends BaseEntity {
                 "id=" + getId() +
                 ", modalidad=" + modalidad +
                 ", categoriaGenero=" + categoriaGenero +
+                ", matchType=" + matchType +
                 ", fechaHoraProgramada=" + fechaHoraProgramada +
                 ", latitud=" + latitud +
                 ", longitud=" + longitud +

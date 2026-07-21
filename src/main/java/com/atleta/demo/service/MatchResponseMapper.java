@@ -50,6 +50,7 @@ public class MatchResponseMapper {
         response.setId(match.getId());
         response.setModalidad(match.getModalidad());
         response.setCategoriaGenero(match.getCategoriaGenero());
+        response.setMatchType(match.getMatchType());
         response.setFechaHoraProgramada(match.getFechaHoraProgramada());
         response.setLatitud(match.getLatitud());
         response.setLongitud(match.getLongitud());

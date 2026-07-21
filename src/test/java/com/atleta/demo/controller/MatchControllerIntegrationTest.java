@@ -6,6 +6,7 @@ import com.atleta.demo.dto.request.JoinMatchRequest;
 import com.atleta.demo.entity.*;
 import com.atleta.demo.enums.EventType;
 import com.atleta.demo.enums.MatchMode;
+import com.atleta.demo.enums.MatchType;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -158,12 +159,42 @@ public class MatchControllerIntegrationTest {
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.modalidad").value("CINCO_VS_CINCO"))
+                .andExpect(jsonPath("$.matchType").value("FRIENDLY"))
                 .andExpect(jsonPath("$.latitud").value(40.7128))
                 .andExpect(jsonPath("$.longitud").value(-74.0060))
                 .andExpect(jsonPath("$.cuota").value(25.00))
                 .andExpect(jsonPath("$.estado").value("CREADO"))
                 .andExpect(jsonPath("$.creador.atletaUuid").value(testCreatorUuid.toString()))
                 .andExpect(jsonPath("$.createdAt").exists());
+    }
+
+    @Test
+    void testCreateMatch_PersistsEveryMatchTypeAcrossCreateGetAndList() throws Exception {
+        for (MatchType matchType : MatchType.values()) {
+            CreateMatchRequest request = new CreateMatchRequest();
+            request.setModalidad(MatchMode.CINCO_VS_CINCO);
+            request.setMatchType(matchType);
+            request.setFechaHoraProgramada(LocalDateTime.now().plusDays(1));
+            request.setCreadorUuid(testCreatorUuid);
+
+            String response = mockMvc.perform(post("/api/v1/matches")
+                            .with(jwtFor(testCreatorUuid))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.matchType").value(matchType.name()))
+                    .andReturn().getResponse().getContentAsString();
+
+            long matchId = objectMapper.readTree(response).get("id").asLong();
+
+            mockMvc.perform(get("/api/v1/matches/{matchId}", matchId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.matchType").value(matchType.name()));
+
+            mockMvc.perform(get("/api/v1/matches"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id == " + matchId + ")].matchType").value(matchType.name()));
+        }
     }
 
     @Test
