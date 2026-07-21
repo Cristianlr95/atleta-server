@@ -1,5 +1,5 @@
 # Ejemplo de configuración GitHub Actions para Atleta Server
-# Renombrar a 'ci.yml' para activar
+# Copiar a '.github/workflows/ci.yml' para activar.
 
 name: CI/CD Pipeline
 
