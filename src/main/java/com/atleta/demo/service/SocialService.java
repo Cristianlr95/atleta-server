@@ -506,6 +506,18 @@ public class SocialService {
         return toPushTokenResponse(pushNotificationTokenRepository.save(entity));
     }
 
+    @Transactional
+    public void revokePushToken(UUID playerUuid, String deviceId) {
+        PlayerProfile player = getPlayer(playerUuid);
+        String normalizedDeviceId = normalizeRequired(deviceId, "El identificador del dispositivo es obligatorio");
+        pushNotificationTokenRepository.findByRecipientAndDeviceId(player, normalizedDeviceId)
+                .ifPresent(token -> {
+                    token.setActive(false);
+                    token.setLastSeenAt(LocalDateTime.now());
+                    pushNotificationTokenRepository.save(token);
+                });
+    }
+
     @Transactional(readOnly = true)
     public UnreadNotificationCountResponse getUnreadNotificationCount(UUID playerUuid) {
         PlayerProfile player = getPlayer(playerUuid);
