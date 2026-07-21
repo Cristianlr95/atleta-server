@@ -22,6 +22,8 @@ public class PlayerProfileResponse {
      */
     private String alias;
 
+    private String nombre;
+
     private GenderType genero;
 
     /**
@@ -68,6 +70,14 @@ public class PlayerProfileResponse {
         this.alias = alias;
     }
 
+    public String getNombre() {
+        return nombre;
+    }
+
+    public void setNombre(String nombre) {
+        this.nombre = nombre;
+    }
+
     public GenderType getGenero() {
         return genero;
     }
@@ -105,6 +115,7 @@ public class PlayerProfileResponse {
         return "PlayerProfileResponse{" +
                 "atletaUuid=" + atletaUuid +
                 ", alias='" + alias + '\'' +
+                ", nombre='" + nombre + '\'' +
                 ", trustScore=" + trustScore +
                 ", createdAt=" + createdAt +
                 '}';

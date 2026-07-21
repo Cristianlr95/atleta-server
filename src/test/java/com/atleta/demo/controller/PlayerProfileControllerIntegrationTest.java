@@ -30,6 +30,7 @@ import com.atleta.demo.config.TestConfig;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.List;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -228,6 +229,70 @@ public class PlayerProfileControllerIntegrationTest {
                 .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.alias").value("UpdatedAlias"));
+    }
+
+    @Test
+    void testUpdatePlayerProfile_UpdatesIdentityAndExactlyThreePositionsAtomically() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAlias("OriginalPlayer");
+        mockMvc.perform(post("/api/v1/player-profiles")
+                        .with(jwtFor(testAthleteUuid))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        Position midfield = findOrCreatePosition("Mediocampista");
+        Position goalkeeper = findOrCreatePosition("Portero");
+        UpdatePlayerProfileRequest updateRequest = new UpdatePlayerProfileRequest();
+        updateRequest.setNombre("Nombre Actualizado");
+        updateRequest.setAlias("AliasActualizado");
+        updateRequest.setPositionIds(List.of(testPositionId, midfield.getId(), goalkeeper.getId()));
+
+        mockMvc.perform(put("/api/v1/player-profiles/{atletaUuid}", testAthleteUuid)
+                        .with(jwtFor(testAthleteUuid))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("Nombre Actualizado"))
+                .andExpect(jsonPath("$.alias").value("AliasActualizado"))
+                .andExpect(jsonPath("$.positions", hasSize(3)))
+                .andExpect(jsonPath("$.positions[0].prioridad").value(1))
+                .andExpect(jsonPath("$.positions[1].prioridad").value(2))
+                .andExpect(jsonPath("$.positions[2].prioridad").value(3));
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/public", testAthleteUuid)
+                        .with(jwtFor(testAthleteUuid)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("Nombre Actualizado"))
+                .andExpect(jsonPath("$.alias").value("AliasActualizado"));
+    }
+
+    @Test
+    void testUpdatePlayerProfile_RejectsDuplicatePositionsWithoutChangingIdentity() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAlias("OriginalPlayer");
+        mockMvc.perform(post("/api/v1/player-profiles")
+                        .with(jwtFor(testAthleteUuid))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        UpdatePlayerProfileRequest updateRequest = new UpdatePlayerProfileRequest();
+        updateRequest.setNombre("No debe persistir");
+        updateRequest.setAlias("TampocoDebePersistir");
+        updateRequest.setPositionIds(List.of(testPositionId, testPositionId, testPositionId));
+
+        mockMvc.perform(put("/api/v1/player-profiles/{atletaUuid}", testAthleteUuid)
+                        .with(jwtFor(testAthleteUuid))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateRequest)))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}", testAthleteUuid)
+                        .with(jwtFor(testAthleteUuid)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("Test Athlete"))
+                .andExpect(jsonPath("$.alias").value("OriginalPlayer"));
     }
 
     @Test
