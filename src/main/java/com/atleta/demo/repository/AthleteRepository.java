@@ -26,6 +26,8 @@ public interface AthleteRepository extends JpaRepository<Athlete, UUID> {
      */
     Optional<Athlete> findByEmail(String email);
 
+    Optional<Athlete> findByEmailIgnoreCase(String email);
+
     /**
      * Busca un atleta por su Google ID
      * @param googleId ID único de Google

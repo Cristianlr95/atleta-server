@@ -32,6 +32,8 @@ security:
     issuer: ${JWT_ISSUER:atleta-test}
     secret: ${JWT_SECRET:VGhpc0lzQVRlc3RTZWNyZXRGb3JBdGxldGFKV1RfMjAyNg==}
     expiration: ${JWT_EXPIRATION:PT1H}
+    refresh-expiration: ${JWT_REFRESH_EXPIRATION:P30D}
+    password-reset-expiration: ${PASSWORD_RESET_EXPIRATION:PT30M}
 
 logging:
   level:

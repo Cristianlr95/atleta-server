@@ -10,6 +10,8 @@ public class JwtProperties {
     private String secret;
     private String issuer = "atleta";
     private Duration expiration = Duration.ofHours(1);
+    private Duration refreshExpiration = Duration.ofDays(30);
+    private Duration passwordResetExpiration = Duration.ofMinutes(30);
 
     public String getSecret() {
         return secret;
@@ -33,5 +35,21 @@ public class JwtProperties {
 
     public void setExpiration(Duration expiration) {
         this.expiration = expiration;
+    }
+
+    public Duration getRefreshExpiration() {
+        return refreshExpiration;
+    }
+
+    public void setRefreshExpiration(Duration refreshExpiration) {
+        this.refreshExpiration = refreshExpiration;
+    }
+
+    public Duration getPasswordResetExpiration() {
+        return passwordResetExpiration;
+    }
+
+    public void setPasswordResetExpiration(Duration passwordResetExpiration) {
+        this.passwordResetExpiration = passwordResetExpiration;
     }
 }

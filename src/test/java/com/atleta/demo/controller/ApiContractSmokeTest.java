@@ -7,6 +7,7 @@ import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
 import com.atleta.demo.dto.request.UpdateTrustScoreRequest;
 import com.atleta.demo.dto.request.UpdatePlayerProfileRequest;
 import com.atleta.demo.dto.response.AthleteResponse;
+import com.atleta.demo.dto.response.AuthResponse;
 import com.atleta.demo.dto.response.LeaderboardEntryResponse;
 import com.atleta.demo.dto.response.MatchClosePreviewResponse;
 import com.atleta.demo.dto.response.MatchEventResponse;
@@ -47,6 +48,7 @@ import com.atleta.demo.service.OrchestratedMatchCreationService;
 import com.atleta.demo.service.PlayerProfileService;
 import com.atleta.demo.service.RatingService;
 import com.atleta.demo.service.SocialService;
+import com.atleta.demo.service.SessionLifecycleService;
 import com.atleta.demo.service.TeamService;
 import com.atleta.demo.service.TeamLeaderboardService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -117,6 +119,9 @@ class ApiContractSmokeTest {
     private JwtService jwtService;
 
     @MockBean
+    private SessionLifecycleService sessionLifecycleService;
+
+    @MockBean
     private JwtDecoder jwtDecoder;
 
     @MockBean
@@ -164,7 +169,9 @@ class ApiContractSmokeTest {
         when(athleteService.authenticateEntity("demo@atleta.test", "secret123"))
                 .thenReturn(Optional.of(athlete));
         when(googleAuthService.authenticateWithGoogle("google-token")).thenReturn(athlete);
-        when(jwtService.generateToken(athlete)).thenReturn("jwt-token");
+        when(sessionLifecycleService.createSession(athlete)).thenReturn(new com.atleta.demo.dto.response.AuthResponse(
+                USER_ID, "demo@atleta.test", "Jugador Demo", GenderType.MASCULINO,
+                "LOCAL", "jwt-token", "refresh-token"));
 
         mockMvc.perform(post("/api/v1/athletes/register")
                         .with(jwtFor(USER_ID))
@@ -198,6 +205,40 @@ class ApiContractSmokeTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.atletaUuid").value(USER_ID.toString()))
                 .andExpect(jsonPath("$.accessToken").value("jwt-token"));
+    }
+
+    @Test
+    void sessionLifecycleRoutesKeepRotationRevocationAndResetContract() throws Exception {
+        AuthResponse refreshed = new AuthResponse(
+                USER_ID, "demo@atleta.test", "Jugador Demo", GenderType.MASCULINO,
+                "LOCAL", "access-2", "refresh-2");
+        when(sessionLifecycleService.rotateRefreshToken("refresh-1")).thenReturn(refreshed);
+
+        mockMvc.perform(post("/api/v1/athletes/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("refreshToken", "refresh-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("access-2"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-2"));
+
+        mockMvc.perform(post("/api/v1/athletes/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("refreshToken", "refresh-2"))))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/v1/athletes/password-reset/request")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("email", "demo@atleta.test"))))
+                .andExpect(status().isAccepted());
+
+        mockMvc.perform(post("/api/v1/athletes/password-reset/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("token", "reset-token", "newPassword", "new-secret-123"))))
+                .andExpect(status().isNoContent());
+
+        verify(sessionLifecycleService).revoke("refresh-2");
+        verify(sessionLifecycleService).requestPasswordReset("demo@atleta.test");
+        verify(sessionLifecycleService).confirmPasswordReset("reset-token", "new-secret-123");
     }
 
     @Test

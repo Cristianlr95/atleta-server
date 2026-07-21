@@ -28,22 +28,29 @@ public class JwtService {
     }
 
     public String generateToken(Athlete athlete) {
+        return generateToken(athlete, null);
+    }
+
+    public String generateToken(Athlete athlete, UUID sessionId) {
         Instant issuedAt = Instant.now();
         Instant expiresAt = issuedAt.plus(jwtProperties.getExpiration());
 
-        JwtClaimsSet claims = JwtClaimsSet.builder()
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder()
             .issuer(jwtProperties.getIssuer())
             .issuedAt(issuedAt)
             .expiresAt(expiresAt)
             .subject(athlete.getAtletaUuid().toString())
             .claim("uuid", athlete.getAtletaUuid().toString())
             .claim("email", athlete.getEmail())
-            .claim("auth_provider", athlete.getAuthProvider())
-            .build();
+            .claim("auth_provider", athlete.getAuthProvider());
+
+        if (sessionId != null) {
+            claims.claim("sid", sessionId.toString());
+        }
 
         return jwtEncoder.encode(JwtEncoderParameters.from(
             JwsHeader.with(MacAlgorithm.HS256).build(),
-            claims
+            claims.build()
         )).getTokenValue();
     }
 
