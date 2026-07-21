@@ -59,6 +59,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -481,6 +482,18 @@ class ApiContractSmokeTest {
                         .content(json(Map.of("votedUserId", OTHER_USER_ID.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.matchId").value(42));
+    }
+
+    @Test
+    void liveStreamAuthorizesJwtViewerBeforeSubscribing() throws Exception {
+        when(matchLiveEventService.subscribe(42L)).thenReturn(new SseEmitter());
+
+        mockMvc.perform(get("/api/v1/matches/{matchId}/live", 42L)
+                        .with(jwtFor(USER_ID)))
+                .andExpect(status().isOk());
+
+        verify(matchService).requireLiveStreamAccess(42L, USER_ID);
+        verify(matchLiveEventService).subscribe(42L);
     }
 
     @Test

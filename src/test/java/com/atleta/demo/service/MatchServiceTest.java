@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -80,6 +81,37 @@ class MatchServiceTest {
     private Team sampleTeam;
     private Position samplePosition;
     private Match sampleMatch;
+
+    @Test
+    void liveStreamAllowsCreator() {
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchPlayerRepository.findByMatchAndPlayerAtletaUuid(sampleMatch, samplePlayer.getAtletaUuid()))
+                .thenReturn(Optional.empty());
+
+        assertDoesNotThrow(() -> matchService.requireLiveStreamAccess(1L, samplePlayer.getAtletaUuid()));
+    }
+
+    @Test
+    void liveStreamAllowsParticipant() {
+        PlayerProfile participant = new PlayerProfile();
+        participant.setAtletaUuid(UUID.randomUUID());
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchPlayerRepository.findByMatchAndPlayerAtletaUuid(sampleMatch, participant.getAtletaUuid()))
+                .thenReturn(Optional.of(new MatchPlayer()));
+
+        assertDoesNotThrow(() -> matchService.requireLiveStreamAccess(1L, participant.getAtletaUuid()));
+    }
+
+    @Test
+    void liveStreamRejectsOutsider() {
+        UUID outsider = UUID.randomUUID();
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchPlayerRepository.findByMatchAndPlayerAtletaUuid(sampleMatch, outsider))
+                .thenReturn(Optional.empty());
+
+        assertThrows(AccessDeniedException.class,
+                () -> matchService.requireLiveStreamAccess(1L, outsider));
+    }
 
     @BeforeEach
     void setUp() {

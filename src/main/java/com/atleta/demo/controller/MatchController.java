@@ -578,13 +578,19 @@ public class MatchController {
     @Operation(summary = "Suscribirse al stream en vivo del partido",
                description = "SSE para cambios de invitaciones y estado del partido")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Stream conectado")
+        @ApiResponse(responseCode = "200", description = "Stream conectado"),
+        @ApiResponse(responseCode = "401", description = "Sesion requerida"),
+        @ApiResponse(responseCode = "403", description = "No participa en el partido"),
+        @ApiResponse(responseCode = "404", description = "Partido no encontrado")
     })
-    public SseEmitter subscribeMatchLive(
+    public ResponseEntity<SseEmitter> subscribeMatchLive(
             @Parameter(description = "ID del partido")
-            @PathVariable Long matchId) {
-        logger.debug("Abriendo stream SSE para partido {}", matchId);
-        return matchLiveEventService.subscribe(matchId);
+            @PathVariable Long matchId,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID viewerUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+        matchService.requireLiveStreamAccess(matchId, viewerUuid);
+        logger.debug("Abriendo stream SSE para partido {} y usuario {}", matchId, viewerUuid);
+        return ResponseEntity.ok(matchLiveEventService.subscribe(matchId));
     }
 
     @PostMapping("/{matchId}/close/preview")
