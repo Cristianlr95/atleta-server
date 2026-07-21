@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,6 +38,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/player-profiles")
+@PreAuthorize("isAuthenticated()")
 @Tag(name = "Perfiles de Jugador", description = "Gestion de perfiles especificos de futbol, posiciones y trust score")
 public class PlayerProfileController {
 
