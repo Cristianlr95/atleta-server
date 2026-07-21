@@ -10,6 +10,7 @@ import com.atleta.demo.enums.MatchStatus;
 import com.atleta.demo.enums.MatchValidationStatus;
 import com.atleta.demo.enums.EventType;
 import com.atleta.demo.enums.MatchGenderCategory;
+import com.atleta.demo.enums.MatchType;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.enums.MatchTeamSide;
 import com.atleta.demo.repository.*;
@@ -120,6 +121,7 @@ public class MatchService {
         match.setCategoriaGenero(
                 request.getCategoriaGenero() != null ? request.getCategoriaGenero() : MatchGenderCategory.MIXTO
         );
+        match.setMatchType(request.getMatchType() != null ? request.getMatchType() : MatchType.FRIENDLY);
 
         match = matchRepository.save(match);
         return matchResponseMapper.toMatchResponse(match);
