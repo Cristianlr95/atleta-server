@@ -10,6 +10,7 @@ import com.atleta.demo.dto.response.LeaderboardEntryResponse;
 import com.atleta.demo.dto.response.MatchClosePreviewResponse;
 import com.atleta.demo.dto.response.MatchEventResponse;
 import com.atleta.demo.dto.response.MatchMvpResponse;
+import com.atleta.demo.dto.response.MatchInviteDeliveryResponse;
 import com.atleta.demo.dto.response.MatchResponse;
 import com.atleta.demo.dto.response.PlayerPositionResponse;
 import com.atleta.demo.dto.response.PlayerProfileResponse;
@@ -615,6 +616,13 @@ class ApiContractSmokeTest {
 
         when(socialService.createMatchInvite(any(CreateMatchInviteRequest.class))).thenReturn(invite);
         when(socialService.createMatchInvitesBatch(any(CreateMatchInvitesBatchRequest.class))).thenReturn(List.of(invite));
+        when(socialService.createMatchInvitesBatchDetailed(any(CreateMatchInvitesBatchRequest.class)))
+                .thenReturn(List.of(new MatchInviteDeliveryResponse(
+                        OTHER_USER_ID,
+                        MatchInviteDeliveryResponse.DeliveryStatus.SENT,
+                        invite,
+                        null
+                )));
 
         mockMvc.perform(post("/api/v1/social/match-invites")
                         .with(jwtFor(USER_ID))
@@ -647,6 +655,23 @@ class ApiContractSmokeTest {
                 ArgumentCaptor.forClass(CreateMatchInvitesBatchRequest.class);
         verify(socialService).createMatchInvitesBatch(batchCaptor.capture());
         assertEquals(USER_ID, batchCaptor.getValue().getRequesterUuid());
+
+        mockMvc.perform(post("/api/v1/social/match-invites/batch/detailed")
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "matchId", 42,
+                                "teamId", 77,
+                                "requesterUuid", OTHER_USER_ID.toString(),
+                                "targetUuids", List.of(OTHER_USER_ID.toString())
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].status").value("SENT"));
+
+        ArgumentCaptor<CreateMatchInvitesBatchRequest> detailedCaptor =
+                ArgumentCaptor.forClass(CreateMatchInvitesBatchRequest.class);
+        verify(socialService).createMatchInvitesBatchDetailed(detailedCaptor.capture());
+        assertEquals(USER_ID, detailedCaptor.getValue().getRequesterUuid());
     }
 
     @Test
