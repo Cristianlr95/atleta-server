@@ -54,6 +54,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -106,6 +107,9 @@ class ApiContractSmokeTest {
 
     @MockBean
     private JwtService jwtService;
+
+    @MockBean
+    private JwtDecoder jwtDecoder;
 
     @MockBean
     private TeamService teamService;
