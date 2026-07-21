@@ -16,6 +16,9 @@ import java.util.List;
  */
 public class MatchResponse {
 
+    /** Canonical result contract version. */
+    private String resultVersion = "match-result-v1";
+
     /**
      * ID del partido
      */
@@ -154,6 +157,14 @@ public class MatchResponse {
     // Getters and Setters
     public Long getId() {
         return id;
+    }
+
+    public String getResultVersion() {
+        return resultVersion;
+    }
+
+    public void setResultVersion(String resultVersion) {
+        this.resultVersion = resultVersion;
     }
 
     public void setId(Long id) {
