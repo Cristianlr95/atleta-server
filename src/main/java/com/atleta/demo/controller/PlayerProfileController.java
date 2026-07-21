@@ -124,7 +124,7 @@ public class PlayerProfileController {
     }
 
     @PutMapping("/{atletaUuid}")
-    @Operation(summary = "Actualizar perfil de jugador", description = "Actualiza el alias del perfil de jugador")
+    @Operation(summary = "Actualizar perfil de jugador", description = "Actualiza nombre, alias y posiciones en una transaccion")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Perfil actualizado exitosamente"),
             @ApiResponse(responseCode = "400", description = "Datos de entrada invalidos"),
@@ -142,7 +142,7 @@ public class PlayerProfileController {
         logger.info("Actualizando perfil de jugador: {}", atletaUuid);
 
         try {
-            PlayerProfileResponse response = playerProfileService.updateAlias(atletaUuid, request.getAlias());
+            PlayerProfileResponse response = playerProfileService.updateProfile(atletaUuid, request);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             logger.warn("Error actualizando perfil: {}", e.getMessage());

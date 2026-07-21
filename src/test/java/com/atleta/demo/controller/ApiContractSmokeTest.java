@@ -5,6 +5,7 @@ import com.atleta.demo.dto.request.CreateMatchEventRequest;
 import com.atleta.demo.dto.request.CreateMatchInviteRequest;
 import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
 import com.atleta.demo.dto.request.UpdateTrustScoreRequest;
+import com.atleta.demo.dto.request.UpdatePlayerProfileRequest;
 import com.atleta.demo.dto.response.AthleteResponse;
 import com.atleta.demo.dto.response.LeaderboardEntryResponse;
 import com.atleta.demo.dto.response.MatchClosePreviewResponse;
@@ -219,7 +220,7 @@ class ApiContractSmokeTest {
 
         when(playerProfileService.createPlayerProfile(any())).thenReturn(profile);
         when(playerProfileService.findByAtletaUuid(USER_ID)).thenReturn(Optional.of(profile));
-        when(playerProfileService.updateAlias(USER_ID, "Demo11")).thenReturn(profile);
+        when(playerProfileService.updateProfile(eq(USER_ID), any(UpdatePlayerProfileRequest.class))).thenReturn(profile);
         when(playerProfileService.getPlayerPositions(USER_ID)).thenReturn(List.of(position));
         when(playerProfileService.updateTrustScore(any())).thenReturn(profile);
         when(playerProfileService.getTrustScoreHistory(USER_ID)).thenReturn(List.of(trustLog));
@@ -314,7 +315,7 @@ class ApiContractSmokeTest {
                 .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
 
         verify(playerProfileService, never()).findByAtletaUuid(OTHER_USER_ID);
-        verify(playerProfileService, never()).updateAlias(eq(OTHER_USER_ID), any());
+        verify(playerProfileService, never()).updateProfile(eq(OTHER_USER_ID), any(UpdatePlayerProfileRequest.class));
         verify(playerProfileService, never()).getPlayerPositions(OTHER_USER_ID);
         verify(playerProfileService, never()).getTrustScoreHistory(OTHER_USER_ID);
     }
