@@ -154,6 +154,25 @@ class TeamServiceTest {
     }
 
     @Test
+    void getTeamById_ActiveTeam_ShouldReturnPublicDetail() {
+        when(teamRepository.findById(1L)).thenReturn(Optional.of(sampleTeam));
+
+        TeamResponse response = teamService.getTeamById(1L);
+
+        assertEquals(1L, response.getId());
+        assertEquals("Test Team", response.getNombre());
+        assertEquals(samplePlayer.getAtletaUuid(), response.getCreador().getAtletaUuid());
+    }
+
+    @Test
+    void getTeamById_ArchivedTeam_ShouldBehaveAsMissing() {
+        sampleTeam.setArchived(true);
+        when(teamRepository.findById(1L)).thenReturn(Optional.of(sampleTeam));
+
+        assertThrows(IllegalArgumentException.class, () -> teamService.getTeamById(1L));
+    }
+
+    @Test
     void storeTeamLogo_ValidPng_ShouldStoreFile() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
                 "file",
