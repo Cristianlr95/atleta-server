@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -100,6 +101,27 @@ class SocialControllerIntegrationTest {
         );
 
         Assertions.assertEquals(1, stored);
+    }
+
+    @Test
+    void revokePushToken_shouldDeactivateOnlyTheAuthenticatedDeviceToken() throws Exception {
+        jdbcTemplate.update(
+                "INSERT INTO push_notification_tokens (recipient_user_id, token, platform, device_id, is_active, last_seen_at, created_at, updated_at, version) VALUES (?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0)",
+                playerUuid, "push-token-revoke", "ios", "device-revoke"
+        );
+
+        mockMvc.perform(delete("/api/v1/social/notifications/push-tokens")
+                        .with(jwtFor(playerUuid))
+                        .param("deviceId", "device-revoke"))
+                .andExpect(status().isNoContent());
+
+        Boolean active = jdbcTemplate.queryForObject(
+                "SELECT is_active FROM push_notification_tokens WHERE recipient_user_id = ? AND device_id = ?",
+                Boolean.class,
+                playerUuid,
+                "device-revoke"
+        );
+        Assertions.assertEquals(Boolean.FALSE, active);
     }
 
     @Test
