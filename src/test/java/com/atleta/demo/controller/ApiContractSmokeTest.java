@@ -16,6 +16,7 @@ import com.atleta.demo.dto.response.PlayerProfileResponse;
 import com.atleta.demo.dto.response.PositionResponse;
 import com.atleta.demo.dto.response.SocialRequestResponse;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
+import com.atleta.demo.dto.response.TeamLeaderboardEntryResponse;
 import com.atleta.demo.dto.response.TeamResponse;
 import com.atleta.demo.dto.response.TrustLogResponse;
 import com.atleta.demo.config.TestConfig;
@@ -44,6 +45,7 @@ import com.atleta.demo.service.PlayerProfileService;
 import com.atleta.demo.service.RatingService;
 import com.atleta.demo.service.SocialService;
 import com.atleta.demo.service.TeamService;
+import com.atleta.demo.service.TeamLeaderboardService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -55,6 +57,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -81,6 +84,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = {
         AthleteController.class,
         TeamController.class,
+        TeamLeaderboardController.class,
         MatchController.class,
         SocialController.class,
         RatingController.class,
@@ -113,6 +117,9 @@ class ApiContractSmokeTest {
 
     @MockBean
     private TeamService teamService;
+
+    @MockBean
+    private TeamLeaderboardService teamLeaderboardService;
 
     @MockBean
     private MatchService matchService;
@@ -355,6 +362,32 @@ class ApiContractSmokeTest {
                 .andExpect(status().isNoContent());
 
         verify(teamService).deleteTeam(77L, USER_ID);
+    }
+
+    @Test
+    void teamLeaderboardUsesAuthenticatedViewerAndStableContract() throws Exception {
+        when(teamLeaderboardService.getLeaderboard(77L, USER_ID)).thenReturn(List.of(
+                new TeamLeaderboardEntryResponse(1, USER_ID, "Demo10", BigDecimal.valueOf(82.5), 9, true),
+                new TeamLeaderboardEntryResponse(2, OTHER_USER_ID, "Rival9", null, 0, false)
+        ));
+
+        mockMvc.perform(get("/api/v1/teams/{teamId}/leaderboard", 77L).with(jwtFor(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].playerProfileId").value(USER_ID.toString()))
+                .andExpect(jsonPath("$[0].score").value(82.5))
+                .andExpect(jsonPath("$[1].rated").value(false))
+                .andExpect(jsonPath("$[1].score").doesNotExist());
+
+        verify(teamLeaderboardService).getLeaderboard(77L, USER_ID);
+    }
+
+    @Test
+    void teamLeaderboardReturnsForbiddenForNonMembers() throws Exception {
+        when(teamLeaderboardService.getLeaderboard(77L, USER_ID))
+                .thenThrow(new AccessDeniedException("No pertenece al equipo"));
+
+        mockMvc.perform(get("/api/v1/teams/{teamId}/leaderboard", 77L).with(jwtFor(USER_ID)))
+                .andExpect(status().isForbidden());
     }
 
     @Test
