@@ -139,6 +139,14 @@ class JwtAuthenticationIntegrationTest {
     }
 
     @Test
+    void fieldLocationWriteEndpointsRejectMissingToken() throws Exception {
+        mockMvc.perform(post("/api/v1/fields")
+                .contentType(APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void ratingsLeaderboardAcceptsValidToken() throws Exception {
         String token = loginAndExtractToken();
 
