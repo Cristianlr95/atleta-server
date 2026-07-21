@@ -13,6 +13,8 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Repositorio para la entidad Match.
@@ -21,6 +23,8 @@ import java.util.List;
  */
 @Repository
 public interface MatchRepository extends JpaRepository<Match, Long> {
+
+    Optional<Match> findByCreadorAtletaUuidAndCreationIdempotencyKey(UUID creadorUuid, String creationIdempotencyKey);
 
     /**
      * Busca partidos por modalidad

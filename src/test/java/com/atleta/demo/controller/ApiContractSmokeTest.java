@@ -41,6 +41,7 @@ import com.atleta.demo.service.JwtService;
 import com.atleta.demo.service.MatchLiveEventService;
 import com.atleta.demo.service.MatchMvpService;
 import com.atleta.demo.service.MatchService;
+import com.atleta.demo.service.OrchestratedMatchCreationService;
 import com.atleta.demo.service.PlayerProfileService;
 import com.atleta.demo.service.RatingService;
 import com.atleta.demo.service.SocialService;
@@ -124,6 +125,9 @@ class ApiContractSmokeTest {
 
     @MockBean
     private MatchService matchService;
+
+    @MockBean
+    private OrchestratedMatchCreationService orchestratedMatchCreationService;
 
     @MockBean
     private MatchLiveEventService matchLiveEventService;

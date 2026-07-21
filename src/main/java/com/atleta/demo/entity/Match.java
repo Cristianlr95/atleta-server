@@ -49,6 +49,12 @@ public class Match extends BaseEntity {
     private MatchType matchType = MatchType.FRIENDLY;
 
     /**
+     * Client-generated key used to make the complete creation command retry-safe.
+     */
+    @Column(name = "creation_idempotency_key", length = 100)
+    private String creationIdempotencyKey;
+
+    /**
      * Fecha y hora programada para el partido
      */
     @Column(name = "fecha_hora_programada", nullable = false)
@@ -215,6 +221,14 @@ public class Match extends BaseEntity {
 
     public void setMatchType(MatchType matchType) {
         this.matchType = matchType != null ? matchType : MatchType.FRIENDLY;
+    }
+
+    public String getCreationIdempotencyKey() {
+        return creationIdempotencyKey;
+    }
+
+    public void setCreationIdempotencyKey(String creationIdempotencyKey) {
+        this.creationIdempotencyKey = creationIdempotencyKey;
     }
 
     public LocalDateTime getFechaHoraProgramada() {
