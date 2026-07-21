@@ -21,6 +21,7 @@ public class PlayerRatingResponse {
     private BigDecimal currentRating;
     private Integer matchesPlayed;
     private LocalDateTime lastUpdated;
+    private String formulaVersion = "rating-v1";
 
     // Constructors
     public PlayerRatingResponse() {
@@ -99,6 +100,14 @@ public class PlayerRatingResponse {
 
     public LocalDateTime getLastUpdated() {
         return lastUpdated;
+    }
+
+    public String getFormulaVersion() {
+        return formulaVersion;
+    }
+
+    public void setFormulaVersion(String formulaVersion) {
+        this.formulaVersion = formulaVersion;
     }
 
     public void setLastUpdated(LocalDateTime lastUpdated) {
