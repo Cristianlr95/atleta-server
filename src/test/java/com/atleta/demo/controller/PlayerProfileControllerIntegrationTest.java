@@ -497,6 +497,34 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
+    void testGetPublicPlayerProfile_AllowsAnotherAuthenticatedUserWithoutPrivateData() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAtletaUuid(testAthleteUuid);
+        createRequest.setAlias("PublicProfileTest");
+
+        mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/public", testAthleteUuid)
+                .with(jwtFor(UUID.randomUUID())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.atletaUuid").value(testAthleteUuid.toString()))
+                .andExpect(jsonPath("$.alias").value("PublicProfileTest"))
+                .andExpect(jsonPath("$.email").doesNotExist())
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+    }
+
+    @Test
+    void testGetPublicPlayerProfile_MissingProfileReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/public", UUID.randomUUID())
+                .with(jwtFor(testAthleteUuid)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void testTrustScoreHistory_IncludesMatchWhenRequestHasMatchId() throws Exception {
         CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
         createRequest.setAtletaUuid(testAthleteUuid);

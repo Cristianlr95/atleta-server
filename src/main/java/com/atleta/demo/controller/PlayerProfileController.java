@@ -98,6 +98,22 @@ public class PlayerProfileController {
         return profileOpt.map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/{atletaUuid}/public")
+    @Operation(summary = "Obtener vista publica de jugador",
+            description = "Retorna datos competitivos del perfil sin exponer email, credenciales ni configuracion de seguridad")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Perfil publico encontrado"),
+            @ApiResponse(responseCode = "404", description = "Perfil publico no encontrado"),
+            @ApiResponse(responseCode = "401", description = "Sesion requerida")
+    })
+    public ResponseEntity<PlayerProfileResponse> getPublicPlayerProfile(
+            @Parameter(description = "UUID del atleta")
+            @PathVariable UUID atletaUuid
+    ) {
+        Optional<PlayerProfileResponse> profileOpt = playerProfileService.findByAtletaUuid(atletaUuid);
+        return profileOpt.map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+    }
+
     @GetMapping("/by-alias/{alias}")
     @Operation(summary = "Obtener perfil de jugador por alias",
             description = "Busca un perfil de jugador especifico por su alias unico")
