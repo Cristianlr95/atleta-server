@@ -16,6 +16,7 @@ import com.atleta.demo.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -627,6 +628,20 @@ public class MatchService {
     @Transactional
     public List<MatchResponse> getMatchesByPlayerOrCreator(UUID playerUuid) {
         return matchQueryService.getMatchesByPlayerOrCreator(playerUuid);
+    }
+
+    @Transactional(readOnly = true)
+    public void requireLiveStreamAccess(Long matchId, UUID viewerUuid) {
+        Match match = matchRepository.findById(matchId)
+                .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado: " + matchId));
+        boolean isCreator = match.getCreador() != null
+                && match.getCreador().getAtletaUuid().equals(viewerUuid);
+        boolean isParticipant = matchPlayerRepository
+                .findByMatchAndPlayerAtletaUuid(match, viewerUuid)
+                .isPresent();
+        if (!isCreator && !isParticipant) {
+            throw new AccessDeniedException("El stream es visible solo para participantes del partido");
+        }
     }
 
     /**
