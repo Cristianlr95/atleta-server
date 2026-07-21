@@ -248,6 +248,8 @@ class SocialServiceTest {
         pending.setId(903L);
 
         when(matchRepository.findById(match.getId())).thenReturn(Optional.of(match));
+        when(teamRepository.findById(matchTeam.getId())).thenReturn(Optional.of(matchTeam));
+        when(playerProfileRepository.findById(creatorUuid)).thenReturn(Optional.of(creator));
         when(playerProfileRepository.findById(targetUuid)).thenReturn(Optional.of(target));
         when(matchInviteRepository.findTopByMatchAndTargetOrderByCreatedAtDesc(match, target))
                 .thenReturn(Optional.of(pending));
@@ -257,6 +259,23 @@ class SocialServiceTest {
         assertEquals(MatchInviteDeliveryResponse.DeliveryStatus.ALREADY_SENT, result.get(0).getStatus());
         assertEquals(903L, result.get(0).getInvitation().getId());
         verify(matchInviteRepository, never()).save(any(MatchInvite.class));
+    }
+
+    @Test
+    void createMatchInvitesBatchDetailed_validatesRequesterBeforeReturningExistingState() {
+        CreateMatchInvitesBatchRequest request = new CreateMatchInvitesBatchRequest();
+        request.setMatchId(match.getId());
+        request.setTeamId(matchTeam.getId());
+        request.setRequesterUuid(requesterUuid);
+        request.setTargetUuids(List.of(targetUuid));
+
+        when(matchRepository.findById(match.getId())).thenReturn(Optional.of(match));
+        when(teamRepository.findById(matchTeam.getId())).thenReturn(Optional.of(matchTeam));
+        when(playerProfileRepository.findById(requesterUuid)).thenReturn(Optional.of(requester));
+        when(matchPlayerRepository.findByMatchAndPlayerAtletaUuid(match, requesterUuid)).thenReturn(Optional.empty());
+
+        assertThrows(AccessDeniedException.class, () -> socialService.createMatchInvitesBatchDetailed(request));
+        verify(matchInviteRepository, never()).findTopByMatchAndTargetOrderByCreatedAtDesc(any(), any());
     }
 
     private CreateMatchInviteRequest validInviteRequest(UUID requesterUuid, UUID targetUuid, Long teamId) {

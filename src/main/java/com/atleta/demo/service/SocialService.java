@@ -341,6 +341,13 @@ public class SocialService {
         try {
             Match match = matchRepository.findById(request.getMatchId())
                     .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado"));
+            Team team = request.getTeamId() == null
+                    ? null
+                    : teamRepository.findById(request.getTeamId())
+                    .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado"));
+            PlayerProfile requester = getPlayer(request.getRequesterUuid());
+            validateMatchInviteRequester(match, requester.getAtletaUuid());
+            validateTeamBelongsToMatch(match, team);
             PlayerProfile target = getPlayer(targetUuid);
             Optional<MatchInvite> previous = matchInviteRepository
                     .findTopByMatchAndTargetOrderByCreatedAtDesc(match, target);
