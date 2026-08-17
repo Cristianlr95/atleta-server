@@ -46,6 +46,7 @@ import com.atleta.demo.service.MatchMvpService;
 import com.atleta.demo.service.MatchService;
 import com.atleta.demo.service.OrchestratedMatchCreationService;
 import com.atleta.demo.service.PlayerProfileService;
+import com.atleta.demo.service.PlayerAchievementService;
 import com.atleta.demo.service.RatingService;
 import com.atleta.demo.service.SocialService;
 import com.atleta.demo.service.SessionLifecycleService;
@@ -150,6 +151,9 @@ class ApiContractSmokeTest {
 
     @MockBean
     private PlayerProfileService playerProfileService;
+
+    @MockBean
+    private PlayerAchievementService playerAchievementService;
 
     @MockBean
     private PlayerProfileRepository playerProfileRepository;

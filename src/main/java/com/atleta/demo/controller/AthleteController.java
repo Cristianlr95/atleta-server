@@ -2,6 +2,7 @@ package com.atleta.demo.controller;
 
 import com.atleta.demo.dto.request.ChangePasswordRequest;
 import com.atleta.demo.dto.request.CreateAthleteRequest;
+import com.atleta.demo.dto.request.DeleteAccountRequest;
 import com.atleta.demo.dto.request.GoogleAuthRequest;
 import com.atleta.demo.dto.request.LoginRequest;
 import com.atleta.demo.dto.request.PasswordResetConfirmRequest;
@@ -28,6 +29,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -256,6 +258,27 @@ public class AthleteController {
         } catch (IllegalArgumentException e) {
             logger.warn("Error cambiando contrasena: {}", e.getMessage());
             if (e.getMessage().contains("No se encontro")) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @DeleteMapping("/{atletaUuid}")
+    @Operation(summary = "Eliminar cuenta del atleta",
+            description = "Anonimiza los datos de acceso y conserva los registros deportivos compartidos")
+    public ResponseEntity<Void> deleteAccount(
+            @PathVariable UUID atletaUuid,
+            @Valid @RequestBody DeleteAccountRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        AuthenticatedUserUtils.requireSameUser(jwt, atletaUuid);
+        try {
+            athleteService.deleteAccount(atletaUuid, request.getCurrentPassword(), request.getConfirmation());
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException exception) {
+            logger.warn("No se pudo eliminar cuenta {}: {}", atletaUuid, exception.getMessage());
+            if (exception.getMessage().contains("No se encontró")) {
                 return ResponseEntity.notFound().build();
             }
             return ResponseEntity.badRequest().build();

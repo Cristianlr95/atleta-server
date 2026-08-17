@@ -6,9 +6,11 @@ import com.atleta.demo.dto.request.UpdatePlayerProfileRequest;
 import com.atleta.demo.dto.request.UpdateTrustScoreRequest;
 import com.atleta.demo.dto.response.PlayerPositionResponse;
 import com.atleta.demo.dto.response.PlayerProfileResponse;
+import com.atleta.demo.dto.response.PlayerAchievementResponse;
 import com.atleta.demo.dto.response.TrustLogResponse;
 import com.atleta.demo.security.AuthenticatedUserUtils;
 import com.atleta.demo.service.PlayerProfileService;
+import com.atleta.demo.service.PlayerAchievementService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -45,9 +47,12 @@ public class PlayerProfileController {
     private static final Logger logger = LoggerFactory.getLogger(PlayerProfileController.class);
 
     private final PlayerProfileService playerProfileService;
+    private final PlayerAchievementService playerAchievementService;
 
-    public PlayerProfileController(PlayerProfileService playerProfileService) {
+    public PlayerProfileController(PlayerProfileService playerProfileService,
+                                   PlayerAchievementService playerAchievementService) {
         this.playerProfileService = playerProfileService;
+        this.playerAchievementService = playerAchievementService;
     }
 
     @PostMapping
@@ -98,6 +103,16 @@ public class PlayerProfileController {
 
         Optional<PlayerProfileResponse> profileOpt = playerProfileService.findByAtletaUuid(atletaUuid);
         return profileOpt.map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{atletaUuid}/achievements")
+    @Operation(summary = "Obtener logros competitivos del jugador")
+    public ResponseEntity<List<PlayerAchievementResponse>> getAchievements(
+            @PathVariable UUID atletaUuid,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        AuthenticatedUserUtils.requireSameUser(jwt, atletaUuid);
+        return ResponseEntity.ok(playerAchievementService.getAchievements(atletaUuid));
     }
 
     @GetMapping("/{atletaUuid}/public")

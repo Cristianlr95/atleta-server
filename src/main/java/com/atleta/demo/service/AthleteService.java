@@ -4,6 +4,7 @@ import com.atleta.demo.dto.request.CreateAthleteRequest;
 import com.atleta.demo.dto.response.AthleteResponse;
 import com.atleta.demo.entity.Athlete;
 import com.atleta.demo.repository.AthleteRepository;
+import com.atleta.demo.repository.PlayerProfileRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,10 +35,16 @@ public class AthleteService {
     private static final Logger logger = LoggerFactory.getLogger(AthleteService.class);
 
     private final AthleteRepository athleteRepository;
+    private final PlayerProfileRepository playerProfileRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public AthleteService(AthleteRepository athleteRepository, PasswordEncoder passwordEncoder) {
+    public AthleteService(
+            AthleteRepository athleteRepository,
+            PlayerProfileRepository playerProfileRepository,
+            PasswordEncoder passwordEncoder
+    ) {
         this.athleteRepository = athleteRepository;
+        this.playerProfileRepository = playerProfileRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -196,6 +203,43 @@ public class AthleteService {
         athleteRepository.save(athlete);
 
         logger.info("Contraseña cambiada exitosamente para atleta: {}", atletaUuid);
+    }
+
+    /**
+     * Retira el acceso y anonimiza los datos identificables sin destruir el historial
+     * deportivo compartido en partidos, equipos y clasificaciones.
+     */
+    public void deleteAccount(UUID atletaUuid, String currentPassword, String confirmation) {
+        if (!"ELIMINAR".equals(confirmation)) {
+            throw new IllegalArgumentException("La confirmación de eliminación no es válida");
+        }
+
+        Athlete athlete = athleteRepository.findById(atletaUuid)
+                .orElseThrow(() -> new IllegalArgumentException("No se encontró atleta con UUID: " + atletaUuid));
+
+        if (athlete.getDeletedAt() != null) {
+            throw new IllegalArgumentException("La cuenta ya fue eliminada");
+        }
+
+        if ("LOCAL".equals(athlete.getAuthProvider())
+                && (currentPassword == null || !passwordEncoder.matches(currentPassword, athlete.getPasswordHash()))) {
+            throw new IllegalArgumentException("La contraseña actual es incorrecta");
+        }
+
+        playerProfileRepository.findById(atletaUuid).ifPresent(profile -> {
+            profile.setAlias("Jugador eliminado");
+            playerProfileRepository.save(profile);
+        });
+
+        athlete.setEmail("deleted+" + atletaUuid + "@deleted.atleta.invalid");
+        athlete.setNombre("Cuenta eliminada");
+        athlete.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+        athlete.setAuthProvider("DELETED");
+        athlete.setGoogleId(null);
+        athlete.setPictureUrl(null);
+        athlete.setDeletedAt(LocalDateTime.now());
+        athleteRepository.save(athlete);
+        logger.info("Cuenta anonimizada para atleta: {}", atletaUuid);
     }
 
     /**
