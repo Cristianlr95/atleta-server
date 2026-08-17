@@ -18,6 +18,7 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.context.WebApplicationContext;
 
 import java.util.UUID;
@@ -321,6 +322,36 @@ public class TeamControllerIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.createdAt").exists())
                 .andExpect(jsonPath("$.createdAt").isNotEmpty());
+    }
+
+    @Test
+    void testGetTeamById_ReturnsSelectedTeamToAnotherAuthenticatedUser() throws Exception {
+        CreateTeamRequest request = new CreateTeamRequest();
+        request.setNombre(getUniqueTeamName("Public Team"));
+        request.setAnioFundacion(2022);
+        request.setCreadorUuid(testCreatorUuid);
+
+        MvcResult created = mockMvc.perform(post("/api/v1/teams")
+                .with(jwtFor(testCreatorUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long teamId = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asLong();
+
+        mockMvc.perform(get("/api/v1/teams/{teamId}", teamId)
+                .with(jwtFor(UUID.randomUUID())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(teamId))
+                .andExpect(jsonPath("$.nombre").value(getUniqueTeamName("Public Team")))
+                .andExpect(jsonPath("$.anioFundacion").value(2022));
+    }
+
+    @Test
+    void testGetTeamById_MissingTeamReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/v1/teams/{teamId}", Long.MAX_VALUE)
+                .with(jwtFor(testCreatorUuid)))
+                .andExpect(status().isNotFound());
     }
 
     @Test

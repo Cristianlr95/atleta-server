@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,6 +40,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/player-profiles")
+@PreAuthorize("isAuthenticated()")
 @Tag(name = "Perfiles de Jugador", description = "Gestion de perfiles especificos de futbol, posiciones y trust score")
 public class PlayerProfileController {
 
@@ -113,6 +115,22 @@ public class PlayerProfileController {
         return ResponseEntity.ok(playerAchievementService.getAchievements(atletaUuid));
     }
 
+    @GetMapping("/{atletaUuid}/public")
+    @Operation(summary = "Obtener vista publica de jugador",
+            description = "Retorna datos competitivos del perfil sin exponer email, credenciales ni configuracion de seguridad")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Perfil publico encontrado"),
+            @ApiResponse(responseCode = "404", description = "Perfil publico no encontrado"),
+            @ApiResponse(responseCode = "401", description = "Sesion requerida")
+    })
+    public ResponseEntity<PlayerProfileResponse> getPublicPlayerProfile(
+            @Parameter(description = "UUID del atleta")
+            @PathVariable UUID atletaUuid
+    ) {
+        Optional<PlayerProfileResponse> profileOpt = playerProfileService.findByAtletaUuid(atletaUuid);
+        return profileOpt.map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+    }
+
     @GetMapping("/by-alias/{alias}")
     @Operation(summary = "Obtener perfil de jugador por alias",
             description = "Busca un perfil de jugador especifico por su alias unico")
@@ -123,7 +141,7 @@ public class PlayerProfileController {
     }
 
     @PutMapping("/{atletaUuid}")
-    @Operation(summary = "Actualizar perfil de jugador", description = "Actualiza el alias del perfil de jugador")
+    @Operation(summary = "Actualizar perfil de jugador", description = "Actualiza nombre, alias y posiciones en una transaccion")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Perfil actualizado exitosamente"),
             @ApiResponse(responseCode = "400", description = "Datos de entrada invalidos"),
@@ -141,7 +159,7 @@ public class PlayerProfileController {
         logger.info("Actualizando perfil de jugador: {}", atletaUuid);
 
         try {
-            PlayerProfileResponse response = playerProfileService.updateAlias(atletaUuid, request.getAlias());
+            PlayerProfileResponse response = playerProfileService.updateProfile(atletaUuid, request);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             logger.warn("Error actualizando perfil: {}", e.getMessage());

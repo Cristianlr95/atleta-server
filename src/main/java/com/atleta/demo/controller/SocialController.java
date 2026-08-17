@@ -3,6 +3,7 @@ package com.atleta.demo.controller;
 import com.atleta.demo.dto.request.CreateFriendRequest;
 import com.atleta.demo.dto.request.CreateMatchInviteRequest;
 import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
+import com.atleta.demo.dto.response.MatchInviteDeliveryResponse;
 import com.atleta.demo.dto.request.CreateTeamInviteRequest;
 import com.atleta.demo.dto.request.RegisterPushTokenRequest;
 import com.atleta.demo.dto.request.RespondRequestDecision;
@@ -21,6 +22,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -124,6 +126,17 @@ public class SocialController {
         return ResponseEntity.status(HttpStatus.CREATED).body(socialService.createMatchInvitesBatch(request));
     }
 
+    @PostMapping("/match-invites/batch/detailed")
+    @Operation(summary = "Enviar invitaciones de partido con resultado por destinatario")
+    public ResponseEntity<List<MatchInviteDeliveryResponse>> createMatchInvitesBatchDetailed(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody CreateMatchInvitesBatchRequest request
+    ) {
+        request.setRequesterUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(socialService.createMatchInvitesBatchDetailed(request));
+    }
+
     @PutMapping("/match-invites/{inviteId}/decision")
     @Operation(summary = "Responder invitacion de partido")
     public ResponseEntity<SocialRequestResponse> respondMatchInvite(
@@ -197,6 +210,16 @@ public class SocialController {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(socialService.registerPushToken(AuthenticatedUserUtils.currentUserUuid(jwt), request));
+    }
+
+    @DeleteMapping("/notifications/push-tokens")
+    @Operation(summary = "Revocar push token del dispositivo actual")
+    public ResponseEntity<Void> revokePushToken(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam String deviceId
+    ) {
+        socialService.revokePushToken(AuthenticatedUserUtils.currentUserUuid(jwt), deviceId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/notifications/unread-count")

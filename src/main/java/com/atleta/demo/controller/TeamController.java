@@ -92,6 +92,22 @@ public class TeamController {
         }
     }
 
+    @GetMapping("/{teamId}")
+    @Operation(summary = "Obtener detalle de equipo",
+            description = "Retorna la informacion competitiva visible de un equipo activo")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Equipo obtenido exitosamente"),
+            @ApiResponse(responseCode = "404", description = "Equipo no encontrado"),
+            @ApiResponse(responseCode = "401", description = "Sesion requerida")
+    })
+    public ResponseEntity<TeamResponse> getTeamById(@PathVariable Long teamId) {
+        try {
+            return ResponseEntity.ok(teamService.getTeamById(teamId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
     @GetMapping("/{teamId}/members/active")
     @Operation(summary = "Listar miembros activos de equipo",
             description = "Retorna jugadores activos del equipo con su posicion principal")

@@ -4,6 +4,7 @@ import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.enums.MatchGenderCategory;
 import com.atleta.demo.enums.MatchStatus;
 import com.atleta.demo.enums.MatchValidationStatus;
+import com.atleta.demo.enums.MatchType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -14,6 +15,9 @@ import java.util.List;
  * Contiene la información completa del partido incluyendo equipos, jugadores y eventos.
  */
 public class MatchResponse {
+
+    /** Canonical result contract version. */
+    private String resultVersion = "match-result-v1";
 
     /**
      * ID del partido
@@ -29,6 +33,11 @@ public class MatchResponse {
      * Categoria de convocatoria por genero.
      */
     private MatchGenderCategory categoriaGenero;
+
+    /**
+     * Competitive context selected for the match.
+     */
+    private MatchType matchType;
 
     /**
      * Fecha y hora programada del partido
@@ -150,6 +159,14 @@ public class MatchResponse {
         return id;
     }
 
+    public String getResultVersion() {
+        return resultVersion;
+    }
+
+    public void setResultVersion(String resultVersion) {
+        this.resultVersion = resultVersion;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -168,6 +185,14 @@ public class MatchResponse {
 
     public void setCategoriaGenero(MatchGenderCategory categoriaGenero) {
         this.categoriaGenero = categoriaGenero;
+    }
+
+    public MatchType getMatchType() {
+        return matchType;
+    }
+
+    public void setMatchType(MatchType matchType) {
+        this.matchType = matchType;
     }
 
     public LocalDateTime getFechaHoraProgramada() {
@@ -328,6 +353,7 @@ public class MatchResponse {
                 "id=" + id +
                 ", modalidad=" + modalidad +
                 ", categoriaGenero=" + categoriaGenero +
+                ", matchType=" + matchType +
                 ", fechaHoraProgramada=" + fechaHoraProgramada +
                 ", estado=" + estado +
                 ", createdAt=" + createdAt +

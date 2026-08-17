@@ -324,6 +324,7 @@ public class TrustScoreService {
         response.setId(match.getId());
         response.setModalidad(match.getModalidad());
         response.setCategoriaGenero(match.getCategoriaGenero());
+        response.setMatchType(match.getMatchType());
         response.setFechaHoraProgramada(match.getFechaHoraProgramada());
         response.setEstado(match.getEstado());
         response.setCreatedAt(match.getCreatedAt());

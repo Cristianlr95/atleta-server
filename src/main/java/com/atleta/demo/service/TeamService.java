@@ -135,6 +135,18 @@ public class TeamService {
     }
 
     @Transactional(readOnly = true)
+    public TeamResponse getTeamById(Long teamId) {
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado: " + teamId));
+
+        if (Boolean.TRUE.equals(team.getArchived())) {
+            throw new IllegalArgumentException("Equipo no encontrado: " + teamId);
+        }
+
+        return toTeamResponse(team);
+    }
+
+    @Transactional(readOnly = true)
     public List<TeamActiveMemberResponse> getActiveMembersByTeam(Long teamId) {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado: " + teamId));

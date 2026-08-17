@@ -6,6 +6,7 @@ import com.atleta.demo.dto.request.JoinMatchRequest;
 import com.atleta.demo.entity.*;
 import com.atleta.demo.enums.EventType;
 import com.atleta.demo.enums.MatchMode;
+import com.atleta.demo.enums.MatchType;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +22,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.web.context.WebApplicationContext;
 
 import com.atleta.demo.config.TestConfig;
@@ -28,8 +30,11 @@ import com.atleta.demo.config.TestConfig;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.List;
+import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -76,6 +81,15 @@ public class MatchControllerIntegrationTest {
 
     @Autowired
     private PositionRepository positionRepository;
+
+    @Autowired
+    private MatchRepository matchRepository;
+
+    @Autowired
+    private MatchInviteRepository matchInviteRepository;
+
+    @Autowired
+    private MatchTeamRepository matchTeamRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -158,12 +172,111 @@ public class MatchControllerIntegrationTest {
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.modalidad").value("CINCO_VS_CINCO"))
+                .andExpect(jsonPath("$.matchType").value("FRIENDLY"))
                 .andExpect(jsonPath("$.latitud").value(40.7128))
                 .andExpect(jsonPath("$.longitud").value(-74.0060))
                 .andExpect(jsonPath("$.cuota").value(25.00))
                 .andExpect(jsonPath("$.estado").value("CREADO"))
                 .andExpect(jsonPath("$.creador.atletaUuid").value(testCreatorUuid.toString()))
                 .andExpect(jsonPath("$.createdAt").exists());
+    }
+
+    @Test
+    void testCreateMatchOrchestrated_IsAtomicAndIdempotent() throws Exception {
+        Map<String, Object> payload = orchestratedPayload(List.of(testPlayerUuid));
+
+        String firstResponse = mockMvc.perform(post("/api/v1/matches/orchestrated")
+                        .with(jwtFor(testCreatorUuid))
+                        .header("Idempotency-Key", "create-match-abc-123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.replayed").value(false))
+                .andExpect(jsonPath("$.match.matchType").value("POINTS"))
+                .andExpect(jsonPath("$.match.matchTeams", hasSize(1)))
+                .andExpect(jsonPath("$.invitations", hasSize(1)))
+                .andExpect(jsonPath("$.invitations[0].targetUuid").value(testPlayerUuid.toString()))
+                .andReturn().getResponse().getContentAsString();
+
+        long matchId = objectMapper.readTree(firstResponse).path("match").path("id").asLong();
+
+        mockMvc.perform(post("/api/v1/matches/orchestrated")
+                        .with(jwtFor(testCreatorUuid))
+                        .header("Idempotency-Key", "create-match-abc-123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.match.id").value(matchId))
+                .andExpect(jsonPath("$.invitations", hasSize(1)));
+
+        assertThat(matchRepository.count(), is(1L));
+        assertThat(matchTeamRepository.count(), is(1L));
+        assertThat(matchInviteRepository.count(), is(1L));
+    }
+
+    @Test
+    void testCreateMatchOrchestrated_RollsBackEverythingWhenAnInviteFails() throws Exception {
+        Map<String, Object> payload = orchestratedPayload(List.of(testPlayerUuid, UUID.randomUUID()));
+
+        mockMvc.perform(post("/api/v1/matches/orchestrated")
+                        .with(jwtFor(testCreatorUuid))
+                        .header("Idempotency-Key", "create-match-rollback-123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest());
+
+        TestTransaction.end();
+        TestTransaction.start();
+
+        assertThat(matchRepository.count(), is(0L));
+        assertThat(matchTeamRepository.count(), is(0L));
+        assertThat(matchInviteRepository.count(), is(0L));
+    }
+
+    private Map<String, Object> orchestratedPayload(List<UUID> targetUuids) {
+        Map<String, Object> match = Map.of(
+                "creadorUuid", testCreatorUuid,
+                "modalidad", "CINCO_VS_CINCO",
+                "matchType", "POINTS",
+                "categoriaGenero", "MIXTO",
+                "fechaHoraProgramada", LocalDateTime.now().plusDays(1).toString()
+        );
+        return Map.of(
+                "match", match,
+                "teamId", testTeamId,
+                "targetUuids", targetUuids,
+                "invitationMessage", "Sumate al partido"
+        );
+    }
+
+    @Test
+    void testCreateMatch_PersistsEveryMatchTypeAcrossCreateGetAndList() throws Exception {
+        for (MatchType matchType : MatchType.values()) {
+            CreateMatchRequest request = new CreateMatchRequest();
+            request.setModalidad(MatchMode.CINCO_VS_CINCO);
+            request.setMatchType(matchType);
+            request.setFechaHoraProgramada(LocalDateTime.now().plusDays(1));
+            request.setCreadorUuid(testCreatorUuid);
+
+            String response = mockMvc.perform(post("/api/v1/matches")
+                            .with(jwtFor(testCreatorUuid))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.matchType").value(matchType.name()))
+                    .andReturn().getResponse().getContentAsString();
+
+            long matchId = objectMapper.readTree(response).get("id").asLong();
+
+            mockMvc.perform(get("/api/v1/matches/{matchId}", matchId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.matchType").value(matchType.name()));
+
+            mockMvc.perform(get("/api/v1/matches"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id == " + matchId + ")].matchType").value(matchType.name()));
+        }
     }
 
     @Test

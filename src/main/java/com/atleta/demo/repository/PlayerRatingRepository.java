@@ -30,6 +30,10 @@ public interface PlayerRatingRepository extends JpaRepository<PlayerRating, Long
     @Query("SELECT pr FROM PlayerRating pr WHERE pr.playerProfile.atletaUuid = :playerProfileId ORDER BY pr.roleType, pr.priorityLevel")
     List<PlayerRating> findByPlayerProfileId(@Param("playerProfileId") UUID playerProfileId);
 
+    @Query("SELECT pr FROM PlayerRating pr JOIN FETCH pr.playerProfile " +
+           "WHERE pr.playerProfile.atletaUuid IN :playerProfileIds")
+    List<PlayerRating> findByPlayerProfileIds(@Param("playerProfileIds") List<UUID> playerProfileIds);
+
     /**
      * Busca la calificación específica de un jugador para un rol y prioridad dados
      * @param playerProfileId UUID del perfil del jugador

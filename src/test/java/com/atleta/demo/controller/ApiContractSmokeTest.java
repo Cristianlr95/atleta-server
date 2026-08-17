@@ -5,17 +5,21 @@ import com.atleta.demo.dto.request.CreateMatchEventRequest;
 import com.atleta.demo.dto.request.CreateMatchInviteRequest;
 import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
 import com.atleta.demo.dto.request.UpdateTrustScoreRequest;
+import com.atleta.demo.dto.request.UpdatePlayerProfileRequest;
 import com.atleta.demo.dto.response.AthleteResponse;
+import com.atleta.demo.dto.response.AuthResponse;
 import com.atleta.demo.dto.response.LeaderboardEntryResponse;
 import com.atleta.demo.dto.response.MatchClosePreviewResponse;
 import com.atleta.demo.dto.response.MatchEventResponse;
 import com.atleta.demo.dto.response.MatchMvpResponse;
+import com.atleta.demo.dto.response.MatchInviteDeliveryResponse;
 import com.atleta.demo.dto.response.MatchResponse;
 import com.atleta.demo.dto.response.PlayerPositionResponse;
 import com.atleta.demo.dto.response.PlayerProfileResponse;
 import com.atleta.demo.dto.response.PositionResponse;
 import com.atleta.demo.dto.response.SocialRequestResponse;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
+import com.atleta.demo.dto.response.TeamLeaderboardEntryResponse;
 import com.atleta.demo.dto.response.TeamResponse;
 import com.atleta.demo.dto.response.TrustLogResponse;
 import com.atleta.demo.config.TestConfig;
@@ -40,11 +44,14 @@ import com.atleta.demo.service.JwtService;
 import com.atleta.demo.service.MatchLiveEventService;
 import com.atleta.demo.service.MatchMvpService;
 import com.atleta.demo.service.MatchService;
+import com.atleta.demo.service.OrchestratedMatchCreationService;
 import com.atleta.demo.service.PlayerProfileService;
 import com.atleta.demo.service.PlayerAchievementService;
 import com.atleta.demo.service.RatingService;
 import com.atleta.demo.service.SocialService;
+import com.atleta.demo.service.SessionLifecycleService;
 import com.atleta.demo.service.TeamService;
+import com.atleta.demo.service.TeamLeaderboardService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -55,7 +62,10 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -81,6 +91,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = {
         AthleteController.class,
         TeamController.class,
+        TeamLeaderboardController.class,
         MatchController.class,
         SocialController.class,
         RatingController.class,
@@ -109,10 +120,22 @@ class ApiContractSmokeTest {
     private JwtService jwtService;
 
     @MockBean
+    private SessionLifecycleService sessionLifecycleService;
+
+    @MockBean
+    private JwtDecoder jwtDecoder;
+
+    @MockBean
     private TeamService teamService;
 
     @MockBean
+    private TeamLeaderboardService teamLeaderboardService;
+
+    @MockBean
     private MatchService matchService;
+
+    @MockBean
+    private OrchestratedMatchCreationService orchestratedMatchCreationService;
 
     @MockBean
     private MatchLiveEventService matchLiveEventService;
@@ -150,7 +173,9 @@ class ApiContractSmokeTest {
         when(athleteService.authenticateEntity("demo@atleta.test", "secret123"))
                 .thenReturn(Optional.of(athlete));
         when(googleAuthService.authenticateWithGoogle("google-token")).thenReturn(athlete);
-        when(jwtService.generateToken(athlete)).thenReturn("jwt-token");
+        when(sessionLifecycleService.createSession(athlete)).thenReturn(new com.atleta.demo.dto.response.AuthResponse(
+                USER_ID, "demo@atleta.test", "Jugador Demo", GenderType.MASCULINO,
+                "LOCAL", "jwt-token", "refresh-token"));
 
         mockMvc.perform(post("/api/v1/athletes/register")
                         .with(jwtFor(USER_ID))
@@ -187,6 +212,40 @@ class ApiContractSmokeTest {
     }
 
     @Test
+    void sessionLifecycleRoutesKeepRotationRevocationAndResetContract() throws Exception {
+        AuthResponse refreshed = new AuthResponse(
+                USER_ID, "demo@atleta.test", "Jugador Demo", GenderType.MASCULINO,
+                "LOCAL", "access-2", "refresh-2");
+        when(sessionLifecycleService.rotateRefreshToken("refresh-1")).thenReturn(refreshed);
+
+        mockMvc.perform(post("/api/v1/athletes/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("refreshToken", "refresh-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("access-2"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-2"));
+
+        mockMvc.perform(post("/api/v1/athletes/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("refreshToken", "refresh-2"))))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/v1/athletes/password-reset/request")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("email", "demo@atleta.test"))))
+                .andExpect(status().isAccepted());
+
+        mockMvc.perform(post("/api/v1/athletes/password-reset/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("token", "reset-token", "newPassword", "new-secret-123"))))
+                .andExpect(status().isNoContent());
+
+        verify(sessionLifecycleService).revoke("refresh-2");
+        verify(sessionLifecycleService).requestPasswordReset("demo@atleta.test");
+        verify(sessionLifecycleService).confirmPasswordReset("reset-token", "new-secret-123");
+    }
+
+    @Test
     void playerProfileRoutesKeepFrontendContract() throws Exception {
         PlayerProfileResponse profile = profileResponse(USER_ID, "Demo10");
         PlayerPositionResponse position = new PlayerPositionResponse(
@@ -206,7 +265,7 @@ class ApiContractSmokeTest {
 
         when(playerProfileService.createPlayerProfile(any())).thenReturn(profile);
         when(playerProfileService.findByAtletaUuid(USER_ID)).thenReturn(Optional.of(profile));
-        when(playerProfileService.updateAlias(USER_ID, "Demo11")).thenReturn(profile);
+        when(playerProfileService.updateProfile(eq(USER_ID), any(UpdatePlayerProfileRequest.class))).thenReturn(profile);
         when(playerProfileService.getPlayerPositions(USER_ID)).thenReturn(List.of(position));
         when(playerProfileService.updateTrustScore(any())).thenReturn(profile);
         when(playerProfileService.getTrustScoreHistory(USER_ID)).thenReturn(List.of(trustLog));
@@ -301,7 +360,7 @@ class ApiContractSmokeTest {
                 .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
 
         verify(playerProfileService, never()).findByAtletaUuid(OTHER_USER_ID);
-        verify(playerProfileService, never()).updateAlias(eq(OTHER_USER_ID), any());
+        verify(playerProfileService, never()).updateProfile(eq(OTHER_USER_ID), any(UpdatePlayerProfileRequest.class));
         verify(playerProfileService, never()).getPlayerPositions(OTHER_USER_ID);
         verify(playerProfileService, never()).getTrustScoreHistory(OTHER_USER_ID);
     }
@@ -355,6 +414,32 @@ class ApiContractSmokeTest {
                 .andExpect(status().isNoContent());
 
         verify(teamService).deleteTeam(77L, USER_ID);
+    }
+
+    @Test
+    void teamLeaderboardUsesAuthenticatedViewerAndStableContract() throws Exception {
+        when(teamLeaderboardService.getLeaderboard(77L, USER_ID)).thenReturn(List.of(
+                new TeamLeaderboardEntryResponse(1, USER_ID, "Demo10", BigDecimal.valueOf(82.5), 9, true),
+                new TeamLeaderboardEntryResponse(2, OTHER_USER_ID, "Rival9", null, 0, false)
+        ));
+
+        mockMvc.perform(get("/api/v1/teams/{teamId}/leaderboard", 77L).with(jwtFor(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].playerProfileId").value(USER_ID.toString()))
+                .andExpect(jsonPath("$[0].score").value(82.5))
+                .andExpect(jsonPath("$[1].rated").value(false))
+                .andExpect(jsonPath("$[1].score").doesNotExist());
+
+        verify(teamLeaderboardService).getLeaderboard(77L, USER_ID);
+    }
+
+    @Test
+    void teamLeaderboardReturnsForbiddenForNonMembers() throws Exception {
+        when(teamLeaderboardService.getLeaderboard(77L, USER_ID))
+                .thenThrow(new AccessDeniedException("No pertenece al equipo"));
+
+        mockMvc.perform(get("/api/v1/teams/{teamId}/leaderboard", 77L).with(jwtFor(USER_ID)))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -448,6 +533,18 @@ class ApiContractSmokeTest {
                         .content(json(Map.of("votedUserId", OTHER_USER_ID.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.matchId").value(42));
+    }
+
+    @Test
+    void liveStreamAuthorizesJwtViewerBeforeSubscribing() throws Exception {
+        when(matchLiveEventService.subscribe(42L)).thenReturn(new SseEmitter());
+
+        mockMvc.perform(get("/api/v1/matches/{matchId}/live", 42L)
+                        .with(jwtFor(USER_ID)))
+                .andExpect(status().isOk());
+
+        verify(matchService).requireLiveStreamAccess(42L, USER_ID);
+        verify(matchLiveEventService).subscribe(42L);
     }
 
     @Test
@@ -565,6 +662,13 @@ class ApiContractSmokeTest {
 
         when(socialService.createMatchInvite(any(CreateMatchInviteRequest.class))).thenReturn(invite);
         when(socialService.createMatchInvitesBatch(any(CreateMatchInvitesBatchRequest.class))).thenReturn(List.of(invite));
+        when(socialService.createMatchInvitesBatchDetailed(any(CreateMatchInvitesBatchRequest.class)))
+                .thenReturn(List.of(new MatchInviteDeliveryResponse(
+                        OTHER_USER_ID,
+                        MatchInviteDeliveryResponse.DeliveryStatus.SENT,
+                        invite,
+                        null
+                )));
 
         mockMvc.perform(post("/api/v1/social/match-invites")
                         .with(jwtFor(USER_ID))
@@ -597,6 +701,23 @@ class ApiContractSmokeTest {
                 ArgumentCaptor.forClass(CreateMatchInvitesBatchRequest.class);
         verify(socialService).createMatchInvitesBatch(batchCaptor.capture());
         assertEquals(USER_ID, batchCaptor.getValue().getRequesterUuid());
+
+        mockMvc.perform(post("/api/v1/social/match-invites/batch/detailed")
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "matchId", 42,
+                                "teamId", 77,
+                                "requesterUuid", OTHER_USER_ID.toString(),
+                                "targetUuids", List.of(OTHER_USER_ID.toString())
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].status").value("SENT"));
+
+        ArgumentCaptor<CreateMatchInvitesBatchRequest> detailedCaptor =
+                ArgumentCaptor.forClass(CreateMatchInvitesBatchRequest.class);
+        verify(socialService).createMatchInvitesBatchDetailed(detailedCaptor.capture());
+        assertEquals(USER_ID, detailedCaptor.getValue().getRequesterUuid());
     }
 
     @Test

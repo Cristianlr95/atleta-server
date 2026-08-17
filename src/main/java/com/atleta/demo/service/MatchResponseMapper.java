@@ -50,6 +50,7 @@ public class MatchResponseMapper {
         response.setId(match.getId());
         response.setModalidad(match.getModalidad());
         response.setCategoriaGenero(match.getCategoriaGenero());
+        response.setMatchType(match.getMatchType());
         response.setFechaHoraProgramada(match.getFechaHoraProgramada());
         response.setLatitud(match.getLatitud());
         response.setLongitud(match.getLongitud());
@@ -145,6 +146,7 @@ public class MatchResponseMapper {
 
     public MatchEventResponse toMatchEventResponse(MatchEvent event) {
         MatchEventResponse response = new MatchEventResponse();
+        response.setSchemaVersion(1);
         response.setId(event.getId());
         response.setEventType(event.getTipoEvento());
         response.setConfirmedByLocal(event.getConfirmedByHome());

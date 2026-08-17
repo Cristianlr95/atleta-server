@@ -3,6 +3,7 @@ package com.atleta.demo.service;
 import com.atleta.demo.dto.request.CreatePlayerProfileRequest;
 import com.atleta.demo.dto.request.AddPlayerPositionRequest;
 import com.atleta.demo.dto.request.UpdateTrustScoreRequest;
+import com.atleta.demo.dto.request.UpdatePlayerProfileRequest;
 import com.atleta.demo.dto.response.PlayerProfileResponse;
 import com.atleta.demo.dto.response.PlayerPositionResponse;
 import com.atleta.demo.dto.response.PositionResponse;
@@ -17,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -160,6 +163,86 @@ public class PlayerProfileService {
         logger.info("Alias actualizado exitosamente para jugador: {}", atletaUuid);
 
         return convertToResponse(updatedProfile);
+    }
+
+    public PlayerProfileResponse updateProfile(UUID atletaUuid, UpdatePlayerProfileRequest request) {
+        PlayerProfile profile = playerProfileRepository.findById(atletaUuid)
+                .orElseThrow(() -> new IllegalArgumentException("No se encontro perfil de jugador con UUID: " + atletaUuid));
+
+        String normalizedName = null;
+        if (request.getNombre() != null) {
+            normalizedName = request.getNombre().trim();
+            if (normalizedName.isEmpty()) {
+                throw new IllegalArgumentException("El nombre no puede estar vacio");
+            }
+        }
+
+        String normalizedAlias = null;
+        if (request.getAlias() != null) {
+            normalizedAlias = request.getAlias().trim();
+            if (normalizedAlias.isEmpty()) {
+                throw new IllegalArgumentException("El alias no puede estar vacio");
+            }
+            if (!normalizedAlias.equals(profile.getAlias()) && playerProfileRepository.existsByAlias(normalizedAlias)) {
+                throw new IllegalArgumentException("Ya existe un jugador con el alias: " + normalizedAlias);
+            }
+        }
+
+        List<Long> positionIds = request.getPositionIds();
+        Map<Long, Position> positionsById = null;
+        Map<Long, Integer> xpByPosition = null;
+        if (request.getPositionIds() != null) {
+            if (positionIds.size() != 3 || positionIds.stream().distinct().count() != 3) {
+                throw new IllegalArgumentException("Debes seleccionar exactamente 3 posiciones distintas");
+            }
+
+            Map<Long, Position> loadedPositions = new LinkedHashMap<>();
+            positionRepository.findAllById(positionIds)
+                    .forEach(position -> loadedPositions.put(position.getId(), position));
+            if (loadedPositions.size() != 3) {
+                throw new IllegalArgumentException("Una o mas posiciones no existen");
+            }
+            positionsById = loadedPositions;
+
+            xpByPosition = playerPositionRepository.findByPlayerOrderByPrioridad(profile)
+                    .stream()
+                    .collect(Collectors.toMap(item -> item.getPosition().getId(), PlayerPosition::getXp));
+        }
+
+        if (normalizedName != null) {
+            profile.getAthlete().setNombre(normalizedName);
+        }
+        if (normalizedAlias != null) {
+            profile.setAlias(normalizedAlias);
+        }
+
+        List<PlayerPosition> updatedPositions = null;
+        if (positionIds != null && positionsById != null && xpByPosition != null) {
+            playerPositionRepository.deleteByPlayer(profile);
+            playerPositionRepository.flush();
+
+            updatedPositions = new java.util.ArrayList<>();
+            for (int index = 0; index < positionIds.size(); index++) {
+                Long positionId = positionIds.get(index);
+                updatedPositions.add(new PlayerPosition(
+                        profile,
+                        positionsById.get(positionId),
+                        index + 1,
+                        xpByPosition.getOrDefault(positionId, 0)
+                ));
+            }
+            updatedPositions = playerPositionRepository.saveAll(updatedPositions);
+        }
+
+        if (normalizedName != null) {
+            athleteRepository.save(profile.getAthlete());
+        }
+        PlayerProfile updatedProfile = playerProfileRepository.save(profile);
+        PlayerProfileResponse response = convertToResponse(updatedProfile);
+        if (updatedPositions != null) {
+            response.setPositions(updatedPositions.stream().map(this::convertToPlayerPositionResponse).toList());
+        }
+        return response;
     }
 
     /**
@@ -348,6 +431,7 @@ public class PlayerProfileService {
                 playerProfile.getTrustScore(),
                 playerProfile.getCreatedAt()
         );
+        response.setNombre(playerProfile.getAthlete() != null ? playerProfile.getAthlete().getNombre() : null);
 
         // Incluir posiciones si están cargadas
         if (playerProfile.getPositions() != null && !playerProfile.getPositions().isEmpty()) {
