@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -25,6 +27,10 @@ import java.util.UUID;
 public interface MatchRepository extends JpaRepository<Match, Long> {
 
     Optional<Match> findByCreadorAtletaUuidAndCreationIdempotencyKey(UUID creadorUuid, String creationIdempotencyKey);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT m FROM Match m WHERE m.id = :matchId")
+    Optional<Match> findByIdForUpdate(@Param("matchId") Long matchId);
 
     /**
      * Busca partidos por modalidad

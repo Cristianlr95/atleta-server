@@ -101,6 +101,22 @@ $env:JWT_SECRET="replace-with-a-secure-secret-of-at-least-32-bytes"
 .\mvnw.cmd spring-boot:run
 ```
 
+### Cuentas de prueba de desarrollo
+
+Con el perfil `dev`, el backend crea de forma idempotente catorce cuentas locales
+en el equipo mixto **Atleta Dev FC**. Se almacenan en PostgreSQL y no se crean en
+staging ni produccion. La contrasena se configura con `DEV_SEED_PASSWORD` (por
+defecto: `AtletaDev!2026`).
+
+| Cuenta | Estado para probar |
+| --- | --- |
+| `capitan.dev@atleta.test` | Capitán de Atleta Dev FC |
+| `dt.dev@atleta.test` | Dirección técnica del equipo |
+| Cualquier otra cuenta `*.dev@atleta.test` | Jugador/a de Atleta Dev FC |
+| `onboarding.dev@atleta.test` | Sin perfil, para recorrer el onboarding |
+
+Para desactivar esta siembra en tu maquina: `DEV_SEED_ENABLED=false`.
+
 ```bash
 # Linux/macOS
 export DB_HOST=localhost

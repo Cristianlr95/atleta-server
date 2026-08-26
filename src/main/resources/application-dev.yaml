@@ -30,9 +30,9 @@ spring:
   flyway:
     enabled: ${FLYWAY_ENABLED:true}
     locations: classpath:db/migration
-    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
     validate-on-migrate: true
-    clean-disabled: ${FLYWAY_CLEAN_DISABLED:false}
+    clean-disabled: ${FLYWAY_CLEAN_DISABLED:true}
     schemas: public
     table: flyway_schema_history
 
@@ -91,5 +91,9 @@ server:
   port: ${SERVER_PORT:8080}
 
 app:
+  dev-seed:
+    # Solo se evalua con el perfil dev; nunca se carga en staging o produccion.
+    enabled: ${DEV_SEED_ENABLED:true}
+    password: ${DEV_SEED_PASSWORD:AtletaDev!2026}
   cors:
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:8100,http://localhost:4200,http://localhost:4201,http://localhost:3000}

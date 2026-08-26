@@ -33,7 +33,9 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -139,7 +141,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(corsProperties.getAllowedOriginPatterns());
         configuration.setAllowedMethods(corsProperties.getAllowedMethods());
-        configuration.setAllowedHeaders(corsProperties.getAllowedHeaders());
+        configuration.setAllowedHeaders(allowedHeaders());
         configuration.setExposedHeaders(corsProperties.getExposedHeaders());
         configuration.setAllowCredentials(corsProperties.isAllowCredentials());
         configuration.setMaxAge(corsProperties.getMaxAge());
@@ -147,6 +149,24 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    /**
+     * Las operaciones de creación usan esta llave para que un doble toque o un
+     * reintento de red no creen partidos e invitaciones duplicadas. Se añade de
+     * forma defensiva para que una variable CORS_ALLOWED_HEADERS antigua no
+     * bloquee el preflight del navegador.
+     */
+    private List<String> allowedHeaders() {
+        List<String> headers = new ArrayList<>(corsProperties.getAllowedHeaders());
+        boolean includesIdempotencyKey = headers.stream()
+            .anyMatch(header -> "Idempotency-Key".equalsIgnoreCase(header));
+
+        if (!includesIdempotencyKey) {
+            headers.add("Idempotency-Key");
+        }
+
+        return headers;
     }
 
     private byte[] decodeSecret(String secret) {

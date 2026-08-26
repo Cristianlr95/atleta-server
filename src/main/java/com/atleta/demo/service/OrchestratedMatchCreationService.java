@@ -1,6 +1,6 @@
 package com.atleta.demo.service;
 
-import com.atleta.demo.dto.request.CreateMatchInviteRequest;
+import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
 import com.atleta.demo.dto.request.CreateMatchOrchestratedRequest;
 import com.atleta.demo.dto.response.MatchResponse;
 import com.atleta.demo.dto.response.OrchestratedMatchCreationResponse;
@@ -16,7 +16,6 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
@@ -89,16 +88,15 @@ public class OrchestratedMatchCreationService {
 
         matchService.addTeamToMatch(created.getId(), team.getId(), true, actorUuid);
 
-        List<SocialRequestResponse> invitations = new ArrayList<>();
-        for (UUID targetUuid : distinctTargets) {
-            CreateMatchInviteRequest invite = new CreateMatchInviteRequest();
-            invite.setMatchId(created.getId());
-            invite.setTeamId(team.getId());
-            invite.setRequesterUuid(actorUuid);
-            invite.setTargetUuid(targetUuid);
-            invite.setMessage(request.getInvitationMessage());
-            invitations.add(socialService.createMatchInvite(invite));
-        }
+        CreateMatchInvitesBatchRequest invitationsRequest = new CreateMatchInvitesBatchRequest();
+        invitationsRequest.setMatchId(created.getId());
+        invitationsRequest.setTeamId(team.getId());
+        invitationsRequest.setRequesterUuid(actorUuid);
+        invitationsRequest.setTargetUuids(List.copyOf(distinctTargets));
+        invitationsRequest.setMessage(request.getInvitationMessage());
+        List<SocialRequestResponse> invitations = distinctTargets.isEmpty()
+                ? List.of()
+                : socialService.createMatchInvitesBatch(invitationsRequest);
 
         return new OrchestratedMatchCreationResponse(
                 matchService.getMatchById(created.getId()),

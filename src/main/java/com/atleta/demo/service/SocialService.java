@@ -46,6 +46,7 @@ public class SocialService {
     private final MatchPlayerRepository matchPlayerRepository;
     private final PositionRepository positionRepository;
     private final PlayerPositionRepository playerPositionRepository;
+    private final MatchRosterPolicy matchRosterPolicy;
     private final MatchLiveEventService matchLiveEventService;
     private final PushNotificationTokenRepository pushNotificationTokenRepository;
 
@@ -61,6 +62,7 @@ public class SocialService {
             MatchPlayerRepository matchPlayerRepository,
             PositionRepository positionRepository,
             PlayerPositionRepository playerPositionRepository,
+            MatchRosterPolicy matchRosterPolicy,
             MatchLiveEventService matchLiveEventService,
             PushNotificationTokenRepository pushNotificationTokenRepository
     ) {
@@ -75,6 +77,7 @@ public class SocialService {
         this.matchPlayerRepository = matchPlayerRepository;
         this.positionRepository = positionRepository;
         this.playerPositionRepository = playerPositionRepository;
+        this.matchRosterPolicy = matchRosterPolicy;
         this.matchLiveEventService = matchLiveEventService;
         this.pushNotificationTokenRepository = pushNotificationTokenRepository;
     }
@@ -394,22 +397,42 @@ public class SocialService {
             throw new IllegalArgumentException("La invitacion ya fue respondida");
         }
 
-        boolean accepted = Boolean.TRUE.equals(decision.getAccept());
-        invite.setStatus(accepted ? RequestStatus.ACEPTADA : RequestStatus.RECHAZADA);
+        boolean requestedAcceptance = Boolean.TRUE.equals(decision.getAccept());
+        Match match = matchRepository.findByIdForUpdate(invite.getMatch().getId())
+                .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado"));
+        boolean hasRosterSlot = requestedAcceptance && hasRosterSlot(match);
+        boolean accepted = requestedAcceptance && hasRosterSlot;
+
+        invite.setStatus(!requestedAcceptance
+                ? RequestStatus.RECHAZADA
+                : accepted ? RequestStatus.ACEPTADA : RequestStatus.LISTA_ESPERA);
         invite.setRespondedAt(LocalDateTime.now());
         invite = matchInviteRepository.save(invite);
         ensureMatchParticipationFromInvite(invite, accepted);
+
+        String resultMessage = !requestedAcceptance
+                ? " rechazo"
+                : accepted ? " acepto" : " quedo en lista de espera";
 
         createNotification(
                 invite.getRequester(),
                 NotificationType.RESPUESTA_INVITACION_PARTIDO,
                 "Invitacion de partido respondida",
-                aliasOf(invite.getTarget()) + (accepted ? " acepto" : " rechazo") + " la invitacion al partido #" + invite.getMatch().getId(),
+                aliasOf(invite.getTarget()) + resultMessage + " la invitacion al partido #" + invite.getMatch().getId(),
                 "MATCH_INVITE",
                 invite.getId()
         );
         matchLiveEventService.publishInviteDecision(invite.getMatch().getId(), invite.getId(), invite.getStatus().name());
         return toSocialResponse(invite);
+    }
+
+    /**
+     * The match row is pessimistically locked by the caller, so concurrent
+     * acceptances are serialized and only the earliest responses get a spot.
+     */
+    private boolean hasRosterSlot(Match match) {
+        int matchCapacity = matchRosterPolicy.playersPerTeamByModality(match.getModalidad()) * 2;
+        return matchPlayerRepository.countConfirmedPlayersByMatch(match) < matchCapacity;
     }
 
     @Transactional

@@ -2,7 +2,9 @@ package com.atleta.demo.service;
 
 import com.atleta.demo.dto.request.CreateMatchInviteRequest;
 import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
+import com.atleta.demo.dto.request.RespondRequestDecision;
 import com.atleta.demo.dto.response.MatchInviteDeliveryResponse;
+import com.atleta.demo.dto.response.SocialRequestResponse;
 import com.atleta.demo.entity.Match;
 import com.atleta.demo.entity.MatchInvite;
 import com.atleta.demo.entity.MatchPlayer;
@@ -81,6 +83,9 @@ class SocialServiceTest {
     private PlayerPositionRepository playerPositionRepository;
 
     @Mock
+    private MatchRosterPolicy matchRosterPolicy;
+
+    @Mock
     private MatchLiveEventService matchLiveEventService;
 
     @Mock
@@ -111,6 +116,7 @@ class SocialServiceTest {
                 matchPlayerRepository,
                 positionRepository,
                 playerPositionRepository,
+                matchRosterPolicy,
                 matchLiveEventService,
                 pushNotificationTokenRepository
         );
@@ -276,6 +282,26 @@ class SocialServiceTest {
 
         assertThrows(AccessDeniedException.class, () -> socialService.createMatchInvitesBatchDetailed(request));
         verify(matchInviteRepository, never()).findTopByMatchAndTargetOrderByCreatedAtDesc(any(), any());
+    }
+
+    @Test
+    void respondMatchInvite_placesAcceptedResponseOnWaitlistWhenRosterIsFull() {
+        MatchInvite invite = new MatchInvite(match, matchTeam, creator, target, "sumate");
+        invite.setId(950L);
+        RespondRequestDecision decision = new RespondRequestDecision();
+        decision.setActorUuid(targetUuid);
+        decision.setAccept(true);
+
+        when(matchInviteRepository.findById(invite.getId())).thenReturn(Optional.of(invite));
+        when(matchRepository.findByIdForUpdate(match.getId())).thenReturn(Optional.of(match));
+        when(matchRosterPolicy.playersPerTeamByModality(MatchMode.CINCO_VS_CINCO)).thenReturn(5);
+        when(matchPlayerRepository.countConfirmedPlayersByMatch(match)).thenReturn(10L);
+        when(matchInviteRepository.save(any(MatchInvite.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SocialRequestResponse response = socialService.respondMatchInvite(invite.getId(), decision);
+
+        assertEquals(RequestStatus.LISTA_ESPERA, response.getStatus());
+        verify(matchPlayerRepository, never()).save(any(MatchPlayer.class));
     }
 
     private CreateMatchInviteRequest validInviteRequest(UUID requesterUuid, UUID targetUuid, Long teamId) {
