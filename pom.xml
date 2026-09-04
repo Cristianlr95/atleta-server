@@ -113,7 +113,7 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Testcontainers para testing - Soporte nativo en Spring Boot 3.5.9 -->
+		<!-- Testcontainers para testing (integrado con la versión de Spring Boot declarada arriba) -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-testcontainers</artifactId>

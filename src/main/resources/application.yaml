@@ -52,6 +52,11 @@ features:
   mvp-xp-bonus-enabled: ${MVP_XP_BONUS_ENABLED:true}
 
 atleta:
+  ai:
+    # The default is intentionally local and safe. A remote provider must be enabled explicitly.
+    enabled: ${ATLETA_AI_ENABLED:false}
+    provider: ${ATLETA_AI_PROVIDER:disabled}
+    timeout: ${ATLETA_AI_TIMEOUT:PT8S}
   matches:
     scheduler:
       enabled: ${MATCH_STATUS_SCHEDULER_ENABLED:true}
