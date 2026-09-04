@@ -393,13 +393,36 @@ public class SocialService {
         if (!invite.getTarget().getAtletaUuid().equals(decision.getActorUuid())) {
             throw new IllegalArgumentException("Solo el receptor puede responder la invitacion");
         }
+        boolean requestedAcceptance = Boolean.TRUE.equals(decision.getAccept());
+        Match match = matchRepository.findByIdForUpdate(invite.getMatch().getId())
+                .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado"));
+
+        if (match.getEstado() != com.atleta.demo.enums.MatchStatus.CREADO) {
+            throw new IllegalArgumentException("La convocatoria ya esta cerrada para este partido");
+        }
+
+        if (invite.getStatus() == RequestStatus.ACEPTADA || invite.getStatus() == RequestStatus.LISTA_ESPERA) {
+            if (requestedAcceptance) {
+                throw new IllegalArgumentException("La invitacion ya fue aceptada");
+            }
+
+            boolean releasedRosterSlot = invite.getStatus() == RequestStatus.ACEPTADA;
+            invite.setStatus(RequestStatus.CANCELADA);
+            invite.setRespondedAt(LocalDateTime.now());
+            invite = matchInviteRepository.save(invite);
+            ensureMatchParticipationFromInvite(invite, false);
+            if (releasedRosterSlot) {
+                matchPlayerRepository.flush();
+                promoteFirstWaitlisted(match);
+            }
+            matchLiveEventService.publishInviteDecision(match.getId(), invite.getId(), invite.getStatus().name());
+            return toSocialResponse(invite);
+        }
+
         if (invite.getStatus() != RequestStatus.PENDIENTE) {
             throw new IllegalArgumentException("La invitacion ya fue respondida");
         }
 
-        boolean requestedAcceptance = Boolean.TRUE.equals(decision.getAccept());
-        Match match = matchRepository.findByIdForUpdate(invite.getMatch().getId())
-                .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado"));
         boolean hasRosterSlot = requestedAcceptance && hasRosterSlot(match);
         boolean accepted = requestedAcceptance && hasRosterSlot;
 
@@ -426,13 +449,62 @@ public class SocialService {
         return toSocialResponse(invite);
     }
 
+    private void promoteFirstWaitlisted(Match match) {
+        if (!hasRosterSlot(match)) {
+            return;
+        }
+
+        for (MatchInvite waitlisted : matchInviteRepository
+                .findByMatchAndStatusOrderByRespondedAtAscCreatedAtAsc(match, RequestStatus.LISTA_ESPERA)) {
+            if (!isEligibleForPromotion(waitlisted)) {
+                waitlisted.setStatus(RequestStatus.CANCELADA);
+                waitlisted.setRespondedAt(LocalDateTime.now());
+                MatchInvite skipped = matchInviteRepository.save(waitlisted);
+                createNotification(
+                        skipped.getTarget(),
+                        NotificationType.RESPUESTA_INVITACION_PARTIDO,
+                        "No se pudo confirmar el cupo",
+                        "Completa tu posicion principal antes de participar en el partido #" + match.getId(),
+                        "MATCH_INVITE",
+                        skipped.getId()
+                );
+                matchLiveEventService.publishInviteDecision(
+                        match.getId(), skipped.getId(), skipped.getStatus().name()
+                );
+                continue;
+            }
+
+            waitlisted.setStatus(RequestStatus.ACEPTADA);
+            waitlisted.setRespondedAt(LocalDateTime.now());
+            MatchInvite promoted = matchInviteRepository.save(waitlisted);
+            ensureMatchParticipationFromInvite(promoted, true);
+            createNotification(
+                    promoted.getTarget(),
+                    NotificationType.RESPUESTA_INVITACION_PARTIDO,
+                    "Cupo confirmado",
+                    "Se libero un cupo y ahora estas confirmado para el partido #" + match.getId(),
+                    "MATCH_INVITE",
+                    promoted.getId()
+            );
+            matchLiveEventService.publishInviteDecision(
+                    match.getId(), promoted.getId(), promoted.getStatus().name()
+            );
+            return;
+        }
+    }
+
+    private boolean isEligibleForPromotion(MatchInvite invite) {
+        return resolveTeamForInvite(invite) != null && resolvePrimaryPosition(invite.getTarget()) != null;
+    }
+
     /**
      * The match row is pessimistically locked by the caller, so concurrent
      * acceptances are serialized and only the earliest responses get a spot.
      */
     private boolean hasRosterSlot(Match match) {
         int matchCapacity = matchRosterPolicy.playersPerTeamByModality(match.getModalidad()) * 2;
-        return matchPlayerRepository.countConfirmedPlayersByMatch(match) < matchCapacity;
+        long confirmed = matchRosterPolicy.confirmedPlayerCount(match, matchPlayerRepository.findByMatch(match));
+        return confirmed < matchCapacity;
     }
 
     @Transactional

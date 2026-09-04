@@ -31,8 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1073,6 +1075,45 @@ public class RatingService {
         }
         
         return calculateHybridOVRFromRatings(ratings);
+    }
+
+    /**
+     * Calculates the hybrid OVR for several players using one ratings query.
+     * Players without initialized ratings are intentionally omitted so the
+     * caller can apply the product fallback appropriate to its context.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, BigDecimal> calculateHybridOVRBatch(List<UUID> playerProfileIds) {
+        if (playerProfileIds == null || playerProfileIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<UUID> uniqueIds = playerProfileIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (uniqueIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<UUID, List<PlayerRating>> ratingsByPlayer = new LinkedHashMap<>();
+        for (PlayerRating rating : playerRatingRepository.findByPlayerProfileIds(uniqueIds)) {
+            if (rating.getPlayerProfile() == null || rating.getPlayerProfile().getAtletaUuid() == null) {
+                continue;
+            }
+            ratingsByPlayer
+                    .computeIfAbsent(rating.getPlayerProfile().getAtletaUuid(), ignored -> new ArrayList<>())
+                    .add(rating);
+        }
+
+        Map<UUID, BigDecimal> result = new LinkedHashMap<>();
+        uniqueIds.forEach(playerId -> {
+            List<PlayerRating> ratings = ratingsByPlayer.get(playerId);
+            if (ratings != null && !ratings.isEmpty()) {
+                result.put(playerId, calculateHybridOVRFromRatings(ratings));
+            }
+        });
+        return result;
     }
 
     /**

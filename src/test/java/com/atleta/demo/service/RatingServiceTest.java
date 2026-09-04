@@ -22,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -70,6 +71,29 @@ class RatingServiceTest {
                 playerPositionRepository,
                 matchRepository
         );
+    }
+
+    @Test
+    void calculateHybridOvrBatchUsesOneRepositoryQueryAndGroupsPlayers() {
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        PlayerProfile first = new PlayerProfile();
+        first.setAtletaUuid(firstId);
+        PlayerProfile second = new PlayerProfile();
+        second.setAtletaUuid(secondId);
+
+        PlayerRating firstHigh = new PlayerRating(first, RoleType.ATAQUE, PriorityLevel.PRINCIPAL, BigDecimal.valueOf(80));
+        PlayerRating firstLow = new PlayerRating(first, RoleType.DEFENSA, PriorityLevel.SECUNDARIA, BigDecimal.valueOf(70));
+        PlayerRating secondOnly = new PlayerRating(second, RoleType.MEDIOCAMPO, PriorityLevel.PRINCIPAL, BigDecimal.valueOf(60));
+        List<UUID> requested = List.of(firstId, secondId);
+        when(playerRatingRepository.findByPlayerProfileIds(requested))
+                .thenReturn(List.of(firstHigh, firstLow, secondOnly));
+
+        Map<UUID, BigDecimal> result = ratingService.calculateHybridOVRBatch(requested);
+
+        assertEquals(new BigDecimal("77.00"), result.get(firstId));
+        assertEquals(new BigDecimal("60.00"), result.get(secondId));
+        verify(playerRatingRepository).findByPlayerProfileIds(requested);
     }
 
     @Test

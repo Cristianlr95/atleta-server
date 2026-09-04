@@ -94,6 +94,8 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/athletes/auth/refresh").permitAll()
                     .requestMatchers("/api/v1/athletes/auth/logout").permitAll()
                     .requestMatchers("/api/v1/athletes/password-reset/**").permitAll()
+                    // Las fotos y logos se muestran como recursos de perfiles y equipos públicos.
+                    .requestMatchers("/uploads/**").permitAll()
                     .requestMatchers("/actuator/health").permitAll()
                     .requestMatchers("/actuator/health/**").permitAll()
                     .anyRequest().authenticated();

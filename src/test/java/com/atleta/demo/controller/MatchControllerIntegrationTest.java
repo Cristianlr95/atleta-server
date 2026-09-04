@@ -92,6 +92,9 @@ public class MatchControllerIntegrationTest {
     private MatchTeamRepository matchTeamRepository;
 
     @Autowired
+    private MatchPlayerRepository matchPlayerRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     private MockMvc mockMvc;
@@ -466,6 +469,8 @@ public class MatchControllerIntegrationTest {
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
+        addConfirmedPlayers(matchId, 9);
+
         // When & Then - Change status to INICIADO
         mockMvc.perform(put("/api/v1/matches/{matchId}/status", matchId)
                 .with(jwtFor(testCreatorUuid))
@@ -641,6 +646,10 @@ public class MatchControllerIntegrationTest {
                 .with(jwtFor(testPlayerUuid)))
                 .andExpect(status().isOk());
 
+        // Complete the roster after the player joins so the service-level per-team
+        // capacity validation remains meaningful for the participant under test.
+        addConfirmedPlayers(matchId, 8);
+
         mockMvc.perform(put("/api/v1/matches/{matchId}/status", matchId)
                 .with(jwtFor(testCreatorUuid))
                 .param("status", "INICIADO"))
@@ -664,6 +673,31 @@ public class MatchControllerIntegrationTest {
                 .andExpect(jsonPath("$.player.atletaUuid").value(testPlayerUuid.toString()))
                 .andExpect(jsonPath("$.confirmedByLocal").value(true))
                 .andExpect(jsonPath("$.confirmedByVisitante").value(true));
+    }
+
+    private void addConfirmedPlayers(Long matchId, int amount) {
+        Match match = matchRepository.findById(matchId).orElseThrow();
+        Team team = teamRepository.findById(testTeamId).orElseThrow();
+        Position position = positionRepository.findById(testPositionId).orElseThrow();
+
+        for (int index = 0; index < amount; index++) {
+            Athlete athlete = new Athlete();
+            athlete.setEmail("confirmed-" + matchId + "-" + index + "@example.com");
+            athlete.setPasswordHash("hashedpassword");
+            athlete.setNombre("Confirmed " + index);
+            athlete = athleteRepository.save(athlete);
+
+            PlayerProfile profile = new PlayerProfile();
+            profile.setAtletaUuid(athlete.getAtletaUuid());
+            profile.setAthlete(athlete);
+            profile.setAlias("Confirmed" + index);
+            profile.setTrustScore(100);
+            profile = playerProfileRepository.save(profile);
+
+            MatchPlayer participation = new MatchPlayer(match, team, profile, position, PlayerRole.JUGADOR);
+            participation.setConfirmado(true);
+            matchPlayerRepository.save(participation);
+        }
     }
 
     @Test

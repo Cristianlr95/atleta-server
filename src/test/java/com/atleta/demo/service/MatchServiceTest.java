@@ -3,6 +3,7 @@ package com.atleta.demo.service;
 import com.atleta.demo.dto.request.CreateMatchRequest;
 import com.atleta.demo.dto.request.CreateMatchEventRequest;
 import com.atleta.demo.dto.request.JoinMatchRequest;
+import com.atleta.demo.dto.request.MatchClosePreviewRequest;
 import com.atleta.demo.dto.response.MatchResponse;
 import com.atleta.demo.dto.response.MatchPlayerResponse;
 import com.atleta.demo.entity.*;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
@@ -67,6 +69,9 @@ class MatchServiceTest {
 
     @Mock
     private RatingService ratingService;
+
+    @Spy
+    private MatchRosterPolicy matchRosterPolicy = new MatchRosterPolicy();
 
     private MatchStatusPolicy matchStatusPolicy;
     private MatchFinalScoreService matchFinalScoreService;
@@ -147,7 +152,7 @@ class MatchServiceTest {
                 matchFinalScoreService,
                 matchPlayerHistoryService,
                 matchPendingEventClosureService,
-                new MatchRosterPolicy(),
+                matchRosterPolicy,
                 new MatchPostMatchRatingService(
                         matchTeamRepository,
                         matchPlayerRepository,
@@ -451,6 +456,8 @@ class MatchServiceTest {
         when(matchRepository.save(any(Match.class))).thenReturn(sampleMatch);
         when(matchTeamRepository.findByMatch(sampleMatch)).thenReturn(java.util.Collections.emptyList());
         when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(java.util.Collections.emptyList());
+        doReturn(true).when(matchRosterPolicy)
+                .hasMinimumConfirmedPlayers(sampleMatch, java.util.Collections.emptyList());
         when(matchEventRepository.findByMatchOrderByCreatedAt(sampleMatch)).thenReturn(java.util.Collections.emptyList());
 
         // Act
@@ -463,6 +470,55 @@ class MatchServiceTest {
 
         verify(matchRepository).findById(matchId);
         verify(matchRepository).save(sampleMatch);
+    }
+
+    @Test
+    void closePreview_RejectsInvalidMatchBeforeLoadingPlayers() {
+        sampleMatch.setEstado(MatchStatus.INVALIDO);
+        sampleMatch.setValidationReason("Partido vencido automaticamente por no cerrarse en la ventana permitida");
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> matchService.getClosePreview(1L, new MatchClosePreviewRequest())
+        );
+
+        assertEquals(sampleMatch.getValidationReason(), exception.getMessage());
+        verify(matchPlayerRepository, never()).findByMatch(sampleMatch);
+    }
+
+    @Test
+    void closePreview_RejectsFinalizedMatchBeforeLoadingPlayers() {
+        sampleMatch.setEstado(MatchStatus.FINALIZADO);
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> matchService.getClosePreview(1L, new MatchClosePreviewRequest())
+        );
+
+        assertTrue(exception.getMessage().contains("ya fue finalizado"));
+        verify(matchPlayerRepository, never()).findByMatch(sampleMatch);
+    }
+
+    @Test
+    void changeMatchStatus_StartWithoutMinimumConfirmedPlayers_ShouldFail() {
+        Long matchId = 2L;
+        sampleMatch.setEstado(MatchStatus.CREADO);
+        sampleMatch.getMatchTeams().add(new MatchTeam(sampleMatch, sampleTeam, true));
+
+        when(matchRepository.findById(matchId)).thenReturn(Optional.of(sampleMatch));
+        when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(java.util.Collections.emptyList());
+        when(matchRosterPolicy.hasMinimumConfirmedPlayers(sampleMatch, java.util.Collections.emptyList()))
+                .thenReturn(false);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> matchService.changeMatchStatus(matchId, MatchStatus.INICIADO)
+        );
+
+        assertEquals("No se puede iniciar: faltan jugadores confirmados para la modalidad", exception.getMessage());
+        verify(matchRepository, never()).save(any(Match.class));
     }
 
     @Test

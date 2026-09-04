@@ -376,6 +376,7 @@ public class MatchService {
         if (actorUuid != null) {
             validateResponsibleActor(match, actorUuid);
         }
+        validateClosePreviewState(match);
 
         List<MatchPlayer> players = matchPlayerRepository.findByMatch(match).stream()
                 .filter(item -> Boolean.TRUE.equals(item.getConfirmado()))
@@ -388,6 +389,13 @@ public class MatchService {
         Map<UUID, Integer> requestedGoals = request != null && request.getGoalsByPlayer() != null
                 ? request.getGoalsByPlayer()
                 : Map.of();
+        if (requestedGoals.values().stream().anyMatch(value -> value == null || value < 0)) {
+            throw new IllegalArgumentException("Los goles por jugador no pueden ser negativos");
+        }
+        if (request != null && ((request.getFinalScoreLocal() != null && request.getFinalScoreLocal() < 0)
+                || (request.getFinalScoreAway() != null && request.getFinalScoreAway() < 0))) {
+            throw new IllegalArgumentException("El marcador final no puede contener valores negativos");
+        }
         Map<UUID, Integer> persistedGoals = buildPersistedGoalsMap(match);
 
         int computedLocalGoals = 0;
@@ -409,10 +417,25 @@ public class MatchService {
                 ? request.getFinalScoreAway()
                 : computedAwayGoals;
 
+        if (!requestedGoals.isEmpty()
+                && (finalScoreLocal != computedLocalGoals || finalScoreAway != computedAwayGoals)) {
+            throw new IllegalArgumentException("Los goles individuales deben coincidir con el marcador final");
+        }
+
         MatchClosePreviewResponse response = new MatchClosePreviewResponse();
         response.setMatchId(matchId);
-        response.setFinalScoreLocal(Math.max(finalScoreLocal, 0));
-        response.setFinalScoreAway(Math.max(finalScoreAway, 0));
+        response.setFinalScoreLocal(finalScoreLocal);
+        response.setFinalScoreAway(finalScoreAway);
+
+        // Un jugador sin calificaciones inicializadas no debe impedir que el
+        // responsable pueda revisar y cerrar el partido. La consulta en lote
+        // omite esos perfiles de forma explícita, sin marcar la transacción
+        // actual como rollback-only.
+        Map<UUID, BigDecimal> currentOvrByPlayer = ratingService.calculateHybridOVRBatch(
+                players.stream()
+                        .map(player -> player.getPlayer().getAtletaUuid())
+                        .toList()
+        );
 
         List<MatchClosePreviewPlayerResponse> playerRows = new ArrayList<>();
         for (MatchPlayer player : players) {
@@ -420,7 +443,7 @@ public class MatchService {
             int goals = requestedGoals.getOrDefault(playerUuid, persistedGoals.getOrDefault(playerUuid, 0));
             MatchTeamSide side = player.getTeamSide() != null ? player.getTeamSide() : MatchTeamSide.LOCAL;
             int xp = estimateXpForPlayer(player, goals, response.getFinalScoreLocal(), response.getFinalScoreAway(), side);
-            BigDecimal currentOvr = resolveCurrentHybridOvr(playerUuid);
+            BigDecimal currentOvr = currentOvrByPlayer.get(playerUuid);
 
             MatchClosePreviewPlayerResponse row = new MatchClosePreviewPlayerResponse();
             row.setPlayerUuid(playerUuid);
@@ -456,9 +479,15 @@ public class MatchService {
         Team team = teamRepository.findById(request.getTeamId())
                 .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado: " + request.getTeamId()));
 
-        // Verificar que el jugador participe en el partido
-        if (!matchPlayerRepository.existsByMatchAndPlayer(match, player)) {
-            throw new IllegalArgumentException("El jugador no participa en este partido");
+        MatchPlayer scorerParticipation = matchPlayerRepository.findByMatchAndPlayer(match, player)
+                .orElseThrow(() -> new IllegalArgumentException("El jugador no participa en este partido"));
+        if (!Boolean.TRUE.equals(scorerParticipation.getConfirmado())) {
+            throw new IllegalArgumentException("No se pueden registrar eventos para jugadores no confirmados");
+        }
+        if (scorerParticipation.getTeam() == null
+                || scorerParticipation.getTeam().getId() == null
+                || !scorerParticipation.getTeam().getId().equals(team.getId())) {
+            throw new IllegalArgumentException("El equipo del evento no coincide con el equipo del jugador");
         }
 
         // Crear el evento (Requisito 8.3) - registeredBy serÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ el mismo player por ahora
@@ -475,6 +504,16 @@ public class MatchService {
         if (request.getEventType() == EventType.GOL && request.getAssistPlayerUuid() != null) {
             PlayerProfile assistPlayer = playerProfileRepository.findById(request.getAssistPlayerUuid())
                     .orElseThrow(() -> new IllegalArgumentException("Jugador asistente no encontrado: " + request.getAssistPlayerUuid()));
+            MatchPlayer assistParticipation = matchPlayerRepository.findByMatchAndPlayer(match, assistPlayer)
+                    .orElseThrow(() -> new IllegalArgumentException("El asistente no participa en este partido"));
+            if (!Boolean.TRUE.equals(assistParticipation.getConfirmado())) {
+                throw new IllegalArgumentException("No se pueden asignar asistencias a jugadores no confirmados");
+            }
+            if (assistParticipation.getTeam() == null
+                    || assistParticipation.getTeam().getId() == null
+                    || !assistParticipation.getTeam().getId().equals(team.getId())) {
+                throw new IllegalArgumentException("El asistente debe pertenecer al mismo equipo del goleador");
+            }
             event.setAssistPlayer(assistPlayer);
         }
 
@@ -548,6 +587,9 @@ public class MatchService {
         }
 
         if (newStatus == MatchStatus.INICIADO) {
+            if (!matchRosterPolicy.hasMinimumConfirmedPlayers(match, matchPlayerRepository.findByMatch(match))) {
+                throw new IllegalArgumentException("No se puede iniciar: faltan jugadores confirmados para la modalidad");
+            }
             matchStatusPolicy.markStarted(match, LocalDateTime.now());
         }
 
@@ -580,13 +622,8 @@ public class MatchService {
 
         // Actualizar calificaciones automÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ticamente cuando el partido finaliza (Requisito 9.3)
         if (newStatus == MatchStatus.FINALIZADO) {
-            try {
-                matchPostMatchRatingService.updatePlayerRatingsAfterMatch(match);
-                logger.info("Calificaciones actualizadas automÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ticamente para el partido {}", matchId);
-            } catch (Exception e) {
-                logger.error("Error actualizando calificaciones para el partido {}: {}", matchId, e.getMessage(), e);
-                // No fallar el cambio de estado por errores en calificaciones
-            }
+            matchPostMatchRatingService.updatePlayerRatingsAfterMatch(match);
+            logger.info("Calificaciones actualizadas automaticamente para el partido {}", matchId);
         }
 
         return matchResponseMapper.toMatchResponse(match);
@@ -702,17 +739,24 @@ public class MatchService {
         return xp;
     }
 
-    private BigDecimal resolveCurrentHybridOvr(UUID playerUuid) {
-        try {
-            return ratingService.calculateHybridOVR(playerUuid);
-        } catch (Exception ex) {
-            return null;
-        }
-    }
-
     private void validateMatchIniciado(Match match) {
         if (match.getEstado() != MatchStatus.INICIADO) {
             throw new IllegalArgumentException("Solo se pueden registrar/confirmar eventos con el partido INICIADO");
+        }
+    }
+
+    private void validateClosePreviewState(Match match) {
+        if (match.getEstado() == MatchStatus.FINALIZADO) {
+            throw new IllegalStateException("El partido ya fue finalizado y no requiere un nuevo cierre");
+        }
+        if (match.getEstado() == MatchStatus.INVALIDO) {
+            String reason = match.getValidationReason();
+            throw new IllegalStateException(reason != null && !reason.isBlank()
+                    ? reason
+                    : "El partido fue invalidado y no puede cerrarse");
+        }
+        if (match.getEstado() != MatchStatus.CREADO && match.getEstado() != MatchStatus.INICIADO) {
+            throw new IllegalStateException("El partido no se encuentra disponible para cierre");
         }
     }
 

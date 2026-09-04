@@ -36,16 +36,30 @@ public class MatchRosterPolicy {
     }
 
     public boolean hasMinimumConfirmedPlayers(Match match, List<MatchPlayer> players) {
-        long confirmed = players.stream().filter(item -> Boolean.TRUE.equals(item.getConfirmado())).count();
-        boolean creatorIncluded = players.stream()
-                .anyMatch(item -> item.getPlayer() != null
-                        && match.getCreador() != null
-                        && match.getCreador().getAtletaUuid().equals(item.getPlayer().getAtletaUuid()));
-        if (match.getCreador() != null && !creatorIncluded) {
-            confirmed += 1;
-        }
+        long confirmed = confirmedPlayerCount(match, players);
         int minimum = playersPerTeamByModality(match.getModalidad()) * 2;
         return confirmed >= minimum;
+    }
+
+    /**
+     * El creador ocupa un cupo desde que organiza el partido, aunque una fila
+     * legacy de match_players exista todavía con confirmado=false. Contarlo por
+     * presencia producía una diferencia entre el 10/10 mostrado y el 9/10 que
+     * validaba el inicio.
+     */
+    public long confirmedPlayerCount(Match match, List<MatchPlayer> players) {
+        long confirmed = players.stream()
+                .filter(item -> Boolean.TRUE.equals(item.getConfirmado()))
+                .count();
+        boolean creatorConfirmed = players.stream()
+                .anyMatch(item -> Boolean.TRUE.equals(item.getConfirmado())
+                        && item.getPlayer() != null
+                        && match.getCreador() != null
+                        && match.getCreador().getAtletaUuid().equals(item.getPlayer().getAtletaUuid()));
+        if (match.getCreador() != null && !creatorConfirmed) {
+            confirmed += 1;
+        }
+        return confirmed;
     }
 
     public void validateGenderAssignmentRules(

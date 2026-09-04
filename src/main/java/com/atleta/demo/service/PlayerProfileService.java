@@ -14,7 +14,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -38,6 +44,9 @@ import java.util.stream.Collectors;
 public class PlayerProfileService {
 
     private static final Logger logger = LoggerFactory.getLogger(PlayerProfileService.class);
+    private static final long MAX_PICTURE_SIZE_BYTES = 3 * 1024 * 1024;
+    private static final List<String> ALLOWED_PICTURE_TYPES = List.of("image/png", "image/jpeg", "image/webp");
+    private static final Path PLAYER_PICTURES_DIR = Path.of("uploads", "player-pictures");
 
     private final PlayerProfileRepository playerProfileRepository;
     private final AthleteRepository athleteRepository;
@@ -245,6 +254,36 @@ public class PlayerProfileService {
         return response;
     }
 
+    /** Guarda una foto de perfil validada y la asocia al atleta autenticado. */
+    public PlayerProfileResponse updatePicture(UUID atletaUuid, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Debes seleccionar una imagen");
+        }
+        if (file.getSize() > MAX_PICTURE_SIZE_BYTES) {
+            throw new IllegalArgumentException("La imagen excede el tamano maximo permitido (3 MB)");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_PICTURE_TYPES.contains(contentType)) {
+            throw new IllegalArgumentException("Formato de imagen no permitido");
+        }
+        validateImageSignature(file, contentType);
+
+        Athlete athlete = athleteRepository.findById(atletaUuid)
+                .orElseThrow(() -> new IllegalArgumentException("No se encontro atleta con UUID: " + atletaUuid));
+        String fileName = UUID.randomUUID() + "." + resolveImageExtension(contentType);
+        try {
+            Files.createDirectories(PLAYER_PICTURES_DIR);
+            Files.copy(file.getInputStream(), PLAYER_PICTURES_DIR.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("No se pudo guardar la imagen");
+        }
+        athlete.setPictureUrl("/uploads/player-pictures/" + fileName);
+        athleteRepository.save(athlete);
+        PlayerProfile profile = playerProfileRepository.findById(atletaUuid)
+                .orElseThrow(() -> new IllegalArgumentException("No se encontro perfil de jugador con UUID: " + atletaUuid));
+        return convertToResponse(profile);
+    }
+
     /**
      * Agrega una posición a un jugador con prioridad específica.
      * 
@@ -432,6 +471,7 @@ public class PlayerProfileService {
                 playerProfile.getCreatedAt()
         );
         response.setNombre(playerProfile.getAthlete() != null ? playerProfile.getAthlete().getNombre() : null);
+        response.setPictureUrl(playerProfile.getAthlete() != null ? playerProfile.getAthlete().getPictureUrl() : null);
 
         // Incluir posiciones si están cargadas
         if (playerProfile.getPositions() != null && !playerProfile.getPositions().isEmpty()) {
@@ -443,6 +483,39 @@ public class PlayerProfileService {
         }
 
         return response;
+    }
+
+    private void validateImageSignature(MultipartFile file, String contentType) {
+        byte[] signature;
+        try {
+            signature = file.getInputStream().readNBytes(12);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("No se pudo leer la imagen");
+        }
+        boolean valid = switch (contentType) {
+            case "image/png" -> hasPrefix(signature, new byte[] {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A});
+            case "image/jpeg" -> hasPrefix(signature, new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF});
+            case "image/webp" -> hasPrefix(signature, new byte[] {0x52, 0x49, 0x46, 0x46})
+                    && signature.length >= 12
+                    && Arrays.equals(Arrays.copyOfRange(signature, 8, 12), new byte[] {0x57, 0x45, 0x42, 0x50});
+            default -> false;
+        };
+        if (!valid) {
+            throw new IllegalArgumentException("El archivo no corresponde a una imagen valida");
+        }
+    }
+
+    private boolean hasPrefix(byte[] source, byte[] prefix) {
+        return source.length >= prefix.length && Arrays.equals(Arrays.copyOf(source, prefix.length), prefix);
+    }
+
+    private String resolveImageExtension(String contentType) {
+        return switch (contentType) {
+            case "image/png" -> "png";
+            case "image/jpeg" -> "jpg";
+            case "image/webp" -> "webp";
+            default -> throw new IllegalArgumentException("Formato de imagen no permitido");
+        };
     }
 
     /**

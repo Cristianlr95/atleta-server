@@ -20,6 +20,7 @@ import com.atleta.demo.dto.response.PositionResponse;
 import com.atleta.demo.dto.response.SocialRequestResponse;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.dto.response.TeamLeaderboardEntryResponse;
+import com.atleta.demo.dto.response.TeamExternalRecordResponse;
 import com.atleta.demo.dto.response.TeamResponse;
 import com.atleta.demo.dto.response.TrustLogResponse;
 import com.atleta.demo.config.TestConfig;
@@ -373,7 +374,8 @@ class ApiContractSmokeTest {
                 "Demo10",
                 PlayerRole.CAPITAN,
                 9L,
-                "Delantero"
+                "Delantero",
+                BigDecimal.valueOf(82.5)
         );
 
         when(teamService.createTeam(any())).thenReturn(team);
@@ -406,7 +408,8 @@ class ApiContractSmokeTest {
         mockMvc.perform(get("/api/v1/teams/{teamId}/members/active", 77L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].playerUuid").value(USER_ID.toString()))
-                .andExpect(jsonPath("$[0].primaryPositionName").value("Delantero"));
+                .andExpect(jsonPath("$[0].primaryPositionName").value("Delantero"))
+                .andExpect(jsonPath("$[0].ovr").value(82.5));
 
         mockMvc.perform(delete("/api/v1/teams/{teamId}", 77L)
                         .with(jwtFor(USER_ID))
@@ -431,6 +434,21 @@ class ApiContractSmokeTest {
                 .andExpect(jsonPath("$[1].score").doesNotExist());
 
         verify(teamLeaderboardService).getLeaderboard(77L, USER_ID);
+    }
+
+    @Test
+    void teamExternalRecordKeepsInternalMatchesOutOfTheCompetitiveContract() throws Exception {
+        when(teamLeaderboardService.getExternalRecord(77L, USER_ID)).thenReturn(
+                new TeamExternalRecordResponse(77L, "Atleta FC", 8, 5, 1, 2, 16));
+
+        mockMvc.perform(get("/api/v1/teams/{teamId}/external-record", 77L).with(jwtFor(USER_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.teamId").value(77))
+                .andExpect(jsonPath("$.wins").value(5))
+                .andExpect(jsonPath("$.matchesPlayed").value(8))
+                .andExpect(jsonPath("$.points").value(16));
+
+        verify(teamLeaderboardService).getExternalRecord(77L, USER_ID);
     }
 
     @Test

@@ -24,6 +24,9 @@ public class PlayerProfileResponse {
 
     private String nombre;
 
+    /** Foto elegida por el jugador o importada desde su proveedor de acceso. */
+    private String pictureUrl;
+
     private GenderType genero;
 
     /**
@@ -76,6 +79,14 @@ public class PlayerProfileResponse {
 
     public void setNombre(String nombre) {
         this.nombre = nombre;
+    }
+
+    public String getPictureUrl() {
+        return pictureUrl;
+    }
+
+    public void setPictureUrl(String pictureUrl) {
+        this.pictureUrl = pictureUrl;
     }
 
     public GenderType getGenero() {

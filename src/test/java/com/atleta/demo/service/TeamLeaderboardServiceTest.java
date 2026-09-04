@@ -1,12 +1,18 @@
 package com.atleta.demo.service;
 
 import com.atleta.demo.dto.response.TeamLeaderboardEntryResponse;
+import com.atleta.demo.dto.response.TeamExternalRecordResponse;
+import com.atleta.demo.entity.Match;
+import com.atleta.demo.entity.MatchTeam;
 import com.atleta.demo.entity.PlayerProfile;
 import com.atleta.demo.entity.PlayerRating;
 import com.atleta.demo.entity.Team;
 import com.atleta.demo.entity.TeamMember;
 import com.atleta.demo.enums.PriorityLevel;
 import com.atleta.demo.enums.RoleType;
+import com.atleta.demo.enums.MatchStatus;
+import com.atleta.demo.enums.MatchType;
+import com.atleta.demo.repository.MatchTeamRepository;
 import com.atleta.demo.repository.PlayerRatingRepository;
 import com.atleta.demo.repository.TeamMemberRepository;
 import com.atleta.demo.repository.TeamRepository;
@@ -33,6 +39,7 @@ class TeamLeaderboardServiceTest {
     @Mock private TeamRepository teamRepository;
     @Mock private TeamMemberRepository teamMemberRepository;
     @Mock private PlayerRatingRepository playerRatingRepository;
+    @Mock private MatchTeamRepository matchTeamRepository;
 
     private TeamLeaderboardService service;
     private Team team;
@@ -42,7 +49,7 @@ class TeamLeaderboardServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TeamLeaderboardService(teamRepository, teamMemberRepository, playerRatingRepository);
+        service = new TeamLeaderboardService(teamRepository, teamMemberRepository, playerRatingRepository, matchTeamRepository);
         alpha = player("11111111-1111-1111-1111-111111111111", "Alpha");
         beta = player("22222222-2222-2222-2222-222222222222", "Beta");
         unrated = player("33333333-3333-3333-3333-333333333333", "Sin rating");
@@ -86,6 +93,36 @@ class TeamLeaderboardServiceTest {
         assertEquals(List.of(), service.getLeaderboard(77L, alpha.getAtletaUuid()));
     }
 
+    @Test
+    void externalRecordCountsOnlyFinalizedMatchesAgainstAnotherTeam() {
+        Team rival = new Team("Rival FC", beta);
+        rival.setId(88L);
+        Match external = match(MatchType.FRIENDLY);
+        Match internal = match(MatchType.INTERNAL);
+        Match unfinished = match(MatchType.POINTS);
+        unfinished.setEstado(MatchStatus.CREADO);
+        MatchTeam externalSide = side(external, team, 3);
+        MatchTeam externalRival = side(external, rival, 1);
+        MatchTeam internalSide = side(internal, team, 4);
+        MatchTeam internalRival = side(internal, rival, 0);
+        MatchTeam unfinishedSide = side(unfinished, team, 2);
+        MatchTeam unfinishedRival = side(unfinished, rival, 1);
+        when(teamMemberRepository.findActiveByTeam(team)).thenReturn(List.of(member(alpha)));
+        when(matchTeamRepository.findByTeam(team)).thenReturn(List.of(externalSide, internalSide, unfinishedSide));
+        when(matchTeamRepository.findByMatch(external)).thenReturn(List.of(externalSide, externalRival));
+
+        TeamExternalRecordResponse record = service.getExternalRecord(77L, alpha.getAtletaUuid());
+
+        assertEquals(1, record.matchesPlayed());
+        assertEquals(1, record.wins());
+        assertEquals(0, record.draws());
+        assertEquals(0, record.losses());
+        assertEquals(3, record.points());
+        verify(matchTeamRepository).findByMatch(external);
+        verify(matchTeamRepository, org.mockito.Mockito.never()).findByMatch(internal);
+        verify(matchTeamRepository, org.mockito.Mockito.never()).findByMatch(unfinished);
+    }
+
     private PlayerProfile player(String uuid, String alias) {
         PlayerProfile player = new PlayerProfile();
         player.setAtletaUuid(UUID.fromString(uuid));
@@ -104,5 +141,20 @@ class TeamLeaderboardServiceTest {
                 player, RoleType.ATAQUE, PriorityLevel.PRINCIPAL, BigDecimal.valueOf(score));
         rating.setMatchesPlayed(matches);
         return rating;
+    }
+
+    private Match match(MatchType type) {
+        Match match = new Match();
+        match.setEstado(MatchStatus.FINALIZADO);
+        match.setMatchType(type);
+        return match;
+    }
+
+    private MatchTeam side(Match match, Team side, int goals) {
+        MatchTeam matchTeam = new MatchTeam();
+        matchTeam.setMatch(match);
+        matchTeam.setTeam(side);
+        matchTeam.setGoles(goals);
+        return matchTeam;
     }
 }

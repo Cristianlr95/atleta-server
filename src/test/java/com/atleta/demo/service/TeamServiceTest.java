@@ -1,6 +1,7 @@
 package com.atleta.demo.service;
 
 import com.atleta.demo.dto.request.CreateTeamRequest;
+import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.dto.response.TeamResponse;
 import com.atleta.demo.entity.*;
 import com.atleta.demo.repository.*;
@@ -13,6 +14,9 @@ import org.springframework.mock.web.MockMultipartFile;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -48,6 +52,9 @@ class TeamServiceTest {
     @Mock
     private MatchInviteRepository matchInviteRepository;
 
+    @Mock
+    private RatingService ratingService;
+
     private TeamService teamService;
 
     private CreateTeamRequest validCreateRequest;
@@ -64,7 +71,8 @@ class TeamServiceTest {
                 teamStatsRepository,
                 playerPositionRepository,
                 teamInviteRepository,
-                matchInviteRepository
+                matchInviteRepository,
+                ratingService
         );
 
         UUID playerId = UUID.randomUUID();
@@ -91,6 +99,22 @@ class TeamServiceTest {
         sampleStats.setId(1L);
         sampleStats.setTeam(sampleTeam);
 
+    }
+
+    @Test
+    void getActiveMembersByTeamReturnsAggregatedOvrWithoutPerPlayerRatingCalls() {
+        TeamMember member = new TeamMember(sampleTeam, samplePlayer, com.atleta.demo.enums.PlayerRole.JUGADOR);
+        when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
+        when(teamMemberRepository.findActiveByTeam(sampleTeam)).thenReturn(List.of(member));
+        when(playerPositionRepository.findPrimaryPositionByPlayer(samplePlayer)).thenReturn(Optional.empty());
+        when(ratingService.calculateHybridOVRBatch(List.of(samplePlayer.getAtletaUuid())))
+                .thenReturn(Map.of(samplePlayer.getAtletaUuid(), BigDecimal.valueOf(78.25)));
+
+        List<TeamActiveMemberResponse> members = teamService.getActiveMembersByTeam(sampleTeam.getId());
+
+        assertEquals(1, members.size());
+        assertEquals(BigDecimal.valueOf(78.25), members.getFirst().getOvr());
+        verify(ratingService).calculateHybridOVRBatch(List.of(samplePlayer.getAtletaUuid()));
     }
 
     @Test

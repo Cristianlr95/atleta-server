@@ -73,6 +73,27 @@ class MatchRosterPolicyTest {
     }
 
     @Test
+    void hasMinimumConfirmedPlayers_CountsCreatorWhenLegacyRowIsUnconfirmed() {
+        Match match = new Match();
+        match.setModalidad(MatchMode.CINCO_VS_CINCO);
+        PlayerProfile creator = player(GenderType.MASCULINO);
+        match.setCreador(creator);
+
+        MatchPlayer legacyCreatorRow = matchPlayer(creator);
+        legacyCreatorRow.setConfirmado(false);
+        List<MatchPlayer> players = new java.util.ArrayList<>();
+        players.add(legacyCreatorRow);
+        java.util.stream.IntStream.range(0, 9).forEach(index -> {
+            MatchPlayer confirmed = matchPlayer(player(GenderType.MASCULINO));
+            confirmed.setConfirmado(true);
+            players.add(confirmed);
+        });
+
+        assertEquals(10, policy.confirmedPlayerCount(match, players));
+        assertTrue(policy.hasMinimumConfirmedPlayers(match, players));
+    }
+
+    @Test
     void validateGenderAssignmentRules_AllowsBalancedMixedTeams() {
         Match match = matchWithCategory(MatchGenderCategory.MIXTO);
         PlayerProfile homeWoman = player(GenderType.FEMENINO);

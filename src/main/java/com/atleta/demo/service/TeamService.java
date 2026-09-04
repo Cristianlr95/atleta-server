@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -51,6 +52,7 @@ public class TeamService {
     private final PlayerPositionRepository playerPositionRepository;
     private final TeamInviteRepository teamInviteRepository;
     private final MatchInviteRepository matchInviteRepository;
+    private final RatingService ratingService;
 
     public TeamService(TeamRepository teamRepository,
                        PlayerProfileRepository playerProfileRepository,
@@ -58,7 +60,8 @@ public class TeamService {
                        TeamStatsRepository teamStatsRepository,
                        PlayerPositionRepository playerPositionRepository,
                        TeamInviteRepository teamInviteRepository,
-                       MatchInviteRepository matchInviteRepository) {
+                       MatchInviteRepository matchInviteRepository,
+                       RatingService ratingService) {
         this.teamRepository = teamRepository;
         this.playerProfileRepository = playerProfileRepository;
         this.teamMemberRepository = teamMemberRepository;
@@ -66,6 +69,7 @@ public class TeamService {
         this.playerPositionRepository = playerPositionRepository;
         this.teamInviteRepository = teamInviteRepository;
         this.matchInviteRepository = matchInviteRepository;
+        this.ratingService = ratingService;
     }
 
     public TeamResponse createTeam(CreateTeamRequest request) {
@@ -157,6 +161,11 @@ public class TeamService {
 
         List<TeamMember> activeMembers = teamMemberRepository.findActiveByTeam(team);
         List<TeamActiveMemberResponse> response = new ArrayList<>();
+        Map<UUID, BigDecimal> overallByPlayer = ratingService.calculateHybridOVRBatch(
+                activeMembers.stream()
+                        .map(member -> member.getPlayer().getAtletaUuid())
+                        .toList()
+        );
 
         for (TeamMember member : activeMembers) {
             PlayerPosition primaryPosition = playerPositionRepository
@@ -168,7 +177,8 @@ public class TeamService {
                     member.getPlayer().getAlias(),
                     member.getRol(),
                     primaryPosition != null && primaryPosition.getPosition() != null ? primaryPosition.getPosition().getId() : null,
-                    primaryPosition != null && primaryPosition.getPosition() != null ? primaryPosition.getPosition().getNombre() : null
+                    primaryPosition != null && primaryPosition.getPosition() != null ? primaryPosition.getPosition().getNombre() : null,
+                    overallByPlayer.getOrDefault(member.getPlayer().getAtletaUuid(), BigDecimal.valueOf(65))
             ));
         }
 

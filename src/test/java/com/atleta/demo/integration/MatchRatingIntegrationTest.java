@@ -277,6 +277,7 @@ class MatchRatingIntegrationTest {
 
         when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
         when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(matchPlayers);
 
         matchService.changeMatchStatus(1L, MatchStatus.INICIADO);
 
@@ -284,7 +285,7 @@ class MatchRatingIntegrationTest {
     }
 
     @Test
-    void changeMatchStatus_RatingServiceThrowsException_ShouldNotFailStatusChange() {
+    void changeMatchStatus_RatingServiceThrowsException_ShouldFailAtomicClosure() {
         sampleMatch.setEstado(MatchStatus.INICIADO);
 
         when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
@@ -295,7 +296,11 @@ class MatchRatingIntegrationTest {
         when(matchEventRepository.findPendingEventsByMatch(sampleMatch)).thenReturn(List.of());
         doThrow(new RuntimeException("Error en calificaciones")).when(ratingService).updatePlayerRatings(any(), any());
 
-        assertDoesNotThrow(() -> matchService.changeMatchStatus(1L, MatchStatus.FINALIZADO));
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> matchService.changeMatchStatus(1L, MatchStatus.FINALIZADO)
+        );
+        assertEquals("Error en calificaciones", exception.getMessage());
 
         verify(matchRepository, times(1)).save(any(Match.class));
     }

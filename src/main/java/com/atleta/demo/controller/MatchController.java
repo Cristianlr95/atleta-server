@@ -649,6 +649,9 @@ public class MatchController {
                 return ResponseEntity.notFound().build();
             }
             return ResponseEntity.badRequest().build();
+        } catch (IllegalStateException e) {
+            logger.warn("Preview de cierre no disponible para partido {}: {}", matchId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
     }
 

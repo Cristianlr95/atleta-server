@@ -42,7 +42,9 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -295,13 +297,60 @@ class SocialServiceTest {
         when(matchInviteRepository.findById(invite.getId())).thenReturn(Optional.of(invite));
         when(matchRepository.findByIdForUpdate(match.getId())).thenReturn(Optional.of(match));
         when(matchRosterPolicy.playersPerTeamByModality(MatchMode.CINCO_VS_CINCO)).thenReturn(5);
-        when(matchPlayerRepository.countConfirmedPlayersByMatch(match)).thenReturn(10L);
+        when(matchPlayerRepository.findByMatch(match)).thenReturn(List.of());
+        when(matchRosterPolicy.confirmedPlayerCount(match, List.of())).thenReturn(10L);
         when(matchInviteRepository.save(any(MatchInvite.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         SocialRequestResponse response = socialService.respondMatchInvite(invite.getId(), decision);
 
         assertEquals(RequestStatus.LISTA_ESPERA, response.getStatus());
         verify(matchPlayerRepository, never()).save(any(MatchPlayer.class));
+    }
+
+    @Test
+    void respondMatchInvite_withdrawsConfirmedPlayerAndPromotesFirstWaitlisted() {
+        UUID waitingUuid = UUID.randomUUID();
+        PlayerProfile waitingPlayer = player(waitingUuid, "waiting");
+        Position position = new Position();
+        position.setId(9L);
+        position.setNombre("Mediocampo");
+
+        MatchInvite confirmedInvite = new MatchInvite(match, matchTeam, creator, target, "sumate");
+        confirmedInvite.setId(951L);
+        confirmedInvite.setStatus(RequestStatus.ACEPTADA);
+        MatchInvite waitingInvite = new MatchInvite(match, matchTeam, creator, waitingPlayer, "sumate");
+        waitingInvite.setId(952L);
+        waitingInvite.setStatus(RequestStatus.LISTA_ESPERA);
+        waitingInvite.setRespondedAt(LocalDateTime.now().minusMinutes(5));
+
+        MatchPlayer confirmedPlayer = new MatchPlayer(match, matchTeam, target, position, PlayerRole.JUGADOR);
+        confirmedPlayer.setConfirmado(true);
+
+        RespondRequestDecision decision = new RespondRequestDecision();
+        decision.setActorUuid(targetUuid);
+        decision.setAccept(false);
+
+        when(matchInviteRepository.findById(confirmedInvite.getId())).thenReturn(Optional.of(confirmedInvite));
+        when(matchRepository.findByIdForUpdate(match.getId())).thenReturn(Optional.of(match));
+        when(matchInviteRepository.save(any(MatchInvite.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(matchPlayerRepository.findByMatchAndPlayer(match, target)).thenReturn(Optional.of(confirmedPlayer));
+        when(matchRosterPolicy.playersPerTeamByModality(MatchMode.CINCO_VS_CINCO)).thenReturn(5);
+        when(matchPlayerRepository.findByMatch(match)).thenReturn(List.of(confirmedPlayer));
+        when(matchRosterPolicy.confirmedPlayerCount(match, List.of(confirmedPlayer))).thenReturn(9L);
+        when(matchInviteRepository.findByMatchAndStatusOrderByRespondedAtAscCreatedAtAsc(
+                match, RequestStatus.LISTA_ESPERA)).thenReturn(List.of(waitingInvite));
+        when(matchPlayerRepository.findByMatchAndPlayer(match, waitingPlayer)).thenReturn(Optional.empty());
+        when(playerPositionRepository.findPrimaryPositionByPlayer(waitingPlayer)).thenReturn(Optional.empty());
+        when(positionRepository.findAllOrderByNombre()).thenReturn(List.of(position));
+
+        SocialRequestResponse response = socialService.respondMatchInvite(confirmedInvite.getId(), decision);
+
+        assertEquals(RequestStatus.CANCELADA, response.getStatus());
+        assertEquals(RequestStatus.ACEPTADA, waitingInvite.getStatus());
+        org.junit.jupiter.api.Assertions.assertFalse(confirmedPlayer.getConfirmado());
+        verify(matchPlayerRepository, times(2)).save(any(MatchPlayer.class));
+        verify(matchLiveEventService).publishInviteDecision(
+                eq(match.getId()), eq(waitingInvite.getId()), eq(RequestStatus.ACEPTADA.name()));
     }
 
     private CreateMatchInviteRequest validInviteRequest(UUID requesterUuid, UUID targetUuid, Long teamId) {
