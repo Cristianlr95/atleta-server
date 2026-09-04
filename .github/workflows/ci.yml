@@ -2,7 +2,6 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -16,6 +15,10 @@ on:
           - staging
           - production
         default: none
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   JAVA_VERSION: "21"
