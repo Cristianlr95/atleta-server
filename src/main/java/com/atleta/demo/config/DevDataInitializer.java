@@ -16,6 +16,7 @@ import com.atleta.demo.repository.PositionRepository;
 import com.atleta.demo.repository.TeamMemberRepository;
 import com.atleta.demo.repository.TeamRepository;
 import com.atleta.demo.repository.TeamStatsRepository;
+import com.atleta.demo.service.RatingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,6 +52,7 @@ public class DevDataInitializer implements ApplicationRunner {
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamStatsRepository teamStatsRepository;
+    private final RatingService ratingService;
     private final PasswordEncoder passwordEncoder;
     private final String password;
 
@@ -62,6 +64,7 @@ public class DevDataInitializer implements ApplicationRunner {
             TeamRepository teamRepository,
             TeamMemberRepository teamMemberRepository,
             TeamStatsRepository teamStatsRepository,
+            RatingService ratingService,
             PasswordEncoder passwordEncoder,
             @Value("${app.dev-seed.password}") String password
     ) {
@@ -72,6 +75,7 @@ public class DevDataInitializer implements ApplicationRunner {
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.teamStatsRepository = teamStatsRepository;
+        this.ratingService = ratingService;
         this.passwordEncoder = passwordEncoder;
         this.password = password;
     }
@@ -84,6 +88,7 @@ public class DevDataInitializer implements ApplicationRunner {
             players.put(player.email(), seedPlayer(player));
         }
         seedTeam(players);
+        players.values().forEach(player -> ratingService.initializeBaseRatings(player.getAtletaUuid()));
         seedOnboardingUser();
 
         logger.info("Plantilla de desarrollo verificada: 14 jugadores en Atleta Dev FC. Usa DEV_SEED_ENABLED=false para omitirla.");

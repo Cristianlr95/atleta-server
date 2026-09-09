@@ -339,7 +339,7 @@ public class RatingController {
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Historial obtenido exitosamente"),
         @ApiResponse(responseCode = "400", description = "ID de jugador invÃ¡lido"),
-        @ApiResponse(responseCode = "404", description = "No se encontrÃ³ historial para el jugador")
+        @ApiResponse(responseCode = "200", description = "Historial obtenido; puede estar vacÃ­o si el jugador aÃºn no registra partidos")
     })
     public ResponseEntity<List<RatingHistoryResponse>> getRatingHistory(
             @Parameter(description = "UUID del perfil del jugador")
@@ -351,11 +351,6 @@ public class RatingController {
         
         try {
             List<RatingHistory> history = ratingService.getRatingHistory(playerProfileId);
-            
-            if (history.isEmpty()) {
-                logger.debug("No se encontrÃ³ historial para jugador {}", playerProfileId);
-                return ResponseEntity.notFound().build();
-            }
             
             List<RatingHistoryResponse> response = history.stream()
                     .map(this::convertToRatingHistoryResponse)
@@ -538,8 +533,9 @@ public class RatingController {
             @Parameter(description = "UUID del perfil del jugador")
             @PathVariable UUID playerProfileId,
             @AuthenticationPrincipal Jwt jwt) {
-        AuthenticatedUserUtils.requireSameUser(jwt, playerProfileId);
-        
+        // OVR is shown in team rosters and public player cards. The API remains
+        // authenticated, but any signed-in player can read this non-sensitive
+        // competitive summary.
         logger.debug("Consultando OVR completo para jugador {}", playerProfileId);
         
         try {
