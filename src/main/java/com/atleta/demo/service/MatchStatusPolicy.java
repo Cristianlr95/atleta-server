@@ -41,11 +41,23 @@ public class MatchStatusPolicy {
         match.setValidationReason("Partido marcado como invalido manualmente");
     }
 
+    public void validateCloseWindow(Match match, LocalDateTime now) {
+        if (match.getStartedAt() == null) {
+            throw new IllegalArgumentException("El partido debe iniciarse antes de cerrarlo");
+        }
+        if (now.isBefore(match.getStartedAt().plusHours(1))) {
+            throw new IllegalArgumentException("El cierre se habilita 1 hora después del inicio");
+        }
+        if (now.isAfter(match.getStartedAt().plusHours(3))) {
+            throw new IllegalArgumentException("La ventana de cierre de 3 horas ha vencido");
+        }
+    }
+
     public boolean isClosePending(Match match, long matchPlayWindowHours, LocalDateTime now) {
         if (match == null || match.getEstado() != MatchStatus.INICIADO || match.getStartedAt() == null) {
             return false;
         }
 
-        return now.isAfter(match.getStartedAt().plusHours(matchPlayWindowHours));
+        return !now.isBefore(match.getStartedAt().plusHours(matchPlayWindowHours));
     }
 }

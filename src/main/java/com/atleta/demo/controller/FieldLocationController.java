@@ -4,6 +4,7 @@ import com.atleta.demo.dto.request.CreateFieldLocationRequest;
 import com.atleta.demo.dto.request.UpdateFieldLocationRequest;
 import com.atleta.demo.dto.response.FieldLocationResponse;
 import com.atleta.demo.service.FieldLocationService;
+import com.atleta.demo.security.AuthenticatedUserUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -12,6 +13,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -44,8 +47,9 @@ public class FieldLocationController {
             @ApiResponse(responseCode = "400", description = "Datos invalidos"),
             @ApiResponse(responseCode = "409", description = "Cancha duplicada")
     })
-    public ResponseEntity<FieldLocationResponse> createFieldLocation(@Valid @RequestBody CreateFieldLocationRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(fieldLocationService.createFieldLocation(request));
+    public ResponseEntity<FieldLocationResponse> createFieldLocation(@Valid @RequestBody CreateFieldLocationRequest request,
+                                                                      @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(fieldLocationService.createFieldLocation(request, AuthenticatedUserUtils.currentUserUuid(jwt)));
     }
 
     @PutMapping("/{id}")
@@ -58,9 +62,10 @@ public class FieldLocationController {
     })
     public ResponseEntity<FieldLocationResponse> updateFieldLocation(
             @PathVariable Long id,
-            @Valid @RequestBody UpdateFieldLocationRequest request) {
+            @Valid @RequestBody UpdateFieldLocationRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
         try {
-            return ResponseEntity.ok(fieldLocationService.updateFieldLocation(id, request));
+            return ResponseEntity.ok(fieldLocationService.updateFieldLocation(id, request, AuthenticatedUserUtils.currentUserUuid(jwt)));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.notFound().build();
         }

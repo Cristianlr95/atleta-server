@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: atleta-beta-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /actuator/health/readiness
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: beta
+      - key: JAVA_OPTS
+        value: -Xms64m -Xmx224m -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=32m -XX:MaxDirectMemorySize=16m -Xss512k -XX:+UseSerialGC -XX:ActiveProcessorCount=1 -XX:TieredStopAtLevel=1 -XX:+ExitOnOutOfMemoryError
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DB_JDBC_URL
+        sync: false
+      - key: DB_MIGRATION_JDBC_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: BETA_INVITE_CODE
+        sync: false

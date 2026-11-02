@@ -174,7 +174,7 @@ public class RatingService {
         };
     }
 
-    private RoleType mapPositionToRole(String positionName) {
+    static RoleType mapPositionToRole(String positionName) {
         if (positionName == null) {
             return null;
         }
@@ -534,74 +534,29 @@ public class RatingService {
         }
     }
 
-    /**
-     * Actualiza las calificaciones de arquero rotativo para todos los jugadores en un partido.
-     * En este modo especial, todos los jugadores reciben actualizaciones de calificaciÃ³n de arquero
-     * con puntos de resultado modificados, procesÃ¡ndose independientemente del sistema regular.
-     * 
-     * Implementa los requerimientos:
-     * - 7.1: CÃ¡lculo de calificaciones de arquero para TODOS los jugadores
-     * - 7.3: Uso de puntos de resultado modificados
-     * - 7.4: AplicaciÃ³n de reglas de mÃ­nimo base para prioridad de arquero
-     * - 7.5: Procesamiento independiente del sistema regular
-     * 
-     * @param matchId ID del partido en modo arquero rotativo
-     * @param matchResult Resultado del partido desde la perspectiva del equipo
-     * @throws InvalidPlayerDataException si los datos de entrada son invÃ¡lidos
-     * @throws MatchNotFoundException si el partido no existe
-     * @throws RatingCalculationException si ocurre un error durante el procesamiento
-     */
-    public void updateRotativeGoalkeeperRatings(Long matchId, MatchResultType matchResult) {
-        logger.info("Iniciando actualizaciÃ³n de calificaciones de arquero rotativo para partido {}", matchId);
-        
-        // ValidaciÃ³n de entrada
-        validateRotativeGoalkeeperInput(matchId, matchResult);
-        
-        // Verificar que el partido existe
-        Match match = matchRepository.findById(matchId)
-                .orElseThrow(() -> new MatchNotFoundException("El partido con ID " + matchId + " no existe", matchId));
-        
-        // Obtener todos los jugadores que participaron en el partido
-        // Nota: En una implementaciÃ³n real, esto vendrÃ­a de MatchPlayer o similar
-        // Por ahora, obtenemos todos los jugadores con calificaciones de arquero existentes
-        List<PlayerRating> goalkeeperRatings = playerRatingRepository.findByRoleType(RoleType.ARQUERO);
-        
-        if (goalkeeperRatings.isEmpty()) {
-            logger.warn("No se encontraron calificaciones de arquero para actualizar en modo rotativo");
-            return;
-        }
-        
-        int processedCount = 0;
-        int errorCount = 0;
-        
-        // Procesar cada calificaciÃ³n de arquero
-        for (PlayerRating goalkeeperRating : goalkeeperRatings) {
-            try {
-                processRotativeGoalkeeperUpdate(match, goalkeeperRating, matchResult);
-                processedCount++;
-                logger.debug("CalificaciÃ³n de arquero rotativo actualizada para jugador {}", 
-                           goalkeeperRating.getPlayerProfile().getAtletaUuid());
-            } catch (Exception e) {
-                errorCount++;
-                logger.error("Error actualizando calificaciÃ³n de arquero rotativo para jugador {}: {}", 
-                           goalkeeperRating.getPlayerProfile().getAtletaUuid(), e.getMessage(), e);
-                // Continuar procesando otros jugadores
-            }
-        }
-        
-        logger.info("ActualizaciÃ³n de calificaciones de arquero rotativo completada para partido {}. " +
-                   "Procesados: {}, Errores: {}", matchId, processedCount, errorCount);
-        
-        if (errorCount > 0) {
-            logger.warn("Se encontraron {} errores durante la actualizaciÃ³n de arquero rotativo", errorCount);
+    /** Aplica el resultado verificado a los participantes confirmados durante el cierre. */
+    void updateConfirmedRotativeGoalkeeperRatings(Match match, List<PlayerPerformanceDto> performances) {
+        for (PlayerPerformanceDto performance : performances) {
+            List<PlayerRating> existing = playerRatingRepository.findByPlayerProfileIdAndRoleType(
+                    performance.getPlayerProfileId(), RoleType.ARQUERO);
+            PlayerRating rating = existing.isEmpty()
+                    ? getOrCreatePlayerRating(performance.getPlayerProfileId(), RoleType.ARQUERO, PriorityLevel.TERCIARIA)
+                    : existing.get(0);
+            boolean alreadyCounted = performance.getRoleType() == RoleType.ARQUERO
+                    && performance.getPriorityLevel() == rating.getPriorityLevel();
+            processRotativeGoalkeeperUpdate(match, rating, performance.getMatchResult(), alreadyCounted);
         }
     }
 
+    public void updateRotativeGoalkeeperRatings(Long matchId, MatchResultType matchResult) {
+        validateRotativeGoalkeeperInput(matchId, matchResult);
+        throw new UnsupportedOperationException("Actualizacion manual de arquero rotativo deshabilitada");
+    }
     /**
      * Procesa la actualizaciÃ³n de calificaciÃ³n de arquero rotativo para un jugador individual.
      */
-    private void processRotativeGoalkeeperUpdate(Match match, PlayerRating goalkeeperRating, 
-                                               MatchResultType matchResult) {
+    private void processRotativeGoalkeeperUpdate(Match match, PlayerRating goalkeeperRating,
+                                               MatchResultType matchResult, boolean alreadyCounted) {
         // Preparar solicitud de cÃ¡lculo para arquero rotativo
         RotativeGoalkeeperRequest rotativeRequest = new RotativeGoalkeeperRequest(
                 goalkeeperRating.getCurrentRating(),
@@ -615,7 +570,10 @@ public class RatingService {
         BigDecimal ratingDelta = newRating.subtract(previousRating);
         
         // Actualizar la calificaciÃ³n del jugador
-        goalkeeperRating.updateRating(newRating);
+        goalkeeperRating.setCurrentRating(newRating);
+        if (!alreadyCounted) {
+            goalkeeperRating.incrementMatchesPlayed();
+        }
         playerRatingRepository.save(goalkeeperRating);
         
         // Crear registro de historial para arquero rotativo
@@ -894,7 +852,7 @@ public class RatingService {
                                                null, "playerProfileId", null);
         }
         
-        Object[] stats = ratingHistoryRepository.getPlayerPerformanceStatistics(playerProfileId);
+        Object[] stats = normalizeAggregateRow(ratingHistoryRepository.getPlayerPerformanceStatistics(playerProfileId));
         
         logger.debug("EstadÃ­sticas obtenidas para jugador {}: {} partidos, {} goles, {} asistencias, {} MVPs", 
                     playerProfileId, stats[0], stats[1], stats[2], stats[3]);
@@ -952,7 +910,7 @@ public class RatingService {
                                                null, "roleType", null);
         }
         
-        Object[] stats = ratingHistoryRepository.getPlayerPerformanceStatisticsByRole(playerProfileId, roleType);
+        Object[] stats = normalizeAggregateRow(ratingHistoryRepository.getPlayerPerformanceStatisticsByRole(playerProfileId, roleType));
         
         logger.debug("EstadÃ­sticas por rol obtenidas para jugador {} y rol {}: {} partidos, {} goles, {} asistencias, {} MVPs", 
                     playerProfileId, roleType, stats[0], stats[1], stats[2], stats[3]);
@@ -962,7 +920,7 @@ public class RatingService {
     private LeaderboardEntryResponse toLeaderboardRow(PlayerRating rating, RoleType filterRole) {
         UUID playerUuid = rating.getPlayerProfile().getAtletaUuid();
         String alias = rating.getPlayerProfile().getAlias();
-        Object[] resultBreakdown = normalizeBreakdown(ratingHistoryRepository.getResultBreakdownByPlayerProfileId(playerUuid));
+        Object[] resultBreakdown = normalizeAggregateRow(ratingHistoryRepository.getResultBreakdownByPlayerProfileId(playerUuid));
 
         long wins = asLong(resultBreakdown, 0);
         long losses = asLong(resultBreakdown, 1);
@@ -1002,7 +960,7 @@ public class RatingService {
      * Some JPA providers may wrap aggregate rows as Object[]{ Object[]{...} }.
      * Normalize to a flat Object[] to keep leaderboard mapping resilient.
      */
-    private Object[] normalizeBreakdown(Object[] raw) {
+    private Object[] normalizeAggregateRow(Object[] raw) {
         if (raw == null) {
             return null;
         }

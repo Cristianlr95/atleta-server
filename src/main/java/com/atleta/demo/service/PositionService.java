@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
  * Proporciona operaciones de consulta sobre el catálogo fijo de posiciones.
  * 
  * Requisitos implementados:
- * - 3.1: Catálogo fijo de posiciones (Portero, Defensa, Carrilero, Mediocampista, Delantero, DT)
+ * - 3.1: Catálogo de posiciones definido por las migraciones de Flyway.
  */
 @Service
 @Transactional(readOnly = true)

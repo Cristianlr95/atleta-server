@@ -51,6 +51,7 @@ public class MatchResponseMapper {
         response.setModalidad(match.getModalidad());
         response.setCategoriaGenero(match.getCategoriaGenero());
         response.setMatchType(match.getMatchType());
+        response.setRotativeGoalkeeper(match.isRotativeGoalkeeper());
         response.setFechaHoraProgramada(match.getFechaHoraProgramada());
         response.setLatitud(match.getLatitud());
         response.setLongitud(match.getLongitud());

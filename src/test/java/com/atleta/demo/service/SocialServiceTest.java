@@ -30,6 +30,8 @@ import com.atleta.demo.repository.TeamRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
@@ -286,10 +288,12 @@ class SocialServiceTest {
         verify(matchInviteRepository, never()).findTopByMatchAndTargetOrderByCreatedAtDesc(any(), any());
     }
 
-    @Test
-    void respondMatchInvite_placesAcceptedResponseOnWaitlistWhenRosterIsFull() {
+    @ParameterizedTest
+    @EnumSource(value = RequestStatus.class, names = {"PENDIENTE", "CANCELADA"})
+    void respondMatchInvite_placesAcceptedResponseOnWaitlistWhenRosterIsFull(RequestStatus status) {
         MatchInvite invite = new MatchInvite(match, matchTeam, creator, target, "sumate");
         invite.setId(950L);
+        invite.setStatus(status);
         RespondRequestDecision decision = new RespondRequestDecision();
         decision.setActorUuid(targetUuid);
         decision.setAccept(true);

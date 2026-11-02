@@ -10,10 +10,17 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Entity
 @Table(name = "field_locations")
 public class FieldLocation extends BaseEntity {
+
+    @Column(name = "creator_uuid", updatable = false)
+    private UUID creatorUuid;
+
+    public UUID getCreatorUuid() { return creatorUuid; }
+    public void setCreatorUuid(UUID creatorUuid) { this.creatorUuid = creatorUuid; }
 
     @Column(name = "nombre", nullable = false, length = 150)
     @NotBlank(message = "El nombre de la cancha es obligatorio")

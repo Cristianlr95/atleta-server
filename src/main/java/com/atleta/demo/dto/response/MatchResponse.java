@@ -5,6 +5,7 @@ import com.atleta.demo.enums.MatchGenderCategory;
 import com.atleta.demo.enums.MatchStatus;
 import com.atleta.demo.enums.MatchValidationStatus;
 import com.atleta.demo.enums.MatchType;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -39,6 +40,8 @@ public class MatchResponse {
      */
     private MatchType matchType;
 
+    private boolean rotativeGoalkeeper;
+
     /**
      * Fecha y hora programada del partido
      */
@@ -72,11 +75,13 @@ public class MatchResponse {
     /**
      * Fecha y hora de inicio del partido
      */
+    @JsonSerialize(using = ServerLocalDateTimeSerializer.class)
     private LocalDateTime startedAt;
 
     /**
      * Fecha y hora de finalizacion del partido.
      */
+    @JsonSerialize(using = ServerLocalDateTimeSerializer.class)
     private LocalDateTime finalizedAt;
 
     /**
@@ -107,6 +112,7 @@ public class MatchResponse {
     /**
      * Fecha y hora de cierre de la ventana de votacion MVP.
      */
+    @JsonSerialize(using = ServerLocalDateTimeSerializer.class)
     private LocalDateTime mvpVotingClosedAt;
 
     /**
@@ -194,6 +200,10 @@ public class MatchResponse {
     public void setMatchType(MatchType matchType) {
         this.matchType = matchType;
     }
+
+    public boolean isRotativeGoalkeeper() { return rotativeGoalkeeper; }
+
+    public void setRotativeGoalkeeper(boolean rotativeGoalkeeper) { this.rotativeGoalkeeper = rotativeGoalkeeper; }
 
     public LocalDateTime getFechaHoraProgramada() {
         return fechaHoraProgramada;

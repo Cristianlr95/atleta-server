@@ -48,6 +48,9 @@ public class Match extends BaseEntity {
     @Column(name = "match_type", nullable = false, length = 20)
     private MatchType matchType = MatchType.FRIENDLY;
 
+    @Column(name = "rotative_goalkeeper", nullable = false)
+    private boolean rotativeGoalkeeper = false;
+
     /**
      * Client-generated key used to make the complete creation command retry-safe.
      */
@@ -222,6 +225,10 @@ public class Match extends BaseEntity {
     public void setMatchType(MatchType matchType) {
         this.matchType = matchType != null ? matchType : MatchType.FRIENDLY;
     }
+
+    public boolean isRotativeGoalkeeper() { return rotativeGoalkeeper; }
+
+    public void setRotativeGoalkeeper(boolean rotativeGoalkeeper) { this.rotativeGoalkeeper = rotativeGoalkeeper; }
 
     public String getCreationIdempotencyKey() {
         return creationIdempotencyKey;

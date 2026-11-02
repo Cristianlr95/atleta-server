@@ -10,6 +10,7 @@ import com.atleta.demo.enums.MatchType;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -95,6 +96,9 @@ public class MatchControllerIntegrationTest {
     private MatchPlayerRepository matchPlayerRepository;
 
     @Autowired
+    private EntityManager entityManager;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     private MockMvc mockMvc;
@@ -176,12 +180,32 @@ public class MatchControllerIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.modalidad").value("CINCO_VS_CINCO"))
                 .andExpect(jsonPath("$.matchType").value("FRIENDLY"))
+                .andExpect(jsonPath("$.rotativeGoalkeeper").value(false))
                 .andExpect(jsonPath("$.latitud").value(40.7128))
                 .andExpect(jsonPath("$.longitud").value(-74.0060))
                 .andExpect(jsonPath("$.cuota").value(25.00))
                 .andExpect(jsonPath("$.estado").value("CREADO"))
                 .andExpect(jsonPath("$.creador.atletaUuid").value(testCreatorUuid.toString()))
                 .andExpect(jsonPath("$.createdAt").exists());
+    }
+
+    @Test
+    void goalkeeperModeIsPersistedAcrossCreationAndReload() throws Exception {
+        Map<String, Object> payload = Map.of("modalidad", "CINCO_VS_CINCO",
+                "fechaHoraProgramada", LocalDateTime.now().plusDays(1).toString(),
+                "creadorUuid", testCreatorUuid.toString(), "rotativeGoalkeeper", true);
+        String response = mockMvc.perform(post("/api/v1/matches")
+                        .with(jwtFor(testCreatorUuid)).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.rotativeGoalkeeper").value(true))
+                .andReturn().getResponse().getContentAsString();
+        long id = objectMapper.readTree(response).get("id").asLong();
+        entityManager.flush();
+        entityManager.clear();
+        mockMvc.perform(get("/api/v1/matches/{matchId}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rotativeGoalkeeper").value(true));
     }
 
     @Test
@@ -196,6 +220,7 @@ public class MatchControllerIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.replayed").value(false))
                 .andExpect(jsonPath("$.match.matchType").value("POINTS"))
+                .andExpect(jsonPath("$.match.rotativeGoalkeeper").value(true))
                 .andExpect(jsonPath("$.match.matchTeams", hasSize(1)))
                 .andExpect(jsonPath("$.invitations", hasSize(1)))
                 .andExpect(jsonPath("$.invitations[0].targetUuid").value(testPlayerUuid.toString()))
@@ -211,6 +236,7 @@ public class MatchControllerIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.replayed").value(true))
                 .andExpect(jsonPath("$.match.id").value(matchId))
+                .andExpect(jsonPath("$.match.rotativeGoalkeeper").value(true))
                 .andExpect(jsonPath("$.invitations", hasSize(1)));
 
         assertThat(matchRepository.count(), is(1L));
@@ -242,6 +268,7 @@ public class MatchControllerIntegrationTest {
                 "creadorUuid", testCreatorUuid,
                 "modalidad", "CINCO_VS_CINCO",
                 "matchType", "POINTS",
+                "rotativeGoalkeeper", true,
                 "categoriaGenero", "MIXTO",
                 "fechaHoraProgramada", LocalDateTime.now().plusDays(1).toString()
         );

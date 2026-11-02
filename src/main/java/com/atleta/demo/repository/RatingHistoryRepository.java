@@ -192,13 +192,13 @@ public interface RatingHistoryRepository extends JpaRepository<RatingHistory, Lo
      * @param playerProfileId UUID del perfil del jugador
      * @return Array con [total_partidos, total_goles, total_asistencias, veces_mvp, promedio_delta]
      */
-    @Query("SELECT COUNT(rh), SUM(rh.goalsScored), SUM(rh.assistsMade), SUM(CASE WHEN rh.wasMvp = true THEN 1 ELSE 0 END), AVG(rh.ratingDelta) FROM RatingHistory rh WHERE rh.playerRating.playerProfile.atletaUuid = :playerProfileId")
+    @Query("SELECT COUNT(DISTINCT rh.match.id), SUM(rh.goalsScored), SUM(rh.assistsMade), SUM(CASE WHEN rh.wasMvp = true THEN 1 ELSE 0 END), AVG(rh.ratingDelta) FROM RatingHistory rh WHERE rh.playerRating.playerProfile.atletaUuid = :playerProfileId")
     Object[] getPlayerPerformanceStatistics(@Param("playerProfileId") UUID playerProfileId);
 
     @Query("SELECT " +
-           "SUM(CASE WHEN rh.matchResult = 'GANADO' THEN 1 ELSE 0 END), " +
-           "SUM(CASE WHEN rh.matchResult = 'PERDIDO' THEN 1 ELSE 0 END), " +
-           "SUM(CASE WHEN rh.matchResult = 'EMPATE' THEN 1 ELSE 0 END) " +
+           "COUNT(DISTINCT CASE WHEN rh.matchResult = 'GANADO' THEN rh.match.id ELSE NULL END), " +
+           "COUNT(DISTINCT CASE WHEN rh.matchResult = 'PERDIDO' THEN rh.match.id ELSE NULL END), " +
+           "COUNT(DISTINCT CASE WHEN rh.matchResult = 'EMPATE' THEN rh.match.id ELSE NULL END) " +
            "FROM RatingHistory rh WHERE rh.playerRating.playerProfile.atletaUuid = :playerProfileId")
     Object[] getResultBreakdownByPlayerProfileId(@Param("playerProfileId") UUID playerProfileId);
 
@@ -208,7 +208,7 @@ public interface RatingHistoryRepository extends JpaRepository<RatingHistory, Lo
      * @param roleType Tipo de rol
      * @return Array con [total_partidos, total_goles, total_asistencias, veces_mvp, promedio_delta]
      */
-    @Query("SELECT COUNT(rh), SUM(rh.goalsScored), SUM(rh.assistsMade), SUM(CASE WHEN rh.wasMvp = true THEN 1 ELSE 0 END), AVG(rh.ratingDelta) FROM RatingHistory rh WHERE rh.playerRating.playerProfile.atletaUuid = :playerProfileId AND rh.playerRating.roleType = :roleType")
+    @Query("SELECT COUNT(DISTINCT rh.match.id), SUM(rh.goalsScored), SUM(rh.assistsMade), SUM(CASE WHEN rh.wasMvp = true THEN 1 ELSE 0 END), AVG(rh.ratingDelta) FROM RatingHistory rh WHERE rh.playerRating.playerProfile.atletaUuid = :playerProfileId AND rh.playerRating.roleType = :roleType")
     Object[] getPlayerPerformanceStatisticsByRole(
             @Param("playerProfileId") UUID playerProfileId,
             @Param("roleType") RoleType roleType);

@@ -6,9 +6,11 @@ import com.atleta.demo.dto.response.FieldLocationResponse;
 import com.atleta.demo.entity.FieldLocation;
 import com.atleta.demo.repository.FieldLocationRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -38,7 +40,7 @@ public class FieldLocationService {
         return locations.stream().map(this::toResponse).toList();
     }
 
-    public FieldLocationResponse createFieldLocation(CreateFieldLocationRequest request) {
+    public FieldLocationResponse createFieldLocation(CreateFieldLocationRequest request, UUID creatorUuid) {
         FieldLocation location = new FieldLocation(
                 request.getNombre().trim(),
                 request.getDireccion().trim(),
@@ -48,12 +50,18 @@ public class FieldLocationService {
                 request.getActivo()
         );
 
+        location.setCreatorUuid(creatorUuid);
+
         return toResponse(fieldLocationRepository.save(location));
     }
 
-    public FieldLocationResponse updateFieldLocation(Long id, UpdateFieldLocationRequest request) {
+    public FieldLocationResponse updateFieldLocation(Long id, UpdateFieldLocationRequest request, UUID actorUuid) {
         FieldLocation location = fieldLocationRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Cancha no encontrada: " + id));
+
+        if (actorUuid == null || !actorUuid.equals(location.getCreatorUuid())) {
+            throw new AccessDeniedException("Solo el creador puede editar esta cancha");
+        }
 
         location.setNombre(request.getNombre().trim());
         location.setDireccion(request.getDireccion().trim());
