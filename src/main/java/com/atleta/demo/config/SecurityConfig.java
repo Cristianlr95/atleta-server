@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -98,6 +99,9 @@ public class SecurityConfig {
                     .requestMatchers("/uploads/**").permitAll()
                     .requestMatchers("/actuator/health").permitAll()
                     .requestMatchers("/actuator/health/**").permitAll()
+                    // shortcut: escrituras manuales bloqueadas hasta validar resultados y roles de negocio.
+                    .requestMatchers(HttpMethod.POST, "/api/v1/ratings/update").denyAll()
+                    .requestMatchers(HttpMethod.PUT, "/api/v1/player-profiles/trust-score", "/api/v1/player-profiles/*/positions/*/experience").denyAll()
                     .anyRequest().authenticated();
             })
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));

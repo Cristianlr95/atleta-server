@@ -1,6 +1,9 @@
 spring:
   application:
     name: server-atleta
+  jpa:
+    # SSE responses stay open; database work must end with the service transaction.
+    open-in-view: false
   mail:
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}

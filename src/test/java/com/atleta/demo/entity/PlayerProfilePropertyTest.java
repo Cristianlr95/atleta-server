@@ -1,7 +1,7 @@
 package com.atleta.demo.entity;
 
 import net.jqwik.api.*;
-import org.junit.jupiter.api.DisplayName;
+import net.jqwik.api.Label;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -27,7 +27,7 @@ class PlayerProfilePropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("PlayerProfile should be associated to existing athlete and have initial trust score of 100")
+    @Label("PlayerProfile should be associated to existing athlete and have initial trust score of 100")
     void playerProfileShouldHaveValidAthleteAndInitialTrustScore(@ForAll("validPlayerProfileData") PlayerProfileData data) {
         // Property: For any player profile created, it must be associated to an athlete and have trust score 100
         Athlete athlete = new Athlete(data.athleteEmail, data.athletePasswordHash, data.athleteNombre);
@@ -55,7 +55,7 @@ class PlayerProfilePropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("PlayerProfile should maintain one-to-one relationship with Athlete")
+    @Label("PlayerProfile should maintain one-to-one relationship with Athlete")
     void playerProfileShouldMaintainOneToOneRelationship(@ForAll("validPlayerProfileData") PlayerProfileData data1,
                                                         @ForAll("validPlayerProfileData") PlayerProfileData data2) {
         // Property: For any two player profiles, they should have different athletes (one-to-one relationship)
@@ -79,7 +79,7 @@ class PlayerProfilePropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("PlayerProfile validation should enforce trust score constraints and alias length")
+    @Label("PlayerProfile validation should enforce trust score constraints and alias length")
     void playerProfileValidationShouldEnforceConstraints(@ForAll("playerProfileDataWithPotentialIssues") PlayerProfileData data) {
         // Property: For any player profile data, validation should properly enforce constraints
         Athlete athlete = new Athlete(data.athleteEmail, data.athletePasswordHash, data.athleteNombre);
@@ -111,7 +111,7 @@ class PlayerProfilePropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("PlayerProfile should correctly handle bidirectional relationship with Athlete")
+    @Label("PlayerProfile should correctly handle bidirectional relationship with Athlete")
     void playerProfileShouldHandleBidirectionalRelationship(@ForAll("validPlayerProfileData") PlayerProfileData data) {
         // Property: For any player profile, the bidirectional relationship with athlete should be consistent
         Athlete athlete = new Athlete(data.athleteEmail, data.athletePasswordHash, data.athleteNombre);

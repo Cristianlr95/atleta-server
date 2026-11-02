@@ -125,45 +125,19 @@ public class RatingController {
     }
 
     /**
-     * Actualiza las calificaciones en modo arquero rotativo.
-     * En este modo especial, todos los jugadores reciben actualizaciones de calificaciÃ³n de arquero.
+     * La actualizacion manual de arquero rotativo esta temporalmente bloqueada.
      */
     @PostMapping("/update-rotative-goalkeeper")
-    @Operation(summary = "Actualizar calificaciones en modo arquero rotativo", 
-               description = "Actualiza las calificaciones de arquero para todos los jugadores en un partido con modo arquero rotativo")
+    @Operation(summary = "Actualizacion de arquero rotativo deshabilitada",
+               description = "Operacion temporalmente bloqueada hasta validar participantes y resultado del partido")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Calificaciones de arquero rotativo actualizadas exitosamente"),
-        @ApiResponse(responseCode = "400", description = "Datos de entrada invÃ¡lidos"),
-        @ApiResponse(responseCode = "404", description = "Partido no encontrado"),
-        @ApiResponse(responseCode = "500", description = "Error interno en el cÃ¡lculo de calificaciones")
+        @ApiResponse(responseCode = "403", description = "Operacion temporalmente deshabilitada"),
+        @ApiResponse(responseCode = "400", description = "Datos de entrada invÃ¡lidos")
     })
     public ResponseEntity<String> updateRotativeGoalkeeperRatings(
             @Valid @RequestBody UpdateRotativeGoalkeeperRequest request) {
-        
-        logger.info("Solicitud de actualizaciÃ³n de arquero rotativo para partido {} con resultado {}", 
-                   request.getMatchId(), request.getMatchResult());
-        
-        try {
-            ratingService.updateRotativeGoalkeeperRatings(request.getMatchId(), request.getMatchResult());
-            
-            String message = String.format("Calificaciones de arquero rotativo actualizadas exitosamente para el partido %d", 
-                                         request.getMatchId());
-            logger.info(message);
-            return ResponseEntity.ok(message);
-            
-        } catch (InvalidPlayerDataException e) {
-            logger.warn("Datos de entrada invÃ¡lidos: {}", e.getMessage());
-            return ResponseEntity.badRequest().body("Error de validaciÃ³n: " + e.getMessage());
-            
-        } catch (MatchNotFoundException e) {
-            logger.warn("Partido no encontrado: {}", e.getMessage());
-            return ResponseEntity.notFound().build();
-            
-        } catch (RatingCalculationException e) {
-            logger.error("Error en cÃ¡lculo de calificaciones de arquero rotativo: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error interno: " + e.getMessage());
-        }
+        // shortcut: endpoint bloqueado hasta validar participantes y resultado del partido.
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Actualizacion de arquero rotativo no disponible");
     }
 
     /**

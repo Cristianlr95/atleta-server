@@ -1,7 +1,7 @@
 package com.atleta.demo.enums;
 
 import net.jqwik.api.*;
-import org.junit.jupiter.api.DisplayName;
+import net.jqwik.api.Label;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EnumerationPropertyTest {
 
     @Property(tries = 100)
-    @DisplayName("MatchMode enumerations should have valid display names")
+    @Label("MatchMode enumerations should have valid display names")
     void matchModesShouldHaveValidDisplayNames(@ForAll MatchMode mode) {
         // Property: For any MatchMode, the display name should be non-null and follow expected format
         String displayName = mode.getDisplayName();
@@ -23,7 +23,7 @@ class EnumerationPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("MatchStatus enumerations should represent valid match lifecycle states")
+    @Label("MatchStatus enumerations should represent valid match lifecycle states")
     void matchStatusShouldRepresentValidStates(@ForAll MatchStatus status) {
         // Property: For any MatchStatus, it should be one of the valid lifecycle states
         assertThat(status).isIn(
@@ -38,7 +38,7 @@ class EnumerationPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("PlayerRole enumerations should represent valid team roles")
+    @Label("PlayerRole enumerations should represent valid team roles")
     void playerRolesShouldRepresentValidRoles(@ForAll PlayerRole role) {
         // Property: For any PlayerRole, it should be one of the valid team roles
         assertThat(role).isIn(
@@ -52,7 +52,7 @@ class EnumerationPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("EventType enumerations should represent valid match events")
+    @Label("EventType enumerations should represent valid match events")
     void eventTypesShouldRepresentValidEvents(@ForAll EventType eventType) {
         // Property: For any EventType, it should be one of the valid match events
         assertThat(eventType).isIn(
@@ -65,7 +65,7 @@ class EnumerationPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("MatchResult enumerations should represent valid match outcomes")
+    @Label("MatchResult enumerations should represent valid match outcomes")
     void matchResultsShouldRepresentValidOutcomes(@ForAll MatchResult result) {
         // Property: For any MatchResult, it should be one of the valid match outcomes
         assertThat(result).isIn(
@@ -79,7 +79,7 @@ class EnumerationPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("All enumerations should be serializable and have consistent behavior")
+    @Label("All enumerations should be serializable and have consistent behavior")
     void enumerationsShouldBeConsistent() {
         // Property: All enumerations should have consistent valueOf and values() behavior
         

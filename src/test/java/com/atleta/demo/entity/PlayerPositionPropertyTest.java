@@ -1,7 +1,7 @@
 package com.atleta.demo.entity;
 
 import net.jqwik.api.*;
-import org.junit.jupiter.api.DisplayName;
+import net.jqwik.api.Label;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -27,7 +27,7 @@ class PlayerPositionPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("PlayerPosition should enforce unique priorities per player")
+    @Label("PlayerPosition should enforce unique priorities per player")
     void playerPositionShouldEnforceUniquePriorities(@ForAll("validPlayerPositionData") PlayerPositionData data) {
         // Property: For any player, priorities should be unique (1, 2, 3)
         PlayerProfile player = createTestPlayerProfile(data.playerUuid);
@@ -61,7 +61,7 @@ class PlayerPositionPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("PlayerPosition should validate priority range and XP constraints")
+    @Label("PlayerPosition should validate priority range and XP constraints")
     void playerPositionShouldValidateConstraints(@ForAll("playerPositionDataWithPotentialIssues") PlayerPositionData data) {
         // Property: For any player position data, validation should enforce priority and XP constraints
         PlayerProfile player = createTestPlayerProfile(data.playerUuid);
@@ -89,7 +89,7 @@ class PlayerPositionPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("PlayerPosition should correctly handle XP addition")
+    @Label("PlayerPosition should correctly handle XP addition")
     void playerPositionShouldHandleXpAddition(@ForAll("validPlayerPositionData") PlayerPositionData data) {
         // Property: For any player position, adding XP should increase the total correctly
         PlayerProfile player = createTestPlayerProfile(data.playerUuid);
@@ -116,7 +116,7 @@ class PlayerPositionPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("PlayerPosition should maintain valid relationships")
+    @Label("PlayerPosition should maintain valid relationships")
     void playerPositionShouldMaintainValidRelationships(@ForAll("validPlayerPositionData") PlayerPositionData data) {
         // Property: For any player position, relationships with player and position should be consistent
         PlayerProfile player = createTestPlayerProfile(data.playerUuid);

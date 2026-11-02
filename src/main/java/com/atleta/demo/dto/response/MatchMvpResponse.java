@@ -1,5 +1,6 @@
 package com.atleta.demo.dto.response;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,7 +9,9 @@ import java.util.UUID;
 public class MatchMvpResponse {
 
     private Long matchId;
+    @JsonSerialize(using = ServerLocalDateTimeSerializer.class)
     private LocalDateTime finalizedAt;
+    @JsonSerialize(using = ServerLocalDateTimeSerializer.class)
     private LocalDateTime closesAt;
     private boolean open;
     private UUID myVote;

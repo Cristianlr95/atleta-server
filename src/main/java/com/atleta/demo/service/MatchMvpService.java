@@ -84,6 +84,9 @@ public class MatchMvpService {
 
         Match match = getMatchOrThrow(matchId);
         ensureFinalized(match);
+        if (match.getMvpUser() != null) {
+            throw new IllegalArgumentException("La votacion MVP ya esta cerrada y no se puede modificar");
+        }
         LocalDateTime closesAt = resolveVotingCloseAt(match);
         if (LocalDateTime.now().isAfter(closesAt) || LocalDateTime.now().isEqual(closesAt)) {
             maybeCloseVoting(match, closesAt);
@@ -169,7 +172,7 @@ public class MatchMvpService {
     }
 
     private Match getMatchOrThrow(Long matchId) {
-        return matchRepository.findById(matchId)
+        return matchRepository.findByIdForUpdate(matchId)
                 .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado: " + matchId));
     }
 

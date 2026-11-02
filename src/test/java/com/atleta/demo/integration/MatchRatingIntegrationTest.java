@@ -10,6 +10,7 @@ import com.atleta.demo.entity.Position;
 import com.atleta.demo.entity.Team;
 import com.atleta.demo.enums.EventType;
 import com.atleta.demo.enums.MatchMode;
+import com.atleta.demo.enums.MatchResultType;
 import com.atleta.demo.enums.MatchStatus;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.repository.MatchEventRepository;
@@ -173,6 +174,7 @@ class MatchRatingIntegrationTest {
 
         sampleMatch = new Match();
         sampleMatch.setId(1L);
+        sampleMatch.setStartedAt(java.time.LocalDateTime.now().minusHours(2));
         sampleMatch.setCreador(creator);
         sampleMatch.setModalidad(MatchMode.CINCO_VS_CINCO);
 
@@ -241,7 +243,7 @@ class MatchRatingIntegrationTest {
     void changeMatchStatus_ToFinalizado_ShouldTriggerRatingUpdate() {
         sampleMatch.setEstado(MatchStatus.INICIADO);
 
-        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleMatch));
         when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(matchTeamRepository.findByMatch(any(Match.class))).thenReturn(matchTeams);
         when(matchPlayerRepository.findByMatch(any(Match.class))).thenReturn(matchPlayers);
@@ -256,13 +258,15 @@ class MatchRatingIntegrationTest {
         verify(ratingService, times(1)).updatePlayerRatings(matchIdCaptor.capture(), performanceCaptor.capture());
         assertEquals(1L, matchIdCaptor.getValue());
         assertEquals(matchPlayers.size(), performanceCaptor.getValue().size());
+        assertEquals(MatchResultType.GANADO, performanceCaptor.getValue().get(0).getMatchResult());
+        assertEquals(MatchResultType.PERDIDO, performanceCaptor.getValue().get(5).getMatchResult());
     }
 
     @Test
     void changeMatchStatus_ToFinalizado_WithNoPlayers_ShouldNotCallRatingService() {
         sampleMatch.setEstado(MatchStatus.INICIADO);
 
-        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleMatch));
         when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(List.of());
 
@@ -288,7 +292,7 @@ class MatchRatingIntegrationTest {
     void changeMatchStatus_RatingServiceThrowsException_ShouldFailAtomicClosure() {
         sampleMatch.setEstado(MatchStatus.INICIADO);
 
-        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleMatch));
         when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(matchTeamRepository.findByMatch(sampleMatch)).thenReturn(matchTeams);
         when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(matchPlayers);

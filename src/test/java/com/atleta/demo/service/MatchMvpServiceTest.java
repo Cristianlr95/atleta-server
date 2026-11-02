@@ -111,10 +111,55 @@ class MatchMvpServiceTest {
     }
 
     @Test
+    void vote_shouldRejectChangesAfterAutomaticClosure() {
+        match.setMvpUser(candidateA);
+        match.setMvpVotingClosedAt(LocalDateTime.now().plusHours(2));
+        when(matchRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(match));
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> serviceWithoutBonus.vote(100L, voter.getAtletaUuid(), candidateB.getAtletaUuid()));
+        assertEquals("La votacion MVP ya esta cerrada y no se puede modificar", error.getMessage());
+        verify(matchMvpVoteRepository, never()).save(any());
+    }
+
+    @Test
+    void tenthVoteClosesImmediatelyAndReloadDoesNotApplyBonusAgain() {
+        var participants = new java.util.ArrayList<PlayerProfile>(List.of(voter, candidateA, candidateB));
+        for (int i = 3; i < 10; i++) {
+            PlayerProfile profile = new PlayerProfile();
+            profile.setAtletaUuid(UUID.randomUUID());
+            participants.add(profile);
+        }
+        match.setCreador(voter);
+        match.setMvpVotingClosedAt(LocalDateTime.now().plusHours(2));
+        when(matchRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(match));
+        when(matchPlayerRepository.findConfirmedPlayersByMatch(match))
+                .thenReturn(participants.stream().map(this::confirmed).toList());
+        when(playerProfileRepository.findById(voter.getAtletaUuid())).thenReturn(Optional.of(voter));
+        when(playerProfileRepository.findById(candidateA.getAtletaUuid())).thenReturn(Optional.of(candidateA));
+        when(matchMvpVoteRepository.findByMatch(match)).thenReturn(participants.stream()
+                .map(participant -> new MatchMvpVote(match, participant, candidateA)).toList());
+        PlayerHistory history = new PlayerHistory(match, candidateA, team, position, 1, 0, null, 25);
+        PlayerPosition xp = new PlayerPosition(candidateA, position, 1, 100);
+        when(playerHistoryRepository.findByMatchAndPlayer(match, candidateA)).thenReturn(Optional.of(history));
+        when(playerHistoryRepository.applyMvpBonusXpIfNotApplied(100L, candidateA.getAtletaUuid(), 10)).thenReturn(1);
+        when(playerPositionRepository.findByPlayerAndPosition(candidateA, position)).thenReturn(Optional.of(xp));
+        MatchMvpResponse closed = serviceWithBonus.vote(100L, voter.getAtletaUuid(), candidateA.getAtletaUuid());
+        assertFalse(closed.isOpen());
+        assertEquals(10, closed.getCandidates().size());
+        assertEquals(10, closed.getTally().get(0).getVotes());
+        assertEquals(candidateA.getAtletaUuid(), closed.getWinnerUserId());
+        serviceWithBonus.getMvpState(100L, voter.getAtletaUuid());
+        serviceWithBonus.getMvpState(100L, candidateB.getAtletaUuid());
+        assertEquals(110, xp.getXp());
+        verify(playerHistoryRepository).applyMvpBonusXpIfNotApplied(100L, candidateA.getAtletaUuid(), 10);
+        verify(playerPositionRepository).save(xp);
+    }
+
+    @Test
     void vote_shouldUpsertExistingVote() {
         MatchMvpVote existingVote = new MatchMvpVote(match, voter, candidateA);
 
-        when(matchRepository.findById(100L)).thenReturn(Optional.of(match));
+        when(matchRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(match));
         when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
         when(playerProfileRepository.findById(voter.getAtletaUuid())).thenReturn(Optional.of(voter));
         when(playerProfileRepository.findById(candidateB.getAtletaUuid())).thenReturn(Optional.of(candidateB));
@@ -137,7 +182,7 @@ class MatchMvpServiceTest {
     void vote_shouldRejectWhenVotingWindowExpired() {
         match.setFinalizedAt(LocalDateTime.now().minusHours(4));
 
-        when(matchRepository.findById(100L)).thenReturn(Optional.of(match));
+        when(matchRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(match));
         when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
         when(matchMvpVoteRepository.findByMatch(match)).thenReturn(List.of());
 
@@ -159,7 +204,7 @@ class MatchMvpServiceTest {
         PlayerHistory historyA = new PlayerHistory(match, candidateA, team, position, 1, 0, null, 30);
         PlayerHistory historyB = new PlayerHistory(match, candidateB, team, position, 2, 0, null, 20);
 
-        when(matchRepository.findById(100L)).thenReturn(Optional.of(match));
+        when(matchRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(match));
         when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
         when(matchMvpVoteRepository.findByMatch(match)).thenReturn(List.of(vote1, vote2));
         when(matchPlayerRepository.findConfirmedPlayersByMatch(match)).thenReturn(List.of(
@@ -191,7 +236,7 @@ class MatchMvpServiceTest {
         winnerPosition.setPosition(position);
         winnerPosition.setXp(100);
 
-        when(matchRepository.findById(100L)).thenReturn(Optional.of(match));
+        when(matchRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(match));
         when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
         when(matchMvpVoteRepository.findByMatch(match)).thenReturn(List.of(vote1));
         when(matchPlayerRepository.findConfirmedPlayersByMatch(match)).thenReturn(List.of(
@@ -216,7 +261,7 @@ class MatchMvpServiceTest {
         match.setFinalizedAt(LocalDateTime.now().minusHours(4));
         MatchMvpVote vote = new MatchMvpVote(match, voter, candidateA);
 
-        when(matchRepository.findById(100L)).thenReturn(Optional.of(match));
+        when(matchRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(match));
         when(matchRepository.save(any(Match.class))).thenAnswer(inv -> inv.getArgument(0));
         when(matchMvpVoteRepository.findByMatch(match)).thenReturn(List.of(vote));
         when(matchPlayerRepository.findConfirmedPlayersByMatch(match)).thenReturn(List.of(confirmed(candidateA)));

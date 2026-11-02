@@ -557,7 +557,7 @@ class MatchServiceTest {
         startedMatch.setStartedAt(LocalDateTime.now().minusMinutes(10));
         startedMatch.setCreador(samplePlayer);
 
-        when(matchRepository.findById(100L)).thenReturn(Optional.of(startedMatch));
+        when(matchRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(startedMatch));
         when(matchPlayerRepository.findCaptainsByMatch(startedMatch)).thenReturn(java.util.Collections.emptyList());
 
         // Act + Assert
@@ -575,7 +575,7 @@ class MatchServiceTest {
         MatchStatus newStatus = MatchStatus.FINALIZADO;
         sampleMatch.setEstado(MatchStatus.CREADO); // Can't go directly from CREADO to FINALIZADO
 
-        when(matchRepository.findById(matchId)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.findByIdForUpdate(matchId)).thenReturn(Optional.of(sampleMatch));
 
         // Act & Assert
         IllegalArgumentException exception = assertThrows(
@@ -584,7 +584,7 @@ class MatchServiceTest {
         );
 
         assertEquals("Desde CREADO solo se puede pasar a INICIADO o INVALIDO", exception.getMessage());
-        verify(matchRepository).findById(matchId);
+        verify(matchRepository).findByIdForUpdate(matchId);
         verify(matchRepository, never()).save(any(Match.class));
     }
 }

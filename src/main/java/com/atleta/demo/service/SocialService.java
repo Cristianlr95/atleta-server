@@ -419,7 +419,8 @@ public class SocialService {
             return toSocialResponse(invite);
         }
 
-        if (invite.getStatus() != RequestStatus.PENDIENTE) {
+        if (invite.getStatus() != RequestStatus.PENDIENTE
+                && !(requestedAcceptance && invite.getStatus() == RequestStatus.CANCELADA)) {
             throw new IllegalArgumentException("La invitacion ya fue respondida");
         }
 

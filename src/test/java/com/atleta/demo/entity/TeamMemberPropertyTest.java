@@ -2,7 +2,7 @@ package com.atleta.demo.entity;
 
 import com.atleta.demo.enums.PlayerRole;
 import net.jqwik.api.*;
-import org.junit.jupiter.api.DisplayName;
+import net.jqwik.api.Label;
 
 import java.util.UUID;
 
@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TeamMemberPropertyTest {
 
     @Property(tries = 100)
-    @DisplayName("Team membership should have valid player, team, and role")
+    @Label("Team membership should have valid player, team, and role")
     void teamMembershipShouldHaveValidPlayerTeamAndRole(
             @ForAll String teamName,
             @ForAll String playerEmail,
@@ -65,7 +65,7 @@ class TeamMemberPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("Team membership should allow multiple players per team")
+    @Label("Team membership should allow multiple players per team")
     void teamMembershipShouldAllowMultiplePlayersPerTeam(
             @ForAll String teamName,
             @ForAll String player1Email,
@@ -106,7 +106,7 @@ class TeamMemberPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("Team membership status should be manageable")
+    @Label("Team membership status should be manageable")
     void teamMembershipStatusShouldBeManageable(
             @ForAll String teamName,
             @ForAll String playerEmail) {

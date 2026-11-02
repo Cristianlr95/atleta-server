@@ -1,0 +1,1 @@
+ALTER TABLE matches ADD COLUMN rotative_goalkeeper BOOLEAN NOT NULL DEFAULT FALSE;

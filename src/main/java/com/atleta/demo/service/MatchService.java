@@ -124,6 +124,7 @@ public class MatchService {
                 request.getCategoriaGenero() != null ? request.getCategoriaGenero() : MatchGenderCategory.MIXTO
         );
         match.setMatchType(request.getMatchType() != null ? request.getMatchType() : MatchType.FRIENDLY);
+        match.setRotativeGoalkeeper(request.isRotativeGoalkeeper());
 
         match = matchRepository.save(match);
         return matchResponseMapper.toMatchResponse(match);
@@ -578,7 +579,8 @@ public class MatchService {
     }
 
     public MatchResponse changeMatchStatus(Long matchId, MatchStatus newStatus, UUID actorUuid) {
-        Match match = matchRepository.findById(matchId)
+        Match match = (newStatus == MatchStatus.FINALIZADO
+                ? matchRepository.findByIdForUpdate(matchId) : matchRepository.findById(matchId))
                 .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado: " + matchId));
 
         // Validar transiciones de estado
@@ -599,6 +601,7 @@ public class MatchService {
             UUID effectiveActorUuid = actorUuid != null ? actorUuid : match.getCreador().getAtletaUuid();
             validateResponsibleActor(match, effectiveActorUuid);
             validateMatchIniciado(match);
+            matchStatusPolicy.validateCloseWindow(match, LocalDateTime.now());
             if (!matchRosterPolicy.hasMinimumConfirmedPlayers(match, matchPlayerRepository.findByMatch(match))) {
                 match.setEstado(MatchStatus.INVALIDO);
                 match.setValidationStatus(MatchValidationStatus.INVALID_CONFIRMATION_THRESHOLD);
