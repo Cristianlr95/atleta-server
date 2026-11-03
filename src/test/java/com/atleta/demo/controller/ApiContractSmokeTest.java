@@ -670,6 +670,18 @@ class ApiContractSmokeTest {
     }
 
     @Test
+    void socialMatchInviteDecisionExplainsMissingTeam() throws Exception {
+        when(socialService.respondMatchInvite(org.mockito.ArgumentMatchers.eq(801L), any()))
+                .thenThrow(new com.atleta.demo.exception.MatchTeamRequiredException());
+        mockMvc.perform(put("/api/v1/social/match-invites/{id}/decision", 801L)
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accept\":true}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("MATCH_TEAM_REQUIRED"));
+    }
+
+    @Test
     void socialMatchInviteDecisionReturnsForbiddenForNonRecipient() throws Exception {
         when(socialService.respondMatchInvite(org.mockito.ArgumentMatchers.eq(801L), any()))
                 .thenThrow(new AccessDeniedException("Solo el receptor"));

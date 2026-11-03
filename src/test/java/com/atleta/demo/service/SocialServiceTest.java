@@ -143,6 +143,42 @@ class SocialServiceTest {
     }
 
     @Test
+    void respondMatchInvite_requiresTeamBeforeChangingInvitation() {
+        Match withoutTeam = new Match(MatchMode.CINCO_VS_CINCO, LocalDateTime.now().plusDays(1), creator);
+        withoutTeam.setId(43L);
+        MatchInvite invite = new MatchInvite(withoutTeam, null, creator, target, "sumate");
+        invite.setId(951L);
+        RespondRequestDecision decision = new RespondRequestDecision();
+        decision.setActorUuid(targetUuid);
+        decision.setAccept(true);
+        when(matchInviteRepository.findById(951L)).thenReturn(Optional.of(invite));
+        when(matchRepository.findByIdForUpdate(43L)).thenReturn(Optional.of(withoutTeam));
+
+        assertThrows(com.atleta.demo.exception.MatchTeamRequiredException.class,
+                () -> socialService.respondMatchInvite(951L, decision));
+        assertEquals(RequestStatus.PENDIENTE, invite.getStatus());
+        verify(matchInviteRepository, never()).save(any(MatchInvite.class));
+        verify(matchPlayerRepository, never()).save(any(MatchPlayer.class));
+    }
+
+    @Test
+    void respondMatchInvite_canRejectWhenMatchHasNoTeam() {
+        Match withoutTeam = new Match(MatchMode.CINCO_VS_CINCO, LocalDateTime.now().plusDays(1), creator);
+        withoutTeam.setId(43L);
+        MatchInvite invite = new MatchInvite(withoutTeam, null, creator, target, "sumate");
+        invite.setId(951L);
+        RespondRequestDecision decision = new RespondRequestDecision();
+        decision.setActorUuid(targetUuid);
+        decision.setAccept(false);
+        when(matchInviteRepository.findById(951L)).thenReturn(Optional.of(invite));
+        when(matchRepository.findByIdForUpdate(43L)).thenReturn(Optional.of(withoutTeam));
+        when(matchInviteRepository.save(any(MatchInvite.class))).thenAnswer(call -> call.getArgument(0));
+
+        assertEquals(RequestStatus.RECHAZADA, socialService.respondMatchInvite(951L, decision).getStatus());
+        verify(matchPlayerRepository, never()).save(any(MatchPlayer.class));
+    }
+
+    @Test
     void onlyRecipientCanRespondToSocialRequests() {
         var decision = new RespondRequestDecision();
         decision.setActorUuid(requesterUuid);
