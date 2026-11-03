@@ -6,12 +6,14 @@ import com.atleta.demo.dto.request.RespondRequestDecision;
 import com.atleta.demo.dto.response.MatchInviteDeliveryResponse;
 import com.atleta.demo.dto.response.SocialRequestResponse;
 import com.atleta.demo.entity.Match;
+import com.atleta.demo.entity.Friendship;
 import com.atleta.demo.entity.MatchInvite;
 import com.atleta.demo.entity.MatchPlayer;
 import com.atleta.demo.entity.MatchTeam;
 import com.atleta.demo.entity.PlayerProfile;
 import com.atleta.demo.entity.Position;
 import com.atleta.demo.entity.Team;
+import com.atleta.demo.entity.TeamInvite;
 import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.enums.RequestStatus;
@@ -138,6 +140,23 @@ class SocialServiceTest {
         match = new Match(MatchMode.CINCO_VS_CINCO, LocalDateTime.now().plusDays(1), creator);
         match.setId(42L);
         match.addMatchTeam(new MatchTeam(match, matchTeam, true));
+    }
+
+    @Test
+    void onlyRecipientCanRespondToSocialRequests() {
+        var decision = new RespondRequestDecision();
+        decision.setActorUuid(requesterUuid);
+        decision.setAccept(true);
+        when(friendshipRepository.findById(1L)).thenReturn(Optional.of(new Friendship(requester, target)));
+        when(teamInviteRepository.findById(2L)).thenReturn(Optional.of(new TeamInvite(matchTeam, requester, target, null)));
+        when(matchInviteRepository.findById(3L)).thenReturn(Optional.of(new MatchInvite(match, matchTeam, requester, target, null)));
+
+        assertThrows(AccessDeniedException.class, () -> socialService.respondFriendRequest(1L, decision));
+        assertThrows(AccessDeniedException.class, () -> socialService.respondTeamInvite(2L, decision));
+        assertThrows(AccessDeniedException.class, () -> socialService.respondMatchInvite(3L, decision));
+        verify(friendshipRepository, never()).save(any());
+        verify(teamInviteRepository, never()).save(any());
+        verify(matchInviteRepository, never()).save(any());
     }
 
     @Test

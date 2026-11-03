@@ -111,7 +111,7 @@ public class SocialService {
         Friendship friendship = friendshipRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Solicitud de amistad no encontrada"));
         if (!friendship.getTarget().getAtletaUuid().equals(decision.getActorUuid())) {
-            throw new IllegalArgumentException("Solo el receptor puede responder la solicitud");
+            throw new AccessDeniedException("Solo el receptor puede responder la solicitud");
         }
         if (friendship.getStatus() != RequestStatus.PENDIENTE) {
             throw new IllegalArgumentException("La solicitud ya fue respondida");
@@ -174,7 +174,7 @@ public class SocialService {
         TeamInvite invite = teamInviteRepository.findById(inviteId)
                 .orElseThrow(() -> new IllegalArgumentException("Invitacion de equipo no encontrada"));
         if (!invite.getTarget().getAtletaUuid().equals(decision.getActorUuid())) {
-            throw new IllegalArgumentException("Solo el receptor puede responder la invitacion");
+            throw new AccessDeniedException("Solo el receptor puede responder la invitacion");
         }
         if (invite.getStatus() != RequestStatus.PENDIENTE) {
             throw new IllegalArgumentException("La invitacion ya fue respondida");
@@ -391,7 +391,7 @@ public class SocialService {
         MatchInvite invite = matchInviteRepository.findById(inviteId)
                 .orElseThrow(() -> new IllegalArgumentException("Invitacion de partido no encontrada"));
         if (!invite.getTarget().getAtletaUuid().equals(decision.getActorUuid())) {
-            throw new IllegalArgumentException("Solo el receptor puede responder la invitacion");
+            throw new AccessDeniedException("Solo el receptor puede responder la invitacion");
         }
         boolean requestedAcceptance = Boolean.TRUE.equals(decision.getAccept());
         Match match = matchRepository.findByIdForUpdate(invite.getMatch().getId())
