@@ -670,6 +670,19 @@ class ApiContractSmokeTest {
     }
 
     @Test
+    void socialMatchInviteDecisionReturnsForbiddenForNonRecipient() throws Exception {
+        when(socialService.respondMatchInvite(org.mockito.ArgumentMatchers.eq(801L), any()))
+                .thenThrow(new AccessDeniedException("Solo el receptor"));
+
+        mockMvc.perform(put("/api/v1/social/match-invites/{id}/decision", 801L)
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accept\":true}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    @Test
     void socialMatchInviteWritesUseJwtSubjectAsRequester() throws Exception {
         SocialRequestResponse invite = new SocialRequestResponse();
         invite.setId(801L);
