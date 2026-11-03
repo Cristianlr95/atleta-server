@@ -424,6 +424,9 @@ public class SocialService {
             throw new IllegalArgumentException("La invitacion ya fue respondida");
         }
 
+        if (requestedAcceptance && resolveTeamForInvite(invite) == null) {
+            throw new com.atleta.demo.exception.MatchTeamRequiredException();
+        }
         boolean hasRosterSlot = requestedAcceptance && hasRosterSlot(match);
         boolean accepted = requestedAcceptance && hasRosterSlot;
 
@@ -842,7 +845,7 @@ public class SocialService {
 
         Team team = resolveTeamForInvite(invite);
         if (team == null) {
-            throw new IllegalArgumentException("No se pudo determinar equipo para registrar participacion en el partido");
+            throw new com.atleta.demo.exception.MatchTeamRequiredException();
         }
 
         Position position = resolvePrimaryPosition(player);
