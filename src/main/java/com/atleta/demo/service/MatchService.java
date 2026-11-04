@@ -1,5 +1,7 @@
 package com.atleta.demo.service;
 
+import com.atleta.demo.service.xp.MatchXpCalculator;
+
 import com.atleta.demo.dto.request.CreateMatchRequest;
 import com.atleta.demo.dto.request.JoinMatchRequest;
 import com.atleta.demo.dto.request.CreateMatchEventRequest;
@@ -442,7 +444,7 @@ public class MatchService {
             UUID playerUuid = player.getPlayer().getAtletaUuid();
             int goals = requestedGoals.getOrDefault(playerUuid, persistedGoals.getOrDefault(playerUuid, 0));
             MatchTeamSide side = player.getTeamSide() != null ? player.getTeamSide() : MatchTeamSide.LOCAL;
-            int xp = estimateXpForPlayer(player, goals, response.getFinalScoreLocal(), response.getFinalScoreAway(), side);
+            int xp = MatchXpCalculator.calculate(player, goals, response.getFinalScoreLocal(), response.getFinalScoreAway(), side);
             BigDecimal currentOvr = currentOvrByPlayer.get(playerUuid);
 
             MatchClosePreviewPlayerResponse row = new MatchClosePreviewPlayerResponse();
@@ -712,31 +714,6 @@ public class MatchService {
             goalsByPlayer.merge(playerUuid, 1, Integer::sum);
         }
         return goalsByPlayer;
-    }
-
-    private int estimateXpForPlayer(MatchPlayer player, int goals, int finalLocal, int finalAway, MatchTeamSide side) {
-        int xp = 10; // jugar partido
-        if (finalLocal == finalAway) {
-            xp += 0;
-        } else {
-            boolean won = (side == MatchTeamSide.LOCAL && finalLocal > finalAway)
-                    || (side == MatchTeamSide.VISITA && finalAway > finalLocal);
-            xp += won ? 10 : 5;
-        }
-
-        String position = player.getPosition() != null && player.getPosition().getNombre() != null
-                ? player.getPosition().getNombre().toUpperCase()
-                : "";
-        int goalXp;
-        if (position.contains("DEF")) {
-            goalXp = 15;
-        } else if (position.contains("MED")) {
-            goalXp = 12;
-        } else {
-            goalXp = 10;
-        }
-        xp += goals * goalXp;
-        return xp;
     }
 
     private void validateMatchIniciado(Match match) {

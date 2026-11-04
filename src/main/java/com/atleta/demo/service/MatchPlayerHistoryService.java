@@ -1,5 +1,6 @@
 package com.atleta.demo.service;
 
+import com.atleta.demo.service.xp.MatchXpCalculator;
 import com.atleta.demo.entity.Match;
 import com.atleta.demo.entity.MatchEvent;
 import com.atleta.demo.entity.MatchPlayer;
@@ -98,7 +99,7 @@ public class MatchPlayerHistoryService {
             MatchResult result = resolvePlayerResult(side, finalLocal, finalAway);
             int goals = goalsByPlayer.getOrDefault(player.getAtletaUuid(), 0);
             int assists = assistsByPlayer.getOrDefault(player.getAtletaUuid(), 0);
-            int xp = estimateXpForPlayer(matchPlayer, goals, finalLocal, finalAway,
+            int xp = MatchXpCalculator.calculate(matchPlayer, goals, finalLocal, finalAway,
                     side != null ? side : MatchTeamSide.LOCAL);
 
             PlayerHistory history = new PlayerHistory(
@@ -139,29 +140,6 @@ public class MatchPlayerHistoryService {
         }
 
         return localWon ? MatchResult.VICTORIA : MatchResult.DERROTA;
-    }
-
-    private int estimateXpForPlayer(MatchPlayer player, int goals, int finalLocal, int finalAway, MatchTeamSide side) {
-        int xp = 10;
-        if (finalLocal != finalAway) {
-            boolean won = (side == MatchTeamSide.LOCAL && finalLocal > finalAway)
-                    || (side == MatchTeamSide.VISITA && finalAway > finalLocal);
-            xp += won ? 10 : 5;
-        }
-
-        String position = player.getPosition() != null && player.getPosition().getNombre() != null
-                ? player.getPosition().getNombre().toUpperCase()
-                : "";
-        int goalXp;
-        if (position.contains("DEF")) {
-            goalXp = 15;
-        } else if (position.contains("MED")) {
-            goalXp = 12;
-        } else {
-            goalXp = 10;
-        }
-        xp += goals * goalXp;
-        return xp;
     }
 
     private MatchTeamSide resolveTeamSide(Match match, Team team) {
