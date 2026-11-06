@@ -1,7 +1,7 @@
 package com.atleta.demo.entity;
 
 import net.jqwik.api.*;
-import org.junit.jupiter.api.DisplayName;
+import net.jqwik.api.Label;
 
 import java.util.UUID;
 
@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TeamPropertyTest {
 
     @Property(tries = 100)
-    @DisplayName("Team should have valid creator, unique name, and initialized stats")
+    @Label("Team should have valid creator, unique name, and initialized stats")
     void teamShouldHaveValidCreatorAndUniqueNameAndInitializedStats(
             @ForAll String teamName, 
             @ForAll String creatorEmail,
@@ -58,7 +58,7 @@ class TeamPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("Teams with different names should be different entities")
+    @Label("Teams with different names should be different entities")
     void teamsWithDifferentNamesShouldBeDifferent(
             @ForAll String teamName1, 
             @ForAll String teamName2,
@@ -86,7 +86,7 @@ class TeamPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("Team stats should maintain consistency after operations")
+    @Label("Team stats should maintain consistency after operations")
     void teamStatsShouldMaintainConsistencyAfterOperations(
             @ForAll String teamName,
             @ForAll String creatorEmail,

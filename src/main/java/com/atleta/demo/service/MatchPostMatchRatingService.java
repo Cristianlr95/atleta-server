@@ -9,6 +9,8 @@ import com.atleta.demo.entity.Position;
 import com.atleta.demo.entity.Team;
 import com.atleta.demo.enums.EventType;
 import com.atleta.demo.enums.MatchResultType;
+import com.atleta.demo.enums.MatchType;
+import com.atleta.demo.enums.MatchTeamSide;
 import com.atleta.demo.enums.PriorityLevel;
 import com.atleta.demo.enums.RoleType;
 import com.atleta.demo.repository.MatchEventRepository;
@@ -48,16 +50,25 @@ public class MatchPostMatchRatingService {
         logger.debug("Iniciando actualizacion de calificaciones para el partido {}", match.getId());
 
         List<MatchTeam> matchTeams = matchTeamRepository.findByMatch(match);
-        if (matchTeams.size() != 2) {
+        boolean internalMatch = match.getMatchType() == MatchType.INTERNAL;
+        if (!internalMatch && matchTeams.size() != 2) {
+            if (match.isRotativeGoalkeeper()) {
+                throw new IllegalStateException("Se requieren dos equipos para calcular arquero rotativo");
+            }
             logger.warn("El partido {} no tiene exactamente 2 equipos, saltando actualizacion de calificaciones", match.getId());
             return;
         }
 
-        MatchResultType matchResult = determineMatchResult(matchTeams);
+        MatchResultType matchResult = internalMatch
+                ? resultForScore(match.getFinalScoreLocal(), match.getFinalScoreAway())
+                : determineMatchResult(matchTeams);
         logger.debug("Resultado del partido {}: {}", match.getId(), matchResult);
 
         List<MatchPlayer> matchPlayers = matchPlayerRepository.findByMatch(match);
         if (matchPlayers.isEmpty()) {
+            if (match.isRotativeGoalkeeper()) {
+                throw new IllegalStateException("Se requieren jugadores confirmados para calcular arquero rotativo");
+            }
             logger.warn("No hay jugadores registrados en el partido {}", match.getId());
             return;
         }
@@ -74,7 +85,40 @@ public class MatchPostMatchRatingService {
                 continue;
             }
 
-            PlayerPerformanceDto performance = collectPlayerPerformance(matchPlayer, matchEvents, matchResult, matchTeams);
+            if (match.isRotativeGoalkeeper() && internalMatch && matchPlayer.getTeamSide() == null) {
+                throw new IllegalStateException("Todos los jugadores confirmados deben tener equipo asignado para arquero rotativo");
+            }
+
+            MatchResultType playerResult = matchResult;
+            if (!internalMatch) {
+                Team playerTeam = matchPlayer.getTeam();
+                MatchTeam assignedTeam = matchTeams.stream()
+                        .filter(team -> playerTeam != null && playerTeam.getId() != null
+                                && team.getTeam() != null && playerTeam.getId().equals(team.getTeam().getId()))
+                        .findFirst().orElse(null);
+                if (assignedTeam == null) {
+                    if (match.isRotativeGoalkeeper()) {
+                        throw new IllegalStateException("Jugador confirmado sin equipo valido para arquero rotativo");
+                    }
+                    logger.warn("Se omite rating de jugador {} en partido {}: equipo no asociado al partido",
+                            matchPlayer.getPlayer().getAtletaUuid(), match.getId());
+                    continue;
+                }
+                if (Boolean.FALSE.equals(assignedTeam.getEsLocal())) {
+                    playerResult = matchResult == MatchResultType.GANADO ? MatchResultType.PERDIDO
+                            : matchResult == MatchResultType.PERDIDO ? MatchResultType.GANADO : MatchResultType.EMPATE;
+                }
+            }
+
+            PlayerPerformanceDto performance = collectPlayerPerformance(matchPlayer, matchEvents, playerResult, matchTeams);
+            if (internalMatch) {
+                boolean visiting = matchPlayer.getTeamSide() == MatchTeamSide.VISITA;
+                performance.setMatchResult(visiting
+                        ? resultForScore(match.getFinalScoreAway(), match.getFinalScoreLocal()) : matchResult);
+                if (performance.getGoalsConceded() != null) {
+                    performance.setGoalsConceded(visiting ? match.getFinalScoreLocal() : match.getFinalScoreAway());
+                }
+            }
             performanceData.add(performance);
 
             logger.debug(
@@ -86,8 +130,15 @@ public class MatchPostMatchRatingService {
             );
         }
 
+        if (match.isRotativeGoalkeeper() && performanceData.isEmpty()) {
+            throw new IllegalStateException("Se requieren jugadores confirmados para calcular arquero rotativo");
+        }
+
         if (!performanceData.isEmpty()) {
             ratingService.updatePlayerRatings(match.getId(), performanceData);
+            if (match.isRotativeGoalkeeper()) {
+                ratingService.updateConfirmedRotativeGoalkeeperRatings(match, performanceData);
+            }
             logger.info(
                     "Calificaciones actualizadas para {} jugadores del partido {}",
                     performanceData.size(),
@@ -114,6 +165,10 @@ public class MatchPostMatchRatingService {
         int localGoals = localTeam.getGoles();
         int visitingGoals = visitingTeam.getGoles();
 
+        return resultForScore(localGoals, visitingGoals);
+    }
+
+    private MatchResultType resultForScore(int localGoals, int visitingGoals) {
         if (localGoals > visitingGoals) {
             return MatchResultType.GANADO;
         }
@@ -195,6 +250,11 @@ public class MatchPostMatchRatingService {
     private RoleType mapPositionToRole(Position position) {
         if (position == null || position.getNombre() == null) {
             return RoleType.MEDIOCAMPO;
+        }
+
+        RoleType configuredRole = RatingService.mapPositionToRole(position.getNombre());
+        if (configuredRole != null) {
+            return configuredRole;
         }
 
         String positionName = position.getNombre().toLowerCase();

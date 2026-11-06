@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -29,6 +30,7 @@ import static org.hamcrest.Matchers.not;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -47,6 +49,9 @@ class JwtAuthenticationIntegrationTest {
 
     @Autowired
     private JwtEncoder jwtEncoder;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Value("${security.jwt.issuer}")
     private String issuer;
@@ -139,11 +144,89 @@ class JwtAuthenticationIntegrationTest {
     }
 
     @Test
+    void sensitiveManualWritesAreForbiddenForAuthenticatedUsers() throws Exception {
+        String token = loginAndExtractToken();
+        String auth = "Bearer " + token;
+        mockMvc.perform(put("/api/v1/player-profiles/trust-score")).andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/v1/player-profiles/" + athleteUuid + "/positions/1/experience?xp=10000"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/v1/fields/1")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/ratings/update").header("Authorization", auth)
+                .contentType(APPLICATION_JSON).content("{\"matchId\":1,\"performances\":[{\"playerProfileId\":\"" + athleteUuid + "\",\"roleType\":\"ATAQUE\",\"priorityLevel\":\"PRINCIPAL\",\"goalsScored\":1,\"assistsMade\":0,\"wasMvp\":false,\"matchResult\":\"GANADO\"}]}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/player-profiles/trust-score")
+                .header("Authorization", auth).contentType(APPLICATION_JSON).content("{\"cambio\":10,\"motivo\":\"Prueba\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/player-profiles/" + athleteUuid + "/positions/1/experience?xp=10000")
+                .header("Authorization", auth)).andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/fields/1")
+                .header("Authorization", auth).contentType(APPLICATION_JSON)
+                .content("{\"nombre\":\"Cancha\",\"direccion\":\"Calle\",\"ciudad\":\"Ciudad\",\"latitud\":-36,\"longitud\":-73,\"activo\":false}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/fields").header("Authorization", auth)).andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/fields").header("Authorization", auth).contentType(APPLICATION_JSON)
+                .content("{\"nombre\":\"Cancha\",\"direccion\":\"Calle\",\"ciudad\":\"Ciudad\",\"latitud\":-36,\"longitud\":-73}"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void rotativeGoalkeeperUpdateRemainsBlockedWithValidToken() throws Exception {
+        String body = "{\"matchId\":42,\"matchResult\":\"GANADO\"}";
+        mockMvc.perform(post("/api/v1/ratings/update-rotative-goalkeeper")
+                .contentType(APPLICATION_JSON).content(body))
+            .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/v1/ratings/update-rotative-goalkeeper")
+                .header("Authorization", "Bearer " + loginAndExtractToken())
+                .contentType(APPLICATION_JSON).content(body))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
     void fieldLocationWriteEndpointsRejectMissingToken() throws Exception {
         mockMvc.perform(post("/api/v1/fields")
                 .contentType(APPLICATION_JSON)
                 .content("{}"))
             .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void onlyCreatorCanEditFieldAndLegacyFieldsRemainProtected() throws Exception {
+        String ownerAuth = "Bearer " + loginAndExtractToken();
+        String body = "{\"nombre\":\"Cancha Propia\",\"direccion\":\"Calle\",\"ciudad\":\"Ciudad\",\"latitud\":-36,\"longitud\":-73,\"creatorUuid\":\"11111111-1111-1111-1111-111111111111\"}";
+        String created = mockMvc.perform(post("/api/v1/fields").header("Authorization", ownerAuth)
+                .contentType(APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long id = objectMapper.readTree(created).get("id").asLong();
+        org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject(
+                "select creator_uuid from field_locations where id = ?", java.util.UUID.class, id).toString())
+                .isEqualTo(athleteUuid);
+
+        mockMvc.perform(post("/api/v1/athletes/register").contentType(APPLICATION_JSON)
+                .content("{\"email\":\"other-field@example.com\",\"password\":\"password123\",\"nombre\":\"Other\",\"genero\":\"MASCULINO\"}"))
+                .andExpect(status().isCreated());
+        String login = mockMvc.perform(post("/api/v1/athletes/login").contentType(APPLICATION_JSON)
+                .content("{\"email\":\"other-field@example.com\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String otherAuth = "Bearer " + objectMapper.readTree(login).get("accessToken").asText();
+        String update = "{\"nombre\":\"Cancha Propia\",\"direccion\":\"Nueva\",\"ciudad\":\"Ciudad\",\"latitud\":-36,\"longitud\":-73,\"activo\":false}";
+
+        mockMvc.perform(put("/api/v1/fields/{id}", id).contentType(APPLICATION_JSON).content(update))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/api/v1/fields/{id}", id).header("Authorization", otherAuth)
+                .contentType(APPLICATION_JSON).content(update)).andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/fields/{id}", id).header("Authorization", ownerAuth)
+                .contentType(APPLICATION_JSON).content(update)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.direccion").value("Nueva"))
+                .andExpect(jsonPath("$.activo").value(false));
+        mockMvc.perform(put("/api/v1/fields/{id}", 999999).header("Authorization", ownerAuth)
+                .contentType(APPLICATION_JSON).content(update)).andExpect(status().isNotFound());
+
+        jdbc.update("insert into field_locations (nombre,direccion,ciudad,latitud,longitud,activo) values (?,?,?,?,?,?)",
+                "Cancha Anterior", "Calle", "Ciudad", -36, -73, true);
+        Long legacyId = jdbc.queryForObject("select id from field_locations where nombre = ?", Long.class, "Cancha Anterior");
+        mockMvc.perform(put("/api/v1/fields/{id}", legacyId).header("Authorization", ownerAuth)
+                .contentType(APPLICATION_JSON).content(update)).andExpect(status().isForbidden());
     }
 
     @Test

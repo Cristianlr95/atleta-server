@@ -20,7 +20,7 @@ import java.util.Optional;
  * Proporciona endpoints para consultar las posiciones disponibles en el sistema.
  * 
  * Requisitos implementados:
- * - 3.1: Catálogo fijo de posiciones (Portero, Defensa, Carrilero, Mediocampista, Delantero, DT)
+ * - 3.1: Catálogo de posiciones definido por las migraciones de Flyway.
  */
 @RestController
 @RequestMapping("/api/v1/positions")

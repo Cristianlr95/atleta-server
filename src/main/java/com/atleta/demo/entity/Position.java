@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 /**
  * Entidad que representa las posiciones de fútbol disponibles en el sistema.
  * Mantiene un catálogo fijo de posiciones que pueden ser asignadas a los jugadores.
- * Las posiciones incluyen: Portero, Defensa, Carrilero, Mediocampista, Delantero, DT.
+ * El catálogo inicial se define en las migraciones de Flyway.
  */
 @Entity
 @Table(name = "positions")

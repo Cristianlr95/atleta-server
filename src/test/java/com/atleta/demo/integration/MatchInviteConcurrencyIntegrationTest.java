@@ -65,6 +65,37 @@ class MatchInviteConcurrencyIntegrationTest {
     @Autowired private MatchRosterPolicy matchRosterPolicy;
 
     @Test
+    void releasedInvitationCanBeAcceptedAgainAndConfirmationPersists() {
+        removeH2LegacyWaitlistConstraint();
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        Fixture fixture = transaction.execute(ignored -> createFixture());
+        if (fixture == null) {
+            throw new IllegalStateException("Could not create reacceptance fixture");
+        }
+        fixtureMatchId = fixture.matchId();
+        fixtureNotificationRecipients = List.of(fixture.creatorUuid(), fixture.firstTargetUuid());
+        RespondRequestDecision decision = new RespondRequestDecision();
+        decision.setActorUuid(fixture.firstTargetUuid());
+        decision.setAccept(true);
+        socialService.respondMatchInvite(fixture.firstInviteId(), decision);
+        decision.setAccept(false);
+        socialService.respondMatchInvite(fixture.firstInviteId(), decision);
+        transaction.executeWithoutResult(ignored -> {
+            Match reloaded = matchRepository.findById(fixture.matchId()).orElseThrow();
+            assertEquals(9, matchRosterPolicy.confirmedPlayerCount(reloaded, matchPlayerRepository.findByMatch(reloaded)));
+            assertEquals(RequestStatus.CANCELADA, matchInviteRepository.findById(fixture.firstInviteId()).orElseThrow().getStatus());
+        });
+        decision.setAccept(true);
+        socialService.respondMatchInvite(fixture.firstInviteId(), decision);
+        transaction.executeWithoutResult(ignored -> {
+            Match reloaded = matchRepository.findById(fixture.matchId()).orElseThrow();
+            assertEquals(10, matchRosterPolicy.confirmedPlayerCount(reloaded, matchPlayerRepository.findByMatch(reloaded)));
+            assertEquals(RequestStatus.ACEPTADA, matchInviteRepository.findById(fixture.firstInviteId()).orElseThrow().getStatus());
+            assertEquals(9, matchPlayerRepository.findByMatch(reloaded).size());
+        });
+    }
+
+    @Test
     void simultaneousAcceptancesNeverExceedCapacityAndOverflowGoesToWaitlist() throws Exception {
         removeH2LegacyWaitlistConstraint();
         Fixture fixture = new TransactionTemplate(transactionManager).execute(ignored -> createFixture());

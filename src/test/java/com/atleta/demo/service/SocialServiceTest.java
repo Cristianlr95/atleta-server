@@ -6,12 +6,14 @@ import com.atleta.demo.dto.request.RespondRequestDecision;
 import com.atleta.demo.dto.response.MatchInviteDeliveryResponse;
 import com.atleta.demo.dto.response.SocialRequestResponse;
 import com.atleta.demo.entity.Match;
+import com.atleta.demo.entity.Friendship;
 import com.atleta.demo.entity.MatchInvite;
 import com.atleta.demo.entity.MatchPlayer;
 import com.atleta.demo.entity.MatchTeam;
 import com.atleta.demo.entity.PlayerProfile;
 import com.atleta.demo.entity.Position;
 import com.atleta.demo.entity.Team;
+import com.atleta.demo.entity.TeamInvite;
 import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.enums.RequestStatus;
@@ -30,6 +32,8 @@ import com.atleta.demo.repository.TeamRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
@@ -136,6 +140,59 @@ class SocialServiceTest {
         match = new Match(MatchMode.CINCO_VS_CINCO, LocalDateTime.now().plusDays(1), creator);
         match.setId(42L);
         match.addMatchTeam(new MatchTeam(match, matchTeam, true));
+    }
+
+    @Test
+    void respondMatchInvite_requiresTeamBeforeChangingInvitation() {
+        Match withoutTeam = new Match(MatchMode.CINCO_VS_CINCO, LocalDateTime.now().plusDays(1), creator);
+        withoutTeam.setId(43L);
+        MatchInvite invite = new MatchInvite(withoutTeam, null, creator, target, "sumate");
+        invite.setId(951L);
+        RespondRequestDecision decision = new RespondRequestDecision();
+        decision.setActorUuid(targetUuid);
+        decision.setAccept(true);
+        when(matchInviteRepository.findById(951L)).thenReturn(Optional.of(invite));
+        when(matchRepository.findByIdForUpdate(43L)).thenReturn(Optional.of(withoutTeam));
+
+        assertThrows(com.atleta.demo.exception.MatchTeamRequiredException.class,
+                () -> socialService.respondMatchInvite(951L, decision));
+        assertEquals(RequestStatus.PENDIENTE, invite.getStatus());
+        verify(matchInviteRepository, never()).save(any(MatchInvite.class));
+        verify(matchPlayerRepository, never()).save(any(MatchPlayer.class));
+    }
+
+    @Test
+    void respondMatchInvite_canRejectWhenMatchHasNoTeam() {
+        Match withoutTeam = new Match(MatchMode.CINCO_VS_CINCO, LocalDateTime.now().plusDays(1), creator);
+        withoutTeam.setId(43L);
+        MatchInvite invite = new MatchInvite(withoutTeam, null, creator, target, "sumate");
+        invite.setId(951L);
+        RespondRequestDecision decision = new RespondRequestDecision();
+        decision.setActorUuid(targetUuid);
+        decision.setAccept(false);
+        when(matchInviteRepository.findById(951L)).thenReturn(Optional.of(invite));
+        when(matchRepository.findByIdForUpdate(43L)).thenReturn(Optional.of(withoutTeam));
+        when(matchInviteRepository.save(any(MatchInvite.class))).thenAnswer(call -> call.getArgument(0));
+
+        assertEquals(RequestStatus.RECHAZADA, socialService.respondMatchInvite(951L, decision).getStatus());
+        verify(matchPlayerRepository, never()).save(any(MatchPlayer.class));
+    }
+
+    @Test
+    void onlyRecipientCanRespondToSocialRequests() {
+        var decision = new RespondRequestDecision();
+        decision.setActorUuid(requesterUuid);
+        decision.setAccept(true);
+        when(friendshipRepository.findById(1L)).thenReturn(Optional.of(new Friendship(requester, target)));
+        when(teamInviteRepository.findById(2L)).thenReturn(Optional.of(new TeamInvite(matchTeam, requester, target, null)));
+        when(matchInviteRepository.findById(3L)).thenReturn(Optional.of(new MatchInvite(match, matchTeam, requester, target, null)));
+
+        assertThrows(AccessDeniedException.class, () -> socialService.respondFriendRequest(1L, decision));
+        assertThrows(AccessDeniedException.class, () -> socialService.respondTeamInvite(2L, decision));
+        assertThrows(AccessDeniedException.class, () -> socialService.respondMatchInvite(3L, decision));
+        verify(friendshipRepository, never()).save(any());
+        verify(teamInviteRepository, never()).save(any());
+        verify(matchInviteRepository, never()).save(any());
     }
 
     @Test
@@ -286,10 +343,12 @@ class SocialServiceTest {
         verify(matchInviteRepository, never()).findTopByMatchAndTargetOrderByCreatedAtDesc(any(), any());
     }
 
-    @Test
-    void respondMatchInvite_placesAcceptedResponseOnWaitlistWhenRosterIsFull() {
+    @ParameterizedTest
+    @EnumSource(value = RequestStatus.class, names = {"PENDIENTE", "CANCELADA"})
+    void respondMatchInvite_placesAcceptedResponseOnWaitlistWhenRosterIsFull(RequestStatus status) {
         MatchInvite invite = new MatchInvite(match, matchTeam, creator, target, "sumate");
         invite.setId(950L);
+        invite.setStatus(status);
         RespondRequestDecision decision = new RespondRequestDecision();
         decision.setActorUuid(targetUuid);
         decision.setAccept(true);

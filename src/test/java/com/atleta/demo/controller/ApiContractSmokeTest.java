@@ -670,6 +670,31 @@ class ApiContractSmokeTest {
     }
 
     @Test
+    void socialMatchInviteDecisionExplainsMissingTeam() throws Exception {
+        when(socialService.respondMatchInvite(org.mockito.ArgumentMatchers.eq(801L), any()))
+                .thenThrow(new com.atleta.demo.exception.MatchTeamRequiredException());
+        mockMvc.perform(put("/api/v1/social/match-invites/{id}/decision", 801L)
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accept\":true}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("MATCH_TEAM_REQUIRED"));
+    }
+
+    @Test
+    void socialMatchInviteDecisionReturnsForbiddenForNonRecipient() throws Exception {
+        when(socialService.respondMatchInvite(org.mockito.ArgumentMatchers.eq(801L), any()))
+                .thenThrow(new AccessDeniedException("Solo el receptor"));
+
+        mockMvc.perform(put("/api/v1/social/match-invites/{id}/decision", 801L)
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accept\":true}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+    }
+
+    @Test
     void socialMatchInviteWritesUseJwtSubjectAsRequester() throws Exception {
         SocialRequestResponse invite = new SocialRequestResponse();
         invite.setId(801L);
@@ -832,6 +857,17 @@ class ApiContractSmokeTest {
 
     private String json(Object value) throws Exception {
         return objectMapper.writeValueAsString(value);
+    }
+
+    @Test
+    void rotativeGoalkeeperUpdateRejectsUntrustedManualRequests() throws Exception {
+        mockMvc.perform(post("/api/v1/ratings/update-rotative-goalkeeper")
+                        .with(jwtFor(USER_ID))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"matchId\":42,\"matchResult\":\"GANADO\"}"))
+                .andExpect(status().isForbidden());
+
+        verify(ratingService, never()).updateRotativeGoalkeeperRatings(any(), any());
     }
 
     private SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor jwtFor(UUID subject) {

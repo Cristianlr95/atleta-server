@@ -23,6 +23,7 @@ public class RatingHistoryResponse {
     private BigDecimal previousRating;
     private BigDecimal newRating;
     private BigDecimal ratingDelta;
+    private boolean legacyValuesCapped;
     private Integer goalsScored;
     private Integer assistsMade;
     private Integer goalsConceded;
@@ -134,6 +135,14 @@ public class RatingHistoryResponse {
 
     public BigDecimal getRatingDelta() {
         return ratingDelta;
+    }
+
+    public boolean isLegacyValuesCapped() {
+        return legacyValuesCapped;
+    }
+
+    public void setLegacyValuesCapped(boolean legacyValuesCapped) {
+        this.legacyValuesCapped = legacyValuesCapped;
     }
 
     public void setRatingDelta(BigDecimal ratingDelta) {

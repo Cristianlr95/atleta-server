@@ -19,6 +19,19 @@ class MatchStatusPolicyTest {
     private final MatchStatusPolicy policy = new MatchStatusPolicy();
 
     @Test
+    void closureWindowRejectsEarlyAndExpiredRequestsAndIncludesItsBoundaries() {
+        Match match = new Match();
+        match.setEstado(MatchStatus.INICIADO);
+        LocalDateTime kickoff = LocalDateTime.of(2026, 10, 26, 18, 0);
+        match.setStartedAt(kickoff);
+        assertThrows(IllegalArgumentException.class, () -> policy.validateCloseWindow(match, kickoff.plusMinutes(59)));
+        policy.validateCloseWindow(match, kickoff.plusHours(1));
+        policy.validateCloseWindow(match, kickoff.plusHours(3));
+        assertThrows(IllegalArgumentException.class, () -> policy.validateCloseWindow(match, kickoff.plusHours(3).plusSeconds(1)));
+        assertTrue(policy.isClosePending(match, 1, kickoff.plusHours(1)));
+    }
+
+    @Test
     void validateTransition_AllowsValidLifecycleMoves() {
         policy.validateTransition(MatchStatus.CREADO, MatchStatus.INICIADO);
         policy.validateTransition(MatchStatus.CREADO, MatchStatus.INVALIDO);

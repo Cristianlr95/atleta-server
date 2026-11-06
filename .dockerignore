@@ -13,3 +13,5 @@ docker-compose*.yml
 .idea
 .vscode
 .jqwik-database
+uploads
+.tmp

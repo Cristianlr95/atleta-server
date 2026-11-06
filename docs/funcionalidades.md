@@ -141,7 +141,7 @@
 ### Ratings, OVR y leaderboard
 
 - `Implementada` Actualizacion manual de ratings: `POST /api/v1/ratings/update`
-- `Implementada` Modo arquero rotativo: `POST /api/v1/ratings/update-rotative-goalkeeper`
+- `Implementada` Arquero rotativo se elige al crear el partido y se calcula al cerrarlo para participantes confirmados, usando el resultado de su lado. La actualizacion manual `POST /api/v1/ratings/update-rotative-goalkeeper` permanece bloqueada con 403.
 - `Implementada` Inicializacion base por jugador: `POST /api/v1/ratings/player/{playerProfileId}/initialize-base`
 - `Implementada` Consulta de ratings:
   - `GET /api/v1/ratings/player/{playerProfileId}`

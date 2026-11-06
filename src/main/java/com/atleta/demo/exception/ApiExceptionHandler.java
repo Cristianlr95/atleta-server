@@ -77,6 +77,13 @@ public class ApiExceptionHandler {
         return ResponseEntity.badRequest().body(errorResponse);
     }
 
+    @ExceptionHandler(MatchTeamRequiredException.class)
+    public ResponseEntity<Map<String, Object>> handleMatchTeamRequired(MatchTeamRequiredException ex, WebRequest request) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(
+            createErrorResponse("MATCH_TEAM_REQUIRED", ex.getMessage(), HttpStatus.CONFLICT, request)
+        );
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDeniedException(
         AccessDeniedException ex,

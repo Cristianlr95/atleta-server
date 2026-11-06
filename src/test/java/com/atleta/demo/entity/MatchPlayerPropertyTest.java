@@ -3,7 +3,7 @@ package com.atleta.demo.entity;
 import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.enums.PlayerRole;
 import net.jqwik.api.*;
-import org.junit.jupiter.api.DisplayName;
+import net.jqwik.api.Label;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MatchPlayerPropertyTest {
 
     @Property(tries = 100)
-    @DisplayName("MatchPlayer should have valid player, team, and position references")
+    @Label("MatchPlayer should have valid player, team, and position references")
     void matchPlayerShouldHaveValidPlayerTeamAndPositionReferences(
             @ForAll("validPlayerRole") PlayerRole rol,
             @ForAll("validMatchMode") MatchMode matchMode,
@@ -75,7 +75,7 @@ class MatchPlayerPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("MatchPlayer should maintain referential integrity between match and team")
+    @Label("MatchPlayer should maintain referential integrity between match and team")
     void matchPlayerShouldMaintainReferentialIntegrityBetweenMatchAndTeam(
             @ForAll("validPlayerRole") PlayerRole rol,
             @ForAll("validMatchMode") MatchMode matchMode,
@@ -130,7 +130,7 @@ class MatchPlayerPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("MatchPlayer should validate role-specific constraints")
+    @Label("MatchPlayer should validate role-specific constraints")
     void matchPlayerShouldValidateRoleSpecificConstraints(
             @ForAll("validPlayerRole") PlayerRole rol,
             @ForAll("validMatchMode") MatchMode matchMode,
@@ -182,7 +182,7 @@ class MatchPlayerPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("MatchPlayer confirmation status should be properly managed")
+    @Label("MatchPlayer confirmation status should be properly managed")
     void matchPlayerConfirmationStatusShouldBeProperlyManaged(
             @ForAll("validPlayerRole") PlayerRole rol,
             @ForAll("validMatchMode") MatchMode matchMode,

@@ -33,6 +33,8 @@ public class CreateMatchRequest {
      */
     private MatchType matchType = MatchType.FRIENDLY;
 
+    private boolean rotativeGoalkeeper = false;
+
     /**
      * Fecha y hora programada para el partido
      */
@@ -109,6 +111,10 @@ public class CreateMatchRequest {
     public void setMatchType(MatchType matchType) {
         this.matchType = matchType;
     }
+
+    public boolean isRotativeGoalkeeper() { return rotativeGoalkeeper; }
+
+    public void setRotativeGoalkeeper(boolean rotativeGoalkeeper) { this.rotativeGoalkeeper = rotativeGoalkeeper; }
 
     public LocalDateTime getFechaHoraProgramada() {
         return fechaHoraProgramada;

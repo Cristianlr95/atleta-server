@@ -55,7 +55,7 @@ public class PlayerRating extends BaseEntity {
     @Column(name = "current_rating", nullable = false, precision = 5, scale = 2)
     @NotNull(message = "La calificación actual es requerida")
     @DecimalMin(value = "0.00", message = "La calificación no puede ser negativa")
-    @DecimalMax(value = "999.99", message = "La calificación no puede exceder 999.99")
+    @DecimalMax(value = "100.00", message = "La calificación no puede exceder 100.00")
     private BigDecimal currentRating;
 
     /**
