@@ -141,7 +141,7 @@ class MatchMvpServiceTest {
         PlayerHistory history = new PlayerHistory(match, candidateA, team, position, 1, 0, null, 25);
         PlayerPosition xp = new PlayerPosition(candidateA, position, 1, 100);
         when(playerHistoryRepository.findByMatchAndPlayer(match, candidateA)).thenReturn(Optional.of(history));
-        when(playerHistoryRepository.applyMvpBonusXpIfNotApplied(100L, candidateA.getAtletaUuid(), 10)).thenReturn(1);
+        when(playerHistoryRepository.applyMvpBonusXpIfNotApplied(100L, candidateA.getAtletaUuid(), 5)).thenReturn(1);
         when(playerPositionRepository.findByPlayerAndPosition(candidateA, position)).thenReturn(Optional.of(xp));
         MatchMvpResponse closed = serviceWithBonus.vote(100L, voter.getAtletaUuid(), candidateA.getAtletaUuid());
         assertFalse(closed.isOpen());
@@ -150,8 +150,8 @@ class MatchMvpServiceTest {
         assertEquals(candidateA.getAtletaUuid(), closed.getWinnerUserId());
         serviceWithBonus.getMvpState(100L, voter.getAtletaUuid());
         serviceWithBonus.getMvpState(100L, candidateB.getAtletaUuid());
-        assertEquals(110, xp.getXp());
-        verify(playerHistoryRepository).applyMvpBonusXpIfNotApplied(100L, candidateA.getAtletaUuid(), 10);
+        assertEquals(105, xp.getXp());
+        verify(playerHistoryRepository).applyMvpBonusXpIfNotApplied(100L, candidateA.getAtletaUuid(), 5);
         verify(playerPositionRepository).save(xp);
     }
 

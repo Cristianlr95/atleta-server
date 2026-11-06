@@ -71,9 +71,9 @@ class MatchMvpConcurrencyIntegrationTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.vote(fixture.matchId(), winner, fixture.players().get(1)));
         assertEquals(10, jdbc.queryForObject("select count(*) from match_mvp_votes where match_id=?", Integer.class, fixture.matchId()));
-        assertEquals(35, jdbc.queryForObject("select xp_ganada from player_history where match_id=?", Integer.class, fixture.matchId()));
-        assertEquals(10, jdbc.queryForObject("select mvp_bonus_xp from player_history where match_id=?", Integer.class, fixture.matchId()));
-        assertEquals(110, jdbc.queryForObject("select xp from player_positions where player_id=?", Integer.class, winner));
+        assertEquals(30, jdbc.queryForObject("select xp_ganada from player_history where match_id=?", Integer.class, fixture.matchId()));
+        assertEquals(5, jdbc.queryForObject("select mvp_bonus_xp from player_history where match_id=?", Integer.class, fixture.matchId()));
+        assertEquals(105, jdbc.queryForObject("select xp from player_positions where player_id=?", Integer.class, winner));
         assertEquals(1, jdbc.queryForObject("select count(*) from rating_history where match_id=?", Integer.class, fixture.matchId()));
         assertEquals(0, BigDecimal.valueOf(70).compareTo(jdbc.queryForObject("select current_rating from player_ratings where player_profile_id=?", BigDecimal.class, winner)));
     }
