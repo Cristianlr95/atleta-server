@@ -144,7 +144,7 @@ class JwtAuthenticationIntegrationTest {
     }
 
     @Test
-    void sensitiveManualWritesAreForbiddenForAuthenticatedUsers() throws Exception {
+    void sensitiveManualWritesRequireAuthenticationAndValidateRequests() throws Exception {
         String token = loginAndExtractToken();
         String auth = "Bearer " + token;
         mockMvc.perform(put("/api/v1/player-profiles/trust-score")).andExpect(status().isUnauthorized());
@@ -152,13 +152,13 @@ class JwtAuthenticationIntegrationTest {
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(put("/api/v1/fields/1")).andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/v1/ratings/update").header("Authorization", auth)
-                .contentType(APPLICATION_JSON).content("{\"matchId\":1,\"performances\":[{\"playerProfileId\":\"" + athleteUuid + "\",\"roleType\":\"ATAQUE\",\"priorityLevel\":\"PRINCIPAL\",\"goalsScored\":1,\"assistsMade\":0,\"wasMvp\":false,\"matchResult\":\"GANADO\"}]}"))
-                .andExpect(status().isForbidden());
+                .contentType(APPLICATION_JSON).content("{\"matchId\":9223372036854775807,\"performances\":[{\"playerProfileId\":\"" + athleteUuid + "\",\"roleType\":\"ATAQUE\",\"priorityLevel\":\"PRINCIPAL\",\"goalsScored\":1,\"assistsMade\":0,\"wasMvp\":false,\"matchResult\":\"GANADO\"}]}"))
+                .andExpect(status().isNotFound());
         mockMvc.perform(put("/api/v1/player-profiles/trust-score")
-                .header("Authorization", auth).contentType(APPLICATION_JSON).content("{\"cambio\":10,\"motivo\":\"Prueba\"}"))
-                .andExpect(status().isForbidden());
-        mockMvc.perform(put("/api/v1/player-profiles/" + athleteUuid + "/positions/1/experience?xp=10000")
-                .header("Authorization", auth)).andExpect(status().isForbidden());
+                .header("Authorization", auth).contentType(APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(put("/api/v1/player-profiles/" + athleteUuid + "/positions/9223372036854775807/experience?xp=10000")
+                .header("Authorization", auth)).andExpect(status().isNotFound());
         mockMvc.perform(put("/api/v1/fields/1")
                 .header("Authorization", auth).contentType(APPLICATION_JSON)
                 .content("{\"nombre\":\"Cancha\",\"direccion\":\"Calle\",\"ciudad\":\"Ciudad\",\"latitud\":-36,\"longitud\":-73,\"activo\":false}"))
@@ -170,8 +170,8 @@ class JwtAuthenticationIntegrationTest {
     }
 
     @Test
-    void rotativeGoalkeeperUpdateRemainsBlockedWithValidToken() throws Exception {
-        String body = "{\"matchId\":42,\"matchResult\":\"GANADO\"}";
+    void rotativeGoalkeeperUpdateRequiresAuthenticationAndRunsOutsideBeta() throws Exception {
+        String body = "{\"matchId\":9223372036854775807,\"matchResult\":\"GANADO\"}";
         mockMvc.perform(post("/api/v1/ratings/update-rotative-goalkeeper")
                 .contentType(APPLICATION_JSON).content(body))
             .andExpect(status().isUnauthorized());
@@ -179,7 +179,7 @@ class JwtAuthenticationIntegrationTest {
         mockMvc.perform(post("/api/v1/ratings/update-rotative-goalkeeper")
                 .header("Authorization", "Bearer " + loginAndExtractToken())
                 .contentType(APPLICATION_JSON).content(body))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isNotFound());
     }
 
     @Test

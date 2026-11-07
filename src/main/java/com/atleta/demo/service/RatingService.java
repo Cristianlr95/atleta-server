@@ -549,8 +549,17 @@ public class RatingService {
     }
 
     public void updateRotativeGoalkeeperRatings(Long matchId, MatchResultType matchResult) {
+        logger.info("Iniciando actualización de calificaciones de arquero rotativo para partido {}", matchId);
         validateRotativeGoalkeeperInput(matchId, matchResult);
-        throw new UnsupportedOperationException("Actualizacion manual de arquero rotativo deshabilitada");
+
+        Match match = matchRepository.findById(matchId)
+                .orElseThrow(() -> new MatchNotFoundException(
+                        "El partido con ID " + matchId + " no existe", matchId));
+        List<PlayerRating> goalkeeperRatings = playerRatingRepository.findByRoleType(RoleType.ARQUERO);
+
+        for (PlayerRating goalkeeperRating : goalkeeperRatings) {
+            processRotativeGoalkeeperUpdate(match, goalkeeperRating, matchResult, false);
+        }
     }
     /**
      * Procesa la actualizaciÃ³n de calificaciÃ³n de arquero rotativo para un jugador individual.
@@ -1398,4 +1407,3 @@ public class RatingService {
         public void setTotalMatchesPlayed(Integer totalMatchesPlayed) { this.totalMatchesPlayed = totalMatchesPlayed; }
     }
 }
-

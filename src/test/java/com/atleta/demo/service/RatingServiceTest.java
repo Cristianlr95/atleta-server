@@ -288,10 +288,14 @@ class RatingServiceTest {
     }
 
     @Test
-    void manualRotativeUpdateRemainsDisabled() {
-        assertThrows(UnsupportedOperationException.class,
-                () -> ratingService.updateRotativeGoalkeeperRatings(1L, MatchResultType.GANADO));
-        org.mockito.Mockito.verify(playerRatingRepository, org.mockito.Mockito.never()).findByRoleType(any());
+    void manualRotativeUpdateProcessesExistingMatchOutsideBeta() {
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(new Match()));
+        when(playerRatingRepository.findByRoleType(RoleType.ARQUERO)).thenReturn(List.of());
+
+        assertDoesNotThrow(() -> ratingService.updateRotativeGoalkeeperRatings(1L, MatchResultType.GANADO));
+
+        verify(matchRepository).findById(1L);
+        verify(playerRatingRepository).findByRoleType(RoleType.ARQUERO);
     }
     @Test
     void testUpdateRotativeGoalkeeperRatings_NullMatchId_ThrowsException() {

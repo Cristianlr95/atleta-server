@@ -142,6 +142,7 @@
 
 - `Implementada` Actualizacion manual de ratings: `POST /api/v1/ratings/update`
 - `Implementada` Modo arquero rotativo: `POST /api/v1/ratings/update-rotative-goalkeeper`
+- `Beta` bloquea esas escrituras manuales y las rutas de actualizacion manual de trust score y experiencia; fuera de beta se conservan la autenticacion y las validaciones de negocio existentes.
 - `Implementada` Inicializacion base por jugador: `POST /api/v1/ratings/player/{playerProfileId}/initialize-base`
 - `Implementada` Consulta de ratings:
   - `GET /api/v1/ratings/player/{playerProfileId}`

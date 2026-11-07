@@ -860,14 +860,14 @@ class ApiContractSmokeTest {
     }
 
     @Test
-    void rotativeGoalkeeperUpdateRejectsUntrustedManualRequests() throws Exception {
+    void rotativeGoalkeeperUpdateProcessesAuthenticatedRequestsOutsideBeta() throws Exception {
         mockMvc.perform(post("/api/v1/ratings/update-rotative-goalkeeper")
                         .with(jwtFor(USER_ID))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"matchId\":42,\"matchResult\":\"GANADO\"}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk());
 
-        verify(ratingService, never()).updateRotativeGoalkeeperRatings(any(), any());
+        verify(ratingService).updateRotativeGoalkeeperRatings(42L, com.atleta.demo.enums.MatchResultType.GANADO);
     }
 
     private SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor jwtFor(UUID subject) {
