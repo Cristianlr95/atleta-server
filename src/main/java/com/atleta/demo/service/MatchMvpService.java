@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 public class MatchMvpService {
 
     private static final long MVP_VOTING_WINDOW_HOURS = 3;
-    private static final int MVP_BONUS_XP = 10;
+    private static final int MVP_BONUS_XP = 5;
 
     private final MatchRepository matchRepository;
     private final MatchPlayerRepository matchPlayerRepository;

@@ -245,14 +245,14 @@ class MatchMvpServiceTest {
         ));
         when(playerProfileRepository.findById(candidateA.getAtletaUuid())).thenReturn(Optional.of(candidateA));
         when(playerHistoryRepository.findByMatchAndPlayer(match, candidateA)).thenReturn(Optional.of(winnerHistory));
-        when(playerHistoryRepository.applyMvpBonusXpIfNotApplied(100L, candidateA.getAtletaUuid(), 10)).thenReturn(1);
+        when(playerHistoryRepository.applyMvpBonusXpIfNotApplied(100L, candidateA.getAtletaUuid(), 5)).thenReturn(1);
         when(playerPositionRepository.findByPlayerAndPosition(candidateA, position)).thenReturn(Optional.of(winnerPosition));
         when(playerPositionRepository.save(any(PlayerPosition.class))).thenAnswer(inv -> inv.getArgument(0));
 
         MatchMvpResponse response = serviceWithBonus.getMvpState(100L, voter.getAtletaUuid());
 
         assertNotNull(response);
-        verify(playerHistoryRepository).applyMvpBonusXpIfNotApplied(100L, candidateA.getAtletaUuid(), 10);
+        verify(playerHistoryRepository).applyMvpBonusXpIfNotApplied(100L, candidateA.getAtletaUuid(), 5);
         verify(playerPositionRepository).save(any(PlayerPosition.class));
     }
 

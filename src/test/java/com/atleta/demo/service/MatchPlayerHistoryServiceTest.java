@@ -104,8 +104,8 @@ class MatchPlayerHistoryServiceTest {
         assertEquals(1, history.getGoles());
         assertEquals(0, history.getAsistencias());
         assertEquals(MatchResult.VICTORIA, history.getResultado());
-        assertEquals(30, history.getXpGanada());
-        assertEquals(30, playerPosition.getXp());
+        assertEquals(14, history.getXpGanada());
+        assertEquals(14, playerPosition.getXp());
     }
 
     @Test
