@@ -1,8 +1,18 @@
 spring:
   application:
     name: server-atleta
+  jpa:
+    # SSE responses stay open; database work must end with the service transaction.
+    open-in-view: false
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+  config:
+    import: optional:file:.env[.properties]
   profiles:
-    active: dev
+    default: dev
 
 # Common configuration for all profiles
 management:
@@ -12,6 +22,8 @@ management:
         include: health,info,metrics,flyway,prometheus
   endpoint:
     health:
+      probes:
+        enabled: true
       show-details: when-authorized
       show-components: always
   prometheus:
@@ -27,11 +39,41 @@ management:
   health:
     db:
       enabled: true
+    mail:
+      enabled: false
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
 
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{userId}] [%X{transactionId}] %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
 features:
   mvp-xp-bonus-enabled: ${MVP_XP_BONUS_ENABLED:true}
+
+atleta:
+  ai:
+    # The default is intentionally local and safe. A remote provider must be enabled explicitly.
+    enabled: ${ATLETA_AI_ENABLED:false}
+    provider: ${ATLETA_AI_PROVIDER:disabled}
+    timeout: ${ATLETA_AI_TIMEOUT:PT8S}
+  matches:
+    scheduler:
+      enabled: ${MATCH_STATUS_SCHEDULER_ENABLED:true}
+      initial-delay: ${MATCH_STATUS_SCHEDULER_INITIAL_DELAY:PT1M}
+      fixed-delay: ${MATCH_STATUS_SCHEDULER_FIXED_DELAY:PT5M}
+
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:4200}
+  mail:
+    from: ${MAIL_FROM:no-reply@atleta.local}
+  cors:
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:8100,http://localhost:4200,http://localhost:4201,http://localhost:3000}
+    allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,PATCH,DELETE,OPTIONS}
+    allowed-headers: ${CORS_ALLOWED_HEADERS:Authorization,Content-Type,Accept,Origin,X-Requested-With,Idempotency-Key}
+    exposed-headers: ${CORS_EXPOSED_HEADERS:Authorization}
+    allow-credentials: ${CORS_ALLOW_CREDENTIALS:true}
+    max-age: ${CORS_MAX_AGE:3600}

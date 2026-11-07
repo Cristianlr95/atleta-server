@@ -1,7 +1,7 @@
 package com.atleta.demo.entity;
 
 import net.jqwik.api.*;
-import org.junit.jupiter.api.DisplayName;
+import net.jqwik.api.Label;
 
 import java.util.UUID;
 
@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AthletePropertyTest {
 
     @Property(tries = 10)
-    @DisplayName("Athlete UUID should be null before persistence and unique across instances")
+    @Label("Athlete UUID should be null before persistence and unique across instances")
     void athleteUuidShouldBeNullBeforePersistence(@ForAll String email, @ForAll String passwordHash, @ForAll String nombre) {
         // Property: For any valid athlete data, UUID should be null before persistence
         Athlete athlete = new Athlete(email, passwordHash, nombre);
@@ -31,7 +31,7 @@ class AthletePropertyTest {
     }
 
     @Property(tries = 10)
-    @DisplayName("Athletes with different emails should be considered different entities")
+    @Label("Athletes with different emails should be considered different entities")
     void athletesWithDifferentEmailsShouldBeDifferent(@ForAll String email1, @ForAll String email2) {
         Assume.that(!email1.equals(email2));
         
@@ -49,7 +49,7 @@ class AthletePropertyTest {
     }
 
     @Property(tries = 10)
-    @DisplayName("Athletes with same UUID should be equal")
+    @Label("Athletes with same UUID should be equal")
     void athletesWithSameUuidShouldBeEqual(@ForAll String email) {
         // Property: For any athlete data, two athletes with same UUID should be equal
         Athlete athlete1 = new Athlete(email, "hash1", "name1");
@@ -66,7 +66,7 @@ class AthletePropertyTest {
     }
 
     @Property(tries = 10)
-    @DisplayName("Simple validation test")
+    @Label("Simple validation test")
     void simpleValidationTest(@ForAll String email) {
         // Property: For any athlete data, validation should work
         Athlete athlete = new Athlete(email, "hash", "name");

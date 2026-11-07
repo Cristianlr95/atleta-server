@@ -22,6 +22,11 @@ public class PlayerProfileResponse {
      */
     private String alias;
 
+    private String nombre;
+
+    /** Foto elegida por el jugador o importada desde su proveedor de acceso. */
+    private String pictureUrl;
+
     private GenderType genero;
 
     /**
@@ -68,6 +73,22 @@ public class PlayerProfileResponse {
         this.alias = alias;
     }
 
+    public String getNombre() {
+        return nombre;
+    }
+
+    public void setNombre(String nombre) {
+        this.nombre = nombre;
+    }
+
+    public String getPictureUrl() {
+        return pictureUrl;
+    }
+
+    public void setPictureUrl(String pictureUrl) {
+        this.pictureUrl = pictureUrl;
+    }
+
     public GenderType getGenero() {
         return genero;
     }
@@ -105,6 +126,7 @@ public class PlayerProfileResponse {
         return "PlayerProfileResponse{" +
                 "atletaUuid=" + atletaUuid +
                 ", alias='" + alias + '\'' +
+                ", nombre='" + nombre + '\'' +
                 ", trustScore=" + trustScore +
                 ", createdAt=" + createdAt +
                 '}';

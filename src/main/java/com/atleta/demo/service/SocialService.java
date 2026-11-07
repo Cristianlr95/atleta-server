@@ -3,11 +3,16 @@ package com.atleta.demo.service;
 import com.atleta.demo.dto.request.CreateFriendRequest;
 import com.atleta.demo.dto.request.CreateMatchInviteRequest;
 import com.atleta.demo.dto.request.CreateMatchInvitesBatchRequest;
+import com.atleta.demo.dto.response.MatchInviteDeliveryResponse;
+import com.atleta.demo.dto.response.MatchInviteDeliveryResponse.DeliveryStatus;
 import com.atleta.demo.dto.request.CreateTeamInviteRequest;
+import com.atleta.demo.dto.request.RegisterPushTokenRequest;
 import com.atleta.demo.dto.request.RespondRequestDecision;
 import com.atleta.demo.dto.response.AppNotificationResponse;
+import com.atleta.demo.dto.response.PushTokenResponse;
 import com.atleta.demo.dto.response.SocialPlayerLookupResponse;
 import com.atleta.demo.dto.response.SocialRequestResponse;
+import com.atleta.demo.dto.response.UnreadNotificationCountResponse;
 import com.atleta.demo.entity.*;
 import com.atleta.demo.enums.NotificationType;
 import com.atleta.demo.enums.MatchTeamSide;
@@ -16,12 +21,14 @@ import com.atleta.demo.enums.RequestStatus;
 import com.atleta.demo.repository.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -39,7 +46,9 @@ public class SocialService {
     private final MatchPlayerRepository matchPlayerRepository;
     private final PositionRepository positionRepository;
     private final PlayerPositionRepository playerPositionRepository;
+    private final MatchRosterPolicy matchRosterPolicy;
     private final MatchLiveEventService matchLiveEventService;
+    private final PushNotificationTokenRepository pushNotificationTokenRepository;
 
     public SocialService(
             PlayerProfileRepository playerProfileRepository,
@@ -53,7 +62,9 @@ public class SocialService {
             MatchPlayerRepository matchPlayerRepository,
             PositionRepository positionRepository,
             PlayerPositionRepository playerPositionRepository,
-            MatchLiveEventService matchLiveEventService
+            MatchRosterPolicy matchRosterPolicy,
+            MatchLiveEventService matchLiveEventService,
+            PushNotificationTokenRepository pushNotificationTokenRepository
     ) {
         this.playerProfileRepository = playerProfileRepository;
         this.friendshipRepository = friendshipRepository;
@@ -66,7 +77,9 @@ public class SocialService {
         this.matchPlayerRepository = matchPlayerRepository;
         this.positionRepository = positionRepository;
         this.playerPositionRepository = playerPositionRepository;
+        this.matchRosterPolicy = matchRosterPolicy;
         this.matchLiveEventService = matchLiveEventService;
+        this.pushNotificationTokenRepository = pushNotificationTokenRepository;
     }
 
     public SocialRequestResponse createFriendRequest(CreateFriendRequest request) {
@@ -98,7 +111,7 @@ public class SocialService {
         Friendship friendship = friendshipRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Solicitud de amistad no encontrada"));
         if (!friendship.getTarget().getAtletaUuid().equals(decision.getActorUuid())) {
-            throw new IllegalArgumentException("Solo el receptor puede responder la solicitud");
+            throw new AccessDeniedException("Solo el receptor puede responder la solicitud");
         }
         if (friendship.getStatus() != RequestStatus.PENDIENTE) {
             throw new IllegalArgumentException("La solicitud ya fue respondida");
@@ -161,7 +174,7 @@ public class SocialService {
         TeamInvite invite = teamInviteRepository.findById(inviteId)
                 .orElseThrow(() -> new IllegalArgumentException("Invitacion de equipo no encontrada"));
         if (!invite.getTarget().getAtletaUuid().equals(decision.getActorUuid())) {
-            throw new IllegalArgumentException("Solo el receptor puede responder la invitacion");
+            throw new AccessDeniedException("Solo el receptor puede responder la invitacion");
         }
         if (invite.getStatus() != RequestStatus.PENDIENTE) {
             throw new IllegalArgumentException("La invitacion ya fue respondida");
@@ -210,6 +223,8 @@ public class SocialService {
 
         PlayerProfile requester = getPlayer(request.getRequesterUuid());
         PlayerProfile target = getPlayer(request.getTargetUuid());
+        validateMatchInviteRequester(match, requester.getAtletaUuid());
+        validateTeamBelongsToMatch(match, resolvedTeam);
         boolean selfInvite = requester.getAtletaUuid().equals(target.getAtletaUuid());
 
         if (selfInvite) {
@@ -305,32 +320,195 @@ public class SocialService {
         return created;
     }
 
+    public List<MatchInviteDeliveryResponse> createMatchInvitesBatchDetailed(CreateMatchInvitesBatchRequest request) {
+        List<UUID> safeTargets = request.getTargetUuids() == null
+                ? List.of()
+                : request.getTargetUuids().stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (safeTargets.isEmpty()) {
+            throw new IllegalArgumentException("Debes indicar al menos un usuario para invitar");
+        }
+
+        return safeTargets.stream()
+                .map(targetUuid -> deliverMatchInvite(request, targetUuid))
+                .toList();
+    }
+
+    private MatchInviteDeliveryResponse deliverMatchInvite(
+            CreateMatchInvitesBatchRequest request,
+            UUID targetUuid
+    ) {
+        try {
+            Match match = matchRepository.findById(request.getMatchId())
+                    .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado"));
+            Team team = request.getTeamId() == null
+                    ? null
+                    : teamRepository.findById(request.getTeamId())
+                    .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado"));
+            PlayerProfile requester = getPlayer(request.getRequesterUuid());
+            validateMatchInviteRequester(match, requester.getAtletaUuid());
+            validateTeamBelongsToMatch(match, team);
+            PlayerProfile target = getPlayer(targetUuid);
+            Optional<MatchInvite> previous = matchInviteRepository
+                    .findTopByMatchAndTargetOrderByCreatedAtDesc(match, target);
+
+            if (previous.isPresent() && previous.get().getStatus() == RequestStatus.PENDIENTE) {
+                return new MatchInviteDeliveryResponse(
+                        targetUuid,
+                        DeliveryStatus.ALREADY_SENT,
+                        toSocialResponse(previous.get()),
+                        "La invitacion ya estaba pendiente"
+                );
+            }
+            if (previous.isPresent() && previous.get().getStatus() == RequestStatus.ACEPTADA) {
+                return new MatchInviteDeliveryResponse(
+                        targetUuid,
+                        DeliveryStatus.ALREADY_ACCEPTED,
+                        toSocialResponse(previous.get()),
+                        "El jugador ya habia aceptado la invitacion"
+                );
+            }
+
+            CreateMatchInviteRequest single = new CreateMatchInviteRequest();
+            single.setMatchId(request.getMatchId());
+            single.setTeamId(request.getTeamId());
+            single.setRequesterUuid(request.getRequesterUuid());
+            single.setTargetUuid(targetUuid);
+            single.setMessage(request.getMessage());
+            SocialRequestResponse invitation = createMatchInvite(single);
+            return new MatchInviteDeliveryResponse(targetUuid, DeliveryStatus.SENT, invitation, null);
+        } catch (IllegalArgumentException ex) {
+            logger.warn("No se pudo entregar invitacion para target {} en match {}: {}",
+                    targetUuid, request.getMatchId(), ex.getMessage());
+            return new MatchInviteDeliveryResponse(targetUuid, DeliveryStatus.FAILED, null, ex.getMessage());
+        }
+    }
+
     public SocialRequestResponse respondMatchInvite(Long inviteId, RespondRequestDecision decision) {
         MatchInvite invite = matchInviteRepository.findById(inviteId)
                 .orElseThrow(() -> new IllegalArgumentException("Invitacion de partido no encontrada"));
         if (!invite.getTarget().getAtletaUuid().equals(decision.getActorUuid())) {
-            throw new IllegalArgumentException("Solo el receptor puede responder la invitacion");
+            throw new AccessDeniedException("Solo el receptor puede responder la invitacion");
         }
-        if (invite.getStatus() != RequestStatus.PENDIENTE) {
+        boolean requestedAcceptance = Boolean.TRUE.equals(decision.getAccept());
+        Match match = matchRepository.findByIdForUpdate(invite.getMatch().getId())
+                .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado"));
+
+        if (match.getEstado() != com.atleta.demo.enums.MatchStatus.CREADO) {
+            throw new IllegalArgumentException("La convocatoria ya esta cerrada para este partido");
+        }
+
+        if (invite.getStatus() == RequestStatus.ACEPTADA || invite.getStatus() == RequestStatus.LISTA_ESPERA) {
+            if (requestedAcceptance) {
+                throw new IllegalArgumentException("La invitacion ya fue aceptada");
+            }
+
+            boolean releasedRosterSlot = invite.getStatus() == RequestStatus.ACEPTADA;
+            invite.setStatus(RequestStatus.CANCELADA);
+            invite.setRespondedAt(LocalDateTime.now());
+            invite = matchInviteRepository.save(invite);
+            ensureMatchParticipationFromInvite(invite, false);
+            if (releasedRosterSlot) {
+                matchPlayerRepository.flush();
+                promoteFirstWaitlisted(match);
+            }
+            matchLiveEventService.publishInviteDecision(match.getId(), invite.getId(), invite.getStatus().name());
+            return toSocialResponse(invite);
+        }
+
+        if (invite.getStatus() != RequestStatus.PENDIENTE
+                && !(requestedAcceptance && invite.getStatus() == RequestStatus.CANCELADA)) {
             throw new IllegalArgumentException("La invitacion ya fue respondida");
         }
 
-        boolean accepted = Boolean.TRUE.equals(decision.getAccept());
-        invite.setStatus(accepted ? RequestStatus.ACEPTADA : RequestStatus.RECHAZADA);
+        if (requestedAcceptance && resolveTeamForInvite(invite) == null) {
+            throw new com.atleta.demo.exception.MatchTeamRequiredException();
+        }
+        boolean hasRosterSlot = requestedAcceptance && hasRosterSlot(match);
+        boolean accepted = requestedAcceptance && hasRosterSlot;
+
+        invite.setStatus(!requestedAcceptance
+                ? RequestStatus.RECHAZADA
+                : accepted ? RequestStatus.ACEPTADA : RequestStatus.LISTA_ESPERA);
         invite.setRespondedAt(LocalDateTime.now());
         invite = matchInviteRepository.save(invite);
         ensureMatchParticipationFromInvite(invite, accepted);
+
+        String resultMessage = !requestedAcceptance
+                ? " rechazo"
+                : accepted ? " acepto" : " quedo en lista de espera";
 
         createNotification(
                 invite.getRequester(),
                 NotificationType.RESPUESTA_INVITACION_PARTIDO,
                 "Invitacion de partido respondida",
-                aliasOf(invite.getTarget()) + (accepted ? " acepto" : " rechazo") + " la invitacion al partido #" + invite.getMatch().getId(),
+                aliasOf(invite.getTarget()) + resultMessage + " la invitacion al partido #" + invite.getMatch().getId(),
                 "MATCH_INVITE",
                 invite.getId()
         );
         matchLiveEventService.publishInviteDecision(invite.getMatch().getId(), invite.getId(), invite.getStatus().name());
         return toSocialResponse(invite);
+    }
+
+    private void promoteFirstWaitlisted(Match match) {
+        if (!hasRosterSlot(match)) {
+            return;
+        }
+
+        for (MatchInvite waitlisted : matchInviteRepository
+                .findByMatchAndStatusOrderByRespondedAtAscCreatedAtAsc(match, RequestStatus.LISTA_ESPERA)) {
+            if (!isEligibleForPromotion(waitlisted)) {
+                waitlisted.setStatus(RequestStatus.CANCELADA);
+                waitlisted.setRespondedAt(LocalDateTime.now());
+                MatchInvite skipped = matchInviteRepository.save(waitlisted);
+                createNotification(
+                        skipped.getTarget(),
+                        NotificationType.RESPUESTA_INVITACION_PARTIDO,
+                        "No se pudo confirmar el cupo",
+                        "Completa tu posicion principal antes de participar en el partido #" + match.getId(),
+                        "MATCH_INVITE",
+                        skipped.getId()
+                );
+                matchLiveEventService.publishInviteDecision(
+                        match.getId(), skipped.getId(), skipped.getStatus().name()
+                );
+                continue;
+            }
+
+            waitlisted.setStatus(RequestStatus.ACEPTADA);
+            waitlisted.setRespondedAt(LocalDateTime.now());
+            MatchInvite promoted = matchInviteRepository.save(waitlisted);
+            ensureMatchParticipationFromInvite(promoted, true);
+            createNotification(
+                    promoted.getTarget(),
+                    NotificationType.RESPUESTA_INVITACION_PARTIDO,
+                    "Cupo confirmado",
+                    "Se libero un cupo y ahora estas confirmado para el partido #" + match.getId(),
+                    "MATCH_INVITE",
+                    promoted.getId()
+            );
+            matchLiveEventService.publishInviteDecision(
+                    match.getId(), promoted.getId(), promoted.getStatus().name()
+            );
+            return;
+        }
+    }
+
+    private boolean isEligibleForPromotion(MatchInvite invite) {
+        return resolveTeamForInvite(invite) != null && resolvePrimaryPosition(invite.getTarget()) != null;
+    }
+
+    /**
+     * The match row is pessimistically locked by the caller, so concurrent
+     * acceptances are serialized and only the earliest responses get a spot.
+     */
+    private boolean hasRosterSlot(Match match) {
+        int matchCapacity = matchRosterPolicy.playersPerTeamByModality(match.getModalidad()) * 2;
+        long confirmed = matchRosterPolicy.confirmedPlayerCount(match, matchPlayerRepository.findByMatch(match));
+        return confirmed < matchCapacity;
     }
 
     @Transactional
@@ -343,10 +521,11 @@ public class SocialService {
     }
 
     @Transactional
-    public List<SocialRequestResponse> getMatchInvitesByMatch(Long matchId) {
+    public List<SocialRequestResponse> getMatchInvitesByMatch(Long matchId, UUID actorUuid) {
         purgeExpiredPendingMatchInvites();
-        matchRepository.findById(matchId)
+        Match match = matchRepository.findById(matchId)
                 .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado"));
+        validateMatchInviteViewer(match, actorUuid);
         return matchInviteRepository.findByMatchId(matchId).stream()
                 .map(this::toSocialResponse)
                 .toList();
@@ -398,6 +577,52 @@ public class SocialService {
         return toNotificationResponse(notification);
     }
 
+    public PushTokenResponse registerPushToken(UUID playerUuid, RegisterPushTokenRequest request) {
+        PlayerProfile player = getPlayer(playerUuid);
+        String normalizedToken = normalizeRequired(request.getToken(), "El push token es obligatorio");
+        String normalizedPlatform = normalizeRequired(request.getPlatform(), "La plataforma es obligatoria");
+        String normalizedDeviceId = normalizeOptional(request.getDeviceId());
+
+        PushNotificationToken entity = normalizedDeviceId != null
+                ? pushNotificationTokenRepository.findByRecipientAndDeviceId(player, normalizedDeviceId).orElse(null)
+                : null;
+
+        if (entity == null) {
+            entity = pushNotificationTokenRepository.findByToken(normalizedToken).orElse(null);
+        }
+
+        if (entity == null) {
+            entity = new PushNotificationToken(player, normalizedToken, normalizedPlatform, normalizedDeviceId);
+        } else {
+            entity.setRecipient(player);
+            entity.setToken(normalizedToken);
+            entity.setPlatform(normalizedPlatform);
+            entity.setDeviceId(normalizedDeviceId);
+            entity.setActive(true);
+            entity.setLastSeenAt(LocalDateTime.now());
+        }
+
+        return toPushTokenResponse(pushNotificationTokenRepository.save(entity));
+    }
+
+    @Transactional
+    public void revokePushToken(UUID playerUuid, String deviceId) {
+        PlayerProfile player = getPlayer(playerUuid);
+        String normalizedDeviceId = normalizeRequired(deviceId, "El identificador del dispositivo es obligatorio");
+        pushNotificationTokenRepository.findByRecipientAndDeviceId(player, normalizedDeviceId)
+                .ifPresent(token -> {
+                    token.setActive(false);
+                    token.setLastSeenAt(LocalDateTime.now());
+                    pushNotificationTokenRepository.save(token);
+                });
+    }
+
+    @Transactional(readOnly = true)
+    public UnreadNotificationCountResponse getUnreadNotificationCount(UUID playerUuid) {
+        PlayerProfile player = getPlayer(playerUuid);
+        return new UnreadNotificationCountResponse(appNotificationRepository.countUnreadByRecipient(player));
+    }
+
     @Transactional(readOnly = true)
     public List<SocialPlayerLookupResponse> searchPlayers(String query) {
         String normalized = query == null ? "" : query.trim();
@@ -427,12 +652,80 @@ public class SocialService {
         }
     }
 
+    private void validateMatchInviteViewer(Match match, UUID actorUuid) {
+        if (actorUuid == null) {
+            throw new AccessDeniedException("Se requiere usuario autenticado");
+        }
+
+        if (match.getCreador() != null && actorUuid.equals(match.getCreador().getAtletaUuid())) {
+            return;
+        }
+
+        boolean isInviteActor = matchInviteRepository.findByMatchId(match.getId()).stream()
+                .anyMatch(invite -> isInviteParticipant(invite, actorUuid));
+        if (isInviteActor) {
+            return;
+        }
+
+        boolean isMatchParticipant = matchPlayerRepository.findByMatchAndPlayerAtletaUuid(match, actorUuid).isPresent();
+        if (!isMatchParticipant) {
+            throw new AccessDeniedException("No puedes ver invitaciones de un partido ajeno");
+        }
+    }
+
+    private void validateMatchInviteRequester(Match match, UUID actorUuid) {
+        if (actorUuid == null) {
+            throw new AccessDeniedException("Se requiere usuario autenticado");
+        }
+
+        if (match.getCreador() != null && actorUuid.equals(match.getCreador().getAtletaUuid())) {
+            return;
+        }
+
+        boolean isMatchParticipant = matchPlayerRepository.findByMatchAndPlayerAtletaUuid(match, actorUuid).isPresent();
+        if (!isMatchParticipant) {
+            throw new AccessDeniedException("No puedes invitar jugadores a un partido ajeno");
+        }
+    }
+
+    private void validateTeamBelongsToMatch(Match match, Team team) {
+        if (team == null) {
+            return;
+        }
+
+        boolean belongsToMatch = match.getMatchTeams() != null && match.getMatchTeams().stream()
+                .anyMatch(matchTeam -> matchTeam.getTeam() != null
+                        && team.getId() != null
+                        && team.getId().equals(matchTeam.getTeam().getId()));
+
+        if (!belongsToMatch) {
+            throw new IllegalArgumentException("El equipo indicado no pertenece al partido");
+        }
+    }
+
+    private boolean isInviteParticipant(MatchInvite invite, UUID actorUuid) {
+        return (invite.getRequester() != null && actorUuid.equals(invite.getRequester().getAtletaUuid()))
+                || (invite.getTarget() != null && actorUuid.equals(invite.getTarget().getAtletaUuid()));
+    }
+
     private String normalizeMessage(String message) {
-        if (message == null) {
+        return normalizeOptional(message);
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) {
             return null;
         }
-        String normalized = message.trim();
+        String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String normalizeRequired(String value, String errorMessage) {
+        String normalized = normalizeOptional(value);
+        if (normalized == null) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+        return normalized;
     }
 
     private String aliasOf(PlayerProfile player) {
@@ -524,6 +817,18 @@ public class SocialService {
         return response;
     }
 
+    private PushTokenResponse toPushTokenResponse(PushNotificationToken token) {
+        PushTokenResponse response = new PushTokenResponse();
+        response.setId(token.getId());
+        response.setPlayerUuid(token.getRecipient().getAtletaUuid());
+        response.setPlatform(token.getPlatform());
+        response.setDeviceId(token.getDeviceId());
+        response.setActive(token.getActive());
+        response.setLastSeenAt(token.getLastSeenAt());
+        response.setCreatedAt(token.getCreatedAt());
+        return response;
+    }
+
     private void ensureMatchParticipationFromInvite(MatchInvite invite, boolean accepted) {
         Match match = invite.getMatch();
         PlayerProfile player = invite.getTarget();
@@ -540,7 +845,7 @@ public class SocialService {
 
         Team team = resolveTeamForInvite(invite);
         if (team == null) {
-            throw new IllegalArgumentException("No se pudo determinar equipo para registrar participacion en el partido");
+            throw new com.atleta.demo.exception.MatchTeamRequiredException();
         }
 
         Position position = resolvePrimaryPosition(player);

@@ -47,9 +47,10 @@ public class DataInitializationService implements ApplicationRunner {
             List<String> positionNames = Arrays.asList(
                 "Portero",
                 "Defensa",
-                "Carrilero", 
-                "Mediocampista",
+                "Mediocampo",
                 "Delantero",
+                "Lateral Derecho",
+                "Lateral Izquierdo",
                 "DT"
             );
             

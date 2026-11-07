@@ -1,6 +1,7 @@
 package com.atleta.demo.controller;
 
 import com.atleta.demo.dto.request.CreateMatchRequest;
+import com.atleta.demo.dto.request.CreateMatchOrchestratedRequest;
 import com.atleta.demo.dto.request.JoinMatchRequest;
 import com.atleta.demo.dto.request.CreateMatchEventRequest;
 import com.atleta.demo.dto.request.MatchClosePreviewRequest;
@@ -8,13 +9,16 @@ import com.atleta.demo.dto.request.UpdateMatchTeamAssignmentsRequest;
 import com.atleta.demo.dto.request.VoteMatchMvpRequest;
 import com.atleta.demo.dto.response.MatchClosePreviewResponse;
 import com.atleta.demo.dto.response.MatchResponse;
+import com.atleta.demo.dto.response.OrchestratedMatchCreationResponse;
 import com.atleta.demo.dto.response.MatchPlayerResponse;
 import com.atleta.demo.dto.response.MatchEventResponse;
 import com.atleta.demo.dto.response.MatchMvpResponse;
 import com.atleta.demo.enums.MatchStatus;
+import com.atleta.demo.security.AuthenticatedUserUtils;
 import com.atleta.demo.service.MatchLiveEventService;
 import com.atleta.demo.service.MatchMvpService;
 import com.atleta.demo.service.MatchService;
+import com.atleta.demo.service.OrchestratedMatchCreationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -26,10 +30,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -63,15 +70,18 @@ public class MatchController {
     private final MatchService matchService;
     private final MatchLiveEventService matchLiveEventService;
     private final MatchMvpService matchMvpService;
+    private final OrchestratedMatchCreationService orchestratedMatchCreationService;
 
     public MatchController(
             MatchService matchService,
             MatchLiveEventService matchLiveEventService,
-            MatchMvpService matchMvpService
+            MatchMvpService matchMvpService,
+            OrchestratedMatchCreationService orchestratedMatchCreationService
     ) {
         this.matchService = matchService;
         this.matchLiveEventService = matchLiveEventService;
         this.matchMvpService = matchMvpService;
+        this.orchestratedMatchCreationService = orchestratedMatchCreationService;
     }
 
     /**
@@ -86,7 +96,11 @@ public class MatchController {
         @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos"),
         @ApiResponse(responseCode = "404", description = "Creador no encontrado")
     })
-    public ResponseEntity<MatchResponse> createMatch(@Valid @RequestBody CreateMatchRequest request) {
+    public ResponseEntity<MatchResponse> createMatch(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody CreateMatchRequest request
+    ) {
+        request.setCreadorUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
         logger.info("Solicitud de creación de partido: modalidad {} por creador: {}", 
                    request.getModalidad(), request.getCreadorUuid());
         
@@ -173,7 +187,9 @@ public class MatchController {
     })
     public ResponseEntity<List<MatchResponse>> getMatchesByPlayer(
             @Parameter(description = "UUID del jugador")
-            @PathVariable UUID playerUuid) {
+            @PathVariable UUID playerUuid,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerUuid);
         
         logger.debug("Obteniendo partidos del jugador: {}", playerUuid);
         
@@ -229,13 +245,15 @@ public class MatchController {
             @PathVariable Long matchId,
             @Parameter(description = "Nuevo estado del partido")
             @RequestParam MatchStatus status,
+            @AuthenticationPrincipal Jwt jwt,
             @Parameter(description = "UUID del responsable que ejecuta el cambio (opcional)")
             @RequestParam(required = false) UUID actorUuid) {
-        
-        logger.info("Cambiando estado del partido {} a: {}", matchId, status);
-        
+
+        UUID authenticatedActorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+        logger.info("Cambiando estado del partido {} a: {} por {}", matchId, status, authenticatedActorUuid);
+
         try {
-            MatchResponse response = matchService.changeMatchStatus(matchId, status, actorUuid);
+            MatchResponse response = matchService.changeMatchStatus(matchId, status, authenticatedActorUuid);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             logger.warn("Error cambiando estado del partido: {}", e.getMessage());
@@ -264,14 +282,16 @@ public class MatchController {
             @PathVariable Long matchId,
             @Parameter(description = "ID del equipo")
             @PathVariable Long teamId,
+            @AuthenticationPrincipal Jwt jwt,
             @Parameter(description = "Indica si el equipo es local (true) o visitante (false)")
             @RequestParam Boolean esLocal) {
-        
-        logger.info("Agregando equipo {} al partido {} como {}", 
+        UUID authenticatedActorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+
+        logger.info("Agregando equipo {} al partido {} como {}",
                    teamId, matchId, esLocal ? "local" : "visitante");
-        
+
         try {
-            MatchResponse response = matchService.addTeamToMatch(matchId, teamId, esLocal);
+            MatchResponse response = matchService.addTeamToMatch(matchId, teamId, esLocal, authenticatedActorUuid);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             logger.warn("Error agregando equipo al partido: {}", e.getMessage());
@@ -295,7 +315,11 @@ public class MatchController {
         @ApiResponse(responseCode = "400", description = "Datos inválidos o el jugador ya está registrado"),
         @ApiResponse(responseCode = "404", description = "Partido, jugador, equipo o posición no encontrados")
     })
-    public ResponseEntity<MatchPlayerResponse> joinMatch(@Valid @RequestBody JoinMatchRequest request) {
+    public ResponseEntity<MatchPlayerResponse> joinMatch(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody JoinMatchRequest request
+    ) {
+        request.setPlayerUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
         logger.info("Jugador {} uniéndose al partido {} con equipo {} en posición {}", 
                    request.getPlayerUuid(), request.getMatchId(), 
                    request.getTeamId(), request.getPositionId());
@@ -331,12 +355,14 @@ public class MatchController {
             @Parameter(description = "ID del partido")
             @PathVariable Long matchId,
             @Parameter(description = "ID del equipo")
-            @PathVariable Long teamId) {
+            @PathVariable Long teamId,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID authenticatedActorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
 
         logger.info("Importando jugadores del equipo {} al partido {}", teamId, matchId);
 
         try {
-            List<MatchPlayerResponse> response = matchService.importTeamPlayers(matchId, teamId);
+            List<MatchPlayerResponse> response = matchService.importTeamPlayers(matchId, teamId, authenticatedActorUuid);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             logger.warn("Error importando jugadores del equipo: {}", e.getMessage());
@@ -345,6 +371,38 @@ public class MatchController {
             } else {
                 return ResponseEntity.badRequest().build();
             }
+        }
+    }
+
+    @PostMapping("/orchestrated")
+    @Operation(
+            summary = "Crear partido completo de forma idempotente",
+            description = "Crea partido, equipo local e invitaciones en una sola transaccion retry-safe"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Comando aplicado o reproducido exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Datos o Idempotency-Key invalidos"),
+        @ApiResponse(responseCode = "403", description = "El usuario no puede usar el equipo")
+    })
+    public ResponseEntity<?> createMatchOrchestrated(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody CreateMatchOrchestratedRequest request
+    ) {
+        UUID actorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+        request.getMatch().setCreadorUuid(actorUuid);
+        try {
+            OrchestratedMatchCreationResponse response = orchestratedMatchCreationService.create(
+                    request,
+                    actorUuid,
+                    idempotencyKey
+            );
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "errorCode", "MATCH_CREATION_FAILED",
+                    "message", exception.getMessage()
+            ));
         }
     }
 
@@ -360,7 +418,9 @@ public class MatchController {
     })
     public ResponseEntity<List<MatchResponse>> getMatchesByPlayerOrCreator(
             @Parameter(description = "UUID del jugador")
-            @PathVariable UUID playerUuid) {
+            @PathVariable UUID playerUuid,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerUuid);
 
         logger.debug("Obteniendo partidos por jugador o creador: {}", playerUuid);
 
@@ -378,8 +438,10 @@ public class MatchController {
             description = "Persiste la asignacion de jugadores a LOCAL o VISITA para el partido")
     public ResponseEntity<MatchResponse> updateTeamAssignments(
             @PathVariable Long matchId,
+            @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody UpdateMatchTeamAssignmentsRequest request
     ) {
+        request.setActorUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
         logger.info("Actualizando asignacion de equipos del partido {}. home={}, away={}",
                 matchId,
                 request.getHomePlayerUuids() != null ? request.getHomePlayerUuids().size() : 0,
@@ -413,7 +475,9 @@ public class MatchController {
             @Parameter(description = "ID del partido")
             @PathVariable Long matchId,
             @Parameter(description = "UUID del jugador")
-            @PathVariable UUID playerUuid) {
+            @PathVariable UUID playerUuid,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerUuid);
 
         logger.info("Eliminando jugador {} del partido {}", playerUuid, matchId);
 
@@ -436,7 +500,9 @@ public class MatchController {
             @Parameter(description = "ID del partido")
             @PathVariable Long matchId,
             @Parameter(description = "UUID del jugador")
-            @PathVariable UUID playerUuid) {
+            @PathVariable UUID playerUuid,
+            @AuthenticationPrincipal Jwt jwt) {
+        AuthenticatedUserUtils.requireSameUser(jwt, playerUuid);
         
         logger.info("Confirmando participación del jugador {} en el partido {}", playerUuid, matchId);
         
@@ -461,8 +527,12 @@ public class MatchController {
         @ApiResponse(responseCode = "400", description = "Datos inválidos o el jugador no participa en el partido"),
         @ApiResponse(responseCode = "404", description = "Partido, jugador o equipo no encontrados")
     })
-    public ResponseEntity<MatchEventResponse> registerEvent(@Valid @RequestBody CreateMatchEventRequest request) {
-        logger.info("Registrando evento {} del jugador {} en el partido {}", 
+    public ResponseEntity<MatchEventResponse> registerEvent(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody CreateMatchEventRequest request
+    ) {
+        request.setRegisteredByUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
+        logger.info("Registrando evento {} del jugador {} en el partido {}",
                    request.getEventType(), request.getPlayerUuid(), request.getMatchId());
         
         try {
@@ -494,16 +564,18 @@ public class MatchController {
     public ResponseEntity<MatchEventResponse> confirmEvent(
             @Parameter(description = "ID del evento")
             @PathVariable Long eventId,
+            @AuthenticationPrincipal Jwt jwt,
             @Parameter(description = "UUID del jugador que confirma")
             @RequestParam UUID confirmingPlayerUuid,
             @Parameter(description = "Indica si confirma el equipo local (true) o visitante (false)")
             @RequestParam Boolean isLocalTeam) {
-        
-        logger.info("Confirmando evento {} por jugador {} del equipo {}", 
-                   eventId, confirmingPlayerUuid, isLocalTeam ? "local" : "visitante");
-        
+
+        UUID authenticatedConfirmingUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+        logger.info("Confirmando evento {} por jugador {} del equipo {}",
+                   eventId, authenticatedConfirmingUuid, isLocalTeam ? "local" : "visitante");
+
         try {
-            MatchEventResponse response = matchService.confirmEvent(eventId, confirmingPlayerUuid, isLocalTeam);
+            MatchEventResponse response = matchService.confirmEvent(eventId, authenticatedConfirmingUuid, isLocalTeam);
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             logger.warn("Error confirmando evento: {}", e.getMessage());
@@ -545,13 +617,19 @@ public class MatchController {
     @Operation(summary = "Suscribirse al stream en vivo del partido",
                description = "SSE para cambios de invitaciones y estado del partido")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Stream conectado")
+        @ApiResponse(responseCode = "200", description = "Stream conectado"),
+        @ApiResponse(responseCode = "401", description = "Sesion requerida"),
+        @ApiResponse(responseCode = "403", description = "No participa en el partido"),
+        @ApiResponse(responseCode = "404", description = "Partido no encontrado")
     })
-    public SseEmitter subscribeMatchLive(
+    public ResponseEntity<SseEmitter> subscribeMatchLive(
             @Parameter(description = "ID del partido")
-            @PathVariable Long matchId) {
-        logger.debug("Abriendo stream SSE para partido {}", matchId);
-        return matchLiveEventService.subscribe(matchId);
+            @PathVariable Long matchId,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID viewerUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+        matchService.requireLiveStreamAccess(matchId, viewerUuid);
+        logger.debug("Abriendo stream SSE para partido {} y usuario {}", matchId, viewerUuid);
+        return ResponseEntity.ok(matchLiveEventService.subscribe(matchId));
     }
 
     @PostMapping("/{matchId}/close/preview")
@@ -559,16 +637,21 @@ public class MatchController {
             description = "Calcula XP estimada y OVR actual por jugador para confirmar cierre")
     public ResponseEntity<MatchClosePreviewResponse> getClosePreview(
             @PathVariable Long matchId,
+            @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody(required = false) MatchClosePreviewRequest request
     ) {
         try {
-            return ResponseEntity.ok(matchService.getClosePreview(matchId, request));
+            UUID authenticatedActorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+            return ResponseEntity.ok(matchService.getClosePreview(matchId, request, authenticatedActorUuid));
         } catch (IllegalArgumentException e) {
             logger.warn("Error generando preview de cierre para partido {}: {}", matchId, e.getMessage());
             if (e.getMessage().contains("no encontrado")) {
                 return ResponseEntity.notFound().build();
             }
             return ResponseEntity.badRequest().build();
+        } catch (IllegalStateException e) {
+            logger.warn("Preview de cierre no disponible para partido {}: {}", matchId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
     }
 
@@ -577,9 +660,10 @@ public class MatchController {
             description = "Devuelve estado de la votacion MVP, candidatos, voto actual y ganador si ya cerro")
     public ResponseEntity<MatchMvpResponse> getMvpState(
             @PathVariable Long matchId,
-            @RequestParam(required = false) UUID voterUserId
+            @AuthenticationPrincipal Jwt jwt
     ) {
         try {
+            UUID voterUserId = AuthenticatedUserUtils.currentUserUuid(jwt);
             return ResponseEntity.ok(matchMvpService.getMvpState(matchId, voterUserId));
         } catch (IllegalArgumentException e) {
             logger.warn("Error obteniendo MVP para partido {}: {}", matchId, e.getMessage());
@@ -595,10 +679,11 @@ public class MatchController {
             description = "Registra o actualiza voto MVP de un participante confirmado dentro de la ventana de 3 horas")
     public ResponseEntity<MatchMvpResponse> voteMvp(
             @PathVariable Long matchId,
-            @RequestParam UUID voterUserId,
+            @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody VoteMatchMvpRequest request
     ) {
         try {
+            UUID voterUserId = AuthenticatedUserUtils.currentUserUuid(jwt);
             return ResponseEntity.ok(matchMvpService.vote(matchId, voterUserId, request.getVotedUserId()));
         } catch (IllegalArgumentException e) {
             logger.warn("Error votando MVP para partido {}: {}", matchId, e.getMessage());
@@ -608,6 +693,7 @@ public class MatchController {
             return ResponseEntity.badRequest().build();
         }
     }
+
 }
 
 

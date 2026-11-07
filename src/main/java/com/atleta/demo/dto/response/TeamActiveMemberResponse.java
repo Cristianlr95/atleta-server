@@ -2,6 +2,7 @@ package com.atleta.demo.dto.response;
 
 import com.atleta.demo.enums.PlayerRole;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public class TeamActiveMemberResponse {
@@ -10,16 +11,23 @@ public class TeamActiveMemberResponse {
     private PlayerRole rol;
     private Long primaryPositionId;
     private String primaryPositionName;
+    private BigDecimal ovr;
 
     public TeamActiveMemberResponse() {
     }
 
     public TeamActiveMemberResponse(UUID playerUuid, String alias, PlayerRole rol, Long primaryPositionId, String primaryPositionName) {
+        this(playerUuid, alias, rol, primaryPositionId, primaryPositionName, null);
+    }
+
+    public TeamActiveMemberResponse(UUID playerUuid, String alias, PlayerRole rol, Long primaryPositionId,
+                                    String primaryPositionName, BigDecimal ovr) {
         this.playerUuid = playerUuid;
         this.alias = alias;
         this.rol = rol;
         this.primaryPositionId = primaryPositionId;
         this.primaryPositionName = primaryPositionName;
+        this.ovr = ovr;
     }
 
     public UUID getPlayerUuid() {
@@ -60,5 +68,13 @@ public class TeamActiveMemberResponse {
 
     public void setPrimaryPositionName(String primaryPositionName) {
         this.primaryPositionName = primaryPositionName;
+    }
+
+    public BigDecimal getOvr() {
+        return ovr;
+    }
+
+    public void setOvr(BigDecimal ovr) {
+        this.ovr = ovr;
     }
 }

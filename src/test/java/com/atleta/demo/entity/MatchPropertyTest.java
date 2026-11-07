@@ -3,7 +3,7 @@ package com.atleta.demo.entity;
 import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.enums.MatchStatus;
 import net.jqwik.api.*;
-import org.junit.jupiter.api.DisplayName;
+import net.jqwik.api.Label;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MatchPropertyTest {
 
     @Property(tries = 100)
-    @DisplayName("Match should have valid modalidad, coordinates within valid ranges, and initial CREADO status")
+    @Label("Match should have valid modalidad, coordinates within valid ranges, and initial CREADO status")
     void matchShouldHaveValidModalidadCoordinatesAndInitialStatus(
             @ForAll("validMatchMode") MatchMode modalidad,
             @ForAll("validLatitude") BigDecimal latitud,
@@ -66,7 +66,7 @@ class MatchPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("Match should validate exactly two teams constraint")
+    @Label("Match should validate exactly two teams constraint")
     void matchShouldValidateExactlyTwoTeamsConstraint(
             @ForAll("validMatchMode") MatchMode modalidad,
             @ForAll("futureDateTime") LocalDateTime fechaHoraProgramada,
@@ -120,7 +120,7 @@ class MatchPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("Match status transitions should be valid")
+    @Label("Match status transitions should be valid")
     void matchStatusTransitionsShouldBeValid(
             @ForAll("validMatchMode") MatchMode modalidad,
             @ForAll("futureDateTime") LocalDateTime fechaHoraProgramada,
@@ -153,7 +153,7 @@ class MatchPropertyTest {
     }
 
     @Property(tries = 100)
-    @DisplayName("Match coordinates should always be within valid geographic ranges")
+    @Label("Match coordinates should always be within valid geographic ranges")
     void matchCoordinatesShouldAlwaysBeWithinValidGeographicRanges(
             @ForAll("validLatitude") BigDecimal latitud,
             @ForAll("validLongitude") BigDecimal longitud,

@@ -10,6 +10,7 @@ import com.atleta.demo.entity.Position;
 import com.atleta.demo.entity.Team;
 import com.atleta.demo.enums.EventType;
 import com.atleta.demo.enums.MatchMode;
+import com.atleta.demo.enums.MatchResultType;
 import com.atleta.demo.enums.MatchStatus;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.repository.MatchEventRepository;
@@ -22,7 +23,16 @@ import com.atleta.demo.repository.PlayerProfileRepository;
 import com.atleta.demo.repository.PositionRepository;
 import com.atleta.demo.repository.TeamMemberRepository;
 import com.atleta.demo.repository.TeamRepository;
+import com.atleta.demo.service.MatchAutomatedStatusService;
+import com.atleta.demo.service.MatchFinalScoreService;
+import com.atleta.demo.service.MatchPendingEventClosureService;
+import com.atleta.demo.service.MatchPlayerHistoryService;
+import com.atleta.demo.service.MatchPostMatchRatingService;
+import com.atleta.demo.service.MatchQueryService;
+import com.atleta.demo.service.MatchResponseMapper;
+import com.atleta.demo.service.MatchRosterPolicy;
 import com.atleta.demo.service.MatchService;
+import com.atleta.demo.service.MatchStatusPolicy;
 import com.atleta.demo.service.RatingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -96,8 +106,66 @@ class MatchRatingIntegrationTest {
                 positionRepository,
                 teamMemberRepository,
                 playerPositionRepository,
-                playerHistoryRepository,
-                ratingService
+                ratingService,
+                new MatchStatusPolicy(),
+                new MatchFinalScoreService(
+                        matchEventRepository,
+                        matchPlayerRepository,
+                        matchTeamRepository
+                ),
+                new MatchPlayerHistoryService(
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        matchTeamRepository,
+                        playerHistoryRepository,
+                        playerPositionRepository
+                ),
+                new MatchPendingEventClosureService(
+                        matchEventRepository,
+                        matchTeamRepository
+                ),
+                new MatchRosterPolicy(),
+                new MatchPostMatchRatingService(
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        ratingService
+                ),
+                new MatchResponseMapper(
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        new MatchStatusPolicy()
+                ),
+                new MatchQueryService(
+                        matchRepository,
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        playerProfileRepository,
+                        teamRepository,
+                        positionRepository,
+                        playerPositionRepository,
+                        new MatchAutomatedStatusService(
+                                matchRepository,
+                                matchTeamRepository,
+                                matchPlayerRepository,
+                                new MatchPlayerHistoryService(
+                                        matchPlayerRepository,
+                                        matchEventRepository,
+                                        matchTeamRepository,
+                                        playerHistoryRepository,
+                                        playerPositionRepository
+                                ),
+                                new MatchRosterPolicy()
+                        ),
+                        new MatchResponseMapper(
+                                matchTeamRepository,
+                                matchPlayerRepository,
+                                matchEventRepository,
+                                new MatchStatusPolicy()
+                        )
+                )
         );
 
         creator = new PlayerProfile();
@@ -106,6 +174,7 @@ class MatchRatingIntegrationTest {
 
         sampleMatch = new Match();
         sampleMatch.setId(1L);
+        sampleMatch.setStartedAt(java.time.LocalDateTime.now().minusHours(2));
         sampleMatch.setCreador(creator);
         sampleMatch.setModalidad(MatchMode.CINCO_VS_CINCO);
 
@@ -174,7 +243,7 @@ class MatchRatingIntegrationTest {
     void changeMatchStatus_ToFinalizado_ShouldTriggerRatingUpdate() {
         sampleMatch.setEstado(MatchStatus.INICIADO);
 
-        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleMatch));
         when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(matchTeamRepository.findByMatch(any(Match.class))).thenReturn(matchTeams);
         when(matchPlayerRepository.findByMatch(any(Match.class))).thenReturn(matchPlayers);
@@ -189,13 +258,15 @@ class MatchRatingIntegrationTest {
         verify(ratingService, times(1)).updatePlayerRatings(matchIdCaptor.capture(), performanceCaptor.capture());
         assertEquals(1L, matchIdCaptor.getValue());
         assertEquals(matchPlayers.size(), performanceCaptor.getValue().size());
+        assertEquals(MatchResultType.GANADO, performanceCaptor.getValue().get(0).getMatchResult());
+        assertEquals(MatchResultType.PERDIDO, performanceCaptor.getValue().get(5).getMatchResult());
     }
 
     @Test
     void changeMatchStatus_ToFinalizado_WithNoPlayers_ShouldNotCallRatingService() {
         sampleMatch.setEstado(MatchStatus.INICIADO);
 
-        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleMatch));
         when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(List.of());
 
@@ -210,6 +281,7 @@ class MatchRatingIntegrationTest {
 
         when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
         when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(matchPlayers);
 
         matchService.changeMatchStatus(1L, MatchStatus.INICIADO);
 
@@ -217,10 +289,10 @@ class MatchRatingIntegrationTest {
     }
 
     @Test
-    void changeMatchStatus_RatingServiceThrowsException_ShouldNotFailStatusChange() {
+    void changeMatchStatus_RatingServiceThrowsException_ShouldFailAtomicClosure() {
         sampleMatch.setEstado(MatchStatus.INICIADO);
 
-        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleMatch));
         when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(matchTeamRepository.findByMatch(sampleMatch)).thenReturn(matchTeams);
         when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(matchPlayers);
@@ -228,7 +300,11 @@ class MatchRatingIntegrationTest {
         when(matchEventRepository.findPendingEventsByMatch(sampleMatch)).thenReturn(List.of());
         doThrow(new RuntimeException("Error en calificaciones")).when(ratingService).updatePlayerRatings(any(), any());
 
-        assertDoesNotThrow(() -> matchService.changeMatchStatus(1L, MatchStatus.FINALIZADO));
+        RuntimeException exception = assertThrows(
+                RuntimeException.class,
+                () -> matchService.changeMatchStatus(1L, MatchStatus.FINALIZADO)
+        );
+        assertEquals("Error en calificaciones", exception.getMessage());
 
         verify(matchRepository, times(1)).save(any(Match.class));
     }

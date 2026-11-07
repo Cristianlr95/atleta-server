@@ -33,8 +33,8 @@ public class DatabaseConfigurationValidator {
     private static final Map<String, List<String>> REQUIRED_ENV_VARS = Map.of(
         "dev", List.of(),
         "test", List.of(),
-        "staging", List.of("DB_HOST", "DB_NAME", "DB_USERNAME", "DB_PASSWORD", "JWT_SECRET"),
-        "prod", List.of("DB_HOST", "DB_PORT", "DB_NAME", "DB_USERNAME", "DB_PASSWORD", "JWT_SECRET")
+        "staging", List.of("DB_HOST", "DB_PORT", "DB_NAME", "DB_USERNAME", "DB_PASSWORD", "JWT_SECRET", "CORS_ALLOWED_ORIGIN_PATTERNS"),
+        "prod", List.of("DB_HOST", "DB_PORT", "DB_NAME", "DB_USERNAME", "DB_PASSWORD", "JWT_SECRET", "CORS_ALLOWED_ORIGIN_PATTERNS")
     );
 
     private static final Map<String, FlywayValidationRules> FLYWAY_RULES = Map.of(
@@ -95,6 +95,10 @@ public class DatabaseConfigurationValidator {
             validateProductionSslConfiguration();
         }
 
+        if ("staging".equals(currentProfile) || "prod".equals(currentProfile)) {
+            validateCorsConfiguration(currentProfile);
+        }
+
         logger.debug("Configuration validation completed");
     }
 
@@ -104,6 +108,7 @@ public class DatabaseConfigurationValidator {
             case "DB_PASSWORD" -> environment.getProperty("spring.datasource.password");
             case "DB_HOST" -> environment.getProperty("spring.datasource.url");
             case "JWT_SECRET" -> environment.getProperty("security.jwt.secret");
+            case "CORS_ALLOWED_ORIGIN_PATTERNS" -> environment.getProperty("app.cors.allowed-origin-patterns");
             default -> null;
         };
     }
@@ -119,6 +124,27 @@ public class DatabaseConfigurationValidator {
         }
 
         logger.debug("Production SSL configuration validated");
+    }
+
+    private void validateCorsConfiguration(String currentProfile) {
+        String allowedOrigins = environment.getProperty("app.cors.allowed-origin-patterns", "");
+
+        if (allowedOrigins.isBlank()) {
+            throw new DatabaseConfigurationException(
+                String.format("CORS_ALLOWED_ORIGIN_PATTERNS is required for profile '%s'", currentProfile)
+            );
+        }
+
+        List<String> parsedOrigins = Arrays.stream(allowedOrigins.split(","))
+            .map(String::trim)
+            .filter(origin -> !origin.isBlank())
+            .toList();
+
+        if (parsedOrigins.isEmpty() || parsedOrigins.contains("*")) {
+            throw new DatabaseConfigurationException(
+                String.format("Profile '%s' must define explicit CORS origins and cannot use wildcard values", currentProfile)
+            );
+        }
     }
 
     private void validateDatabaseConnectivity() {

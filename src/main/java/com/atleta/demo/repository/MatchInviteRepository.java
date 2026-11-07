@@ -35,6 +35,16 @@ public interface MatchInviteRepository extends JpaRepository<MatchInvite, Long> 
 
     Optional<MatchInvite> findTopByMatchAndTargetOrderByCreatedAtDesc(Match match, PlayerProfile target);
 
+    Optional<MatchInvite> findFirstByMatchAndStatusOrderByRespondedAtAscCreatedAtAsc(
+            Match match,
+            RequestStatus status
+    );
+
+    List<MatchInvite> findByMatchAndStatusOrderByRespondedAtAscCreatedAtAsc(
+            Match match,
+            RequestStatus status
+    );
+
     boolean existsByMatchAndTargetAndStatus(Match match, PlayerProfile target, RequestStatus status);
 
     boolean existsByTeam(Team team);

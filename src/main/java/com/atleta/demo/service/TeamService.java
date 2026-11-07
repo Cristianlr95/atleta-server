@@ -25,11 +25,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +52,7 @@ public class TeamService {
     private final PlayerPositionRepository playerPositionRepository;
     private final TeamInviteRepository teamInviteRepository;
     private final MatchInviteRepository matchInviteRepository;
+    private final RatingService ratingService;
 
     public TeamService(TeamRepository teamRepository,
                        PlayerProfileRepository playerProfileRepository,
@@ -57,7 +60,8 @@ public class TeamService {
                        TeamStatsRepository teamStatsRepository,
                        PlayerPositionRepository playerPositionRepository,
                        TeamInviteRepository teamInviteRepository,
-                       MatchInviteRepository matchInviteRepository) {
+                       MatchInviteRepository matchInviteRepository,
+                       RatingService ratingService) {
         this.teamRepository = teamRepository;
         this.playerProfileRepository = playerProfileRepository;
         this.teamMemberRepository = teamMemberRepository;
@@ -65,6 +69,7 @@ public class TeamService {
         this.playerPositionRepository = playerPositionRepository;
         this.teamInviteRepository = teamInviteRepository;
         this.matchInviteRepository = matchInviteRepository;
+        this.ratingService = ratingService;
     }
 
     public TeamResponse createTeam(CreateTeamRequest request) {
@@ -134,6 +139,18 @@ public class TeamService {
     }
 
     @Transactional(readOnly = true)
+    public TeamResponse getTeamById(Long teamId) {
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado: " + teamId));
+
+        if (Boolean.TRUE.equals(team.getArchived())) {
+            throw new IllegalArgumentException("Equipo no encontrado: " + teamId);
+        }
+
+        return toTeamResponse(team);
+    }
+
+    @Transactional(readOnly = true)
     public List<TeamActiveMemberResponse> getActiveMembersByTeam(Long teamId) {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado: " + teamId));
@@ -144,6 +161,11 @@ public class TeamService {
 
         List<TeamMember> activeMembers = teamMemberRepository.findActiveByTeam(team);
         List<TeamActiveMemberResponse> response = new ArrayList<>();
+        Map<UUID, BigDecimal> overallByPlayer = ratingService.calculateHybridOVRBatch(
+                activeMembers.stream()
+                        .map(member -> member.getPlayer().getAtletaUuid())
+                        .toList()
+        );
 
         for (TeamMember member : activeMembers) {
             PlayerPosition primaryPosition = playerPositionRepository
@@ -155,7 +177,8 @@ public class TeamService {
                     member.getPlayer().getAlias(),
                     member.getRol(),
                     primaryPosition != null && primaryPosition.getPosition() != null ? primaryPosition.getPosition().getId() : null,
-                    primaryPosition != null && primaryPosition.getPosition() != null ? primaryPosition.getPosition().getNombre() : null
+                    primaryPosition != null && primaryPosition.getPosition() != null ? primaryPosition.getPosition().getNombre() : null,
+                    overallByPlayer.getOrDefault(member.getPlayer().getAtletaUuid(), BigDecimal.valueOf(65))
             ));
         }
 
@@ -176,6 +199,8 @@ public class TeamService {
             throw new IllegalArgumentException("Formato de imagen no permitido");
         }
 
+        validateImageSignature(file, contentType);
+
         String extension = resolveExtension(contentType);
         String fileName = UUID.randomUUID() + "." + extension;
 
@@ -188,6 +213,44 @@ public class TeamService {
         }
 
         return "/uploads/team-logos/" + fileName;
+    }
+
+    private void validateImageSignature(MultipartFile file, String contentType) {
+        byte[] signature;
+        try {
+            signature = file.getInputStream().readNBytes(12);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("No se pudo leer el logo");
+        }
+
+        boolean valid = switch (contentType) {
+            case "image/png" -> hasPrefix(signature, new byte[] {
+                    (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+            });
+            case "image/jpeg" -> hasPrefix(signature, new byte[] {
+                    (byte) 0xFF, (byte) 0xD8, (byte) 0xFF
+            });
+            case "image/webp" -> hasPrefix(signature, new byte[] { 0x52, 0x49, 0x46, 0x46 })
+                    && signature.length >= 12
+                    && Arrays.equals(Arrays.copyOfRange(signature, 8, 12), new byte[] { 0x57, 0x45, 0x42, 0x50 });
+            default -> false;
+        };
+
+        if (!valid) {
+            throw new IllegalArgumentException("El contenido del logo no coincide con una imagen valida");
+        }
+    }
+
+    private boolean hasPrefix(byte[] content, byte[] prefix) {
+        if (content.length < prefix.length) {
+            return false;
+        }
+        for (int i = 0; i < prefix.length; i++) {
+            if (content[i] != prefix[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public void deleteTeam(Long teamId, UUID actorUuid) {

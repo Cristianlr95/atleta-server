@@ -1,6 +1,7 @@
 package com.atleta.demo.config;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import com.atleta.demo.security.ActiveSessionTokenValidator;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -32,20 +33,30 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, AppCorsProperties.class})
 public class SecurityConfig {
 
     private final Environment environment;
     private final JwtProperties jwtProperties;
+    private final AppCorsProperties corsProperties;
+    private final ActiveSessionTokenValidator activeSessionTokenValidator;
 
-    public SecurityConfig(Environment environment, JwtProperties jwtProperties) {
+    public SecurityConfig(
+        Environment environment,
+        JwtProperties jwtProperties,
+        AppCorsProperties corsProperties,
+        ActiveSessionTokenValidator activeSessionTokenValidator
+    ) {
         this.environment = environment;
         this.jwtProperties = jwtProperties;
+        this.corsProperties = corsProperties;
+        this.activeSessionTokenValidator = activeSessionTokenValidator;
     }
 
     @Bean
@@ -80,8 +91,13 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/athletes/register").permitAll()
                     .requestMatchers("/api/v1/athletes/login").permitAll()
                     .requestMatchers("/api/v1/athletes/auth/google").permitAll()
-                    .requestMatchers("/api/v1/ratings/**").permitAll()
+                    .requestMatchers("/api/v1/athletes/auth/refresh").permitAll()
+                    .requestMatchers("/api/v1/athletes/auth/logout").permitAll()
+                    .requestMatchers("/api/v1/athletes/password-reset/**").permitAll()
+                    // Las fotos y logos se muestran como recursos de perfiles y equipos públicos.
+                    .requestMatchers("/uploads/**").permitAll()
                     .requestMatchers("/actuator/health").permitAll()
+                    .requestMatchers("/actuator/health/**").permitAll()
                     .anyRequest().authenticated();
             })
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
@@ -117,26 +133,42 @@ public class SecurityConfig {
         NimbusJwtDecoder jwtDecoder = NimbusJwtDecoder.withSecretKey(jwtSigningKey).build();
         OAuth2TokenValidator<Jwt> defaultValidator = JwtValidators.createDefaultWithIssuer(jwtProperties.getIssuer());
         OAuth2TokenValidator<Jwt> timestampValidator = new JwtTimestampValidator(Duration.ofSeconds(30));
-        jwtDecoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(defaultValidator, timestampValidator));
+        jwtDecoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+            defaultValidator, timestampValidator, activeSessionTokenValidator));
         return jwtDecoder;
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of(
-            "http://localhost:8100",
-            "http://localhost:4200",
-            "http://localhost:3000"
-        ));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setExposedHeaders(List.of("Authorization"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowedOriginPatterns(corsProperties.getAllowedOriginPatterns());
+        configuration.setAllowedMethods(corsProperties.getAllowedMethods());
+        configuration.setAllowedHeaders(allowedHeaders());
+        configuration.setExposedHeaders(corsProperties.getExposedHeaders());
+        configuration.setAllowCredentials(corsProperties.isAllowCredentials());
+        configuration.setMaxAge(corsProperties.getMaxAge());
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    /**
+     * Las operaciones de creación usan esta llave para que un doble toque o un
+     * reintento de red no creen partidos e invitaciones duplicadas. Se añade de
+     * forma defensiva para que una variable CORS_ALLOWED_HEADERS antigua no
+     * bloquee el preflight del navegador.
+     */
+    private List<String> allowedHeaders() {
+        List<String> headers = new ArrayList<>(corsProperties.getAllowedHeaders());
+        boolean includesIdempotencyKey = headers.stream()
+            .anyMatch(header -> "Idempotency-Key".equalsIgnoreCase(header));
+
+        if (!includesIdempotencyKey) {
+            headers.add("Idempotency-Key");
+        }
+
+        return headers;
     }
 
     private byte[] decodeSecret(String secret) {

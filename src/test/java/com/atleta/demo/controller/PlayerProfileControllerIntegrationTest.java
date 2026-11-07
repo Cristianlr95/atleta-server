@@ -2,9 +2,14 @@ package com.atleta.demo.controller;
 
 import com.atleta.demo.dto.request.*;
 import com.atleta.demo.entity.Athlete;
+import com.atleta.demo.entity.Match;
+import com.atleta.demo.entity.PlayerProfile;
 import com.atleta.demo.entity.Position;
 import com.atleta.demo.enums.GenderType;
+import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.repository.AthleteRepository;
+import com.atleta.demo.repository.MatchRepository;
+import com.atleta.demo.repository.PlayerProfileRepository;
 import com.atleta.demo.repository.PositionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,7 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -23,7 +28,9 @@ import org.springframework.web.context.WebApplicationContext;
 
 import com.atleta.demo.config.TestConfig;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.List;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -62,6 +69,12 @@ public class PlayerProfileControllerIntegrationTest {
     private PositionRepository positionRepository;
 
     @Autowired
+    private PlayerProfileRepository playerProfileRepository;
+
+    @Autowired
+    private MatchRepository matchRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     private MockMvc mockMvc;
@@ -90,7 +103,6 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testCreatePlayerProfile_Success() throws Exception {
         // Given
         CreatePlayerProfileRequest request = new CreatePlayerProfileRequest();
@@ -99,6 +111,7 @@ public class PlayerProfileControllerIntegrationTest {
 
         // When & Then
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -109,22 +122,22 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testCreatePlayerProfile_AthleteNotFound() throws Exception {
         // Given - Non-existent athlete UUID
+        UUID missingAthleteUuid = UUID.randomUUID();
         CreatePlayerProfileRequest request = new CreatePlayerProfileRequest();
-        request.setAtletaUuid(UUID.randomUUID());
+        request.setAtletaUuid(missingAthleteUuid);
         request.setAlias("TestPlayer");
 
         // When & Then
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(missingAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @WithMockUser
     void testCreatePlayerProfile_DuplicateProfile() throws Exception {
         // Given - Create first profile
         CreatePlayerProfileRequest request1 = new CreatePlayerProfileRequest();
@@ -132,6 +145,7 @@ public class PlayerProfileControllerIntegrationTest {
         request1.setAlias("FirstProfile");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request1)))
                 .andExpect(status().isCreated());
@@ -143,13 +157,13 @@ public class PlayerProfileControllerIntegrationTest {
 
         // Then
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request2)))
                 .andExpect(status().isConflict());
     }
 
     @Test
-    @WithMockUser
     void testGetPlayerProfileByUuid_Success() throws Exception {
         // Given - Create profile first
         CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
@@ -157,12 +171,14 @@ public class PlayerProfileControllerIntegrationTest {
         createRequest.setAlias("GetTest");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated());
 
         // When & Then
-        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}", testAthleteUuid))
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}", testAthleteUuid)
+                .with(jwtFor(testAthleteUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.atletaUuid").value(testAthleteUuid.toString()))
                 .andExpect(jsonPath("$.alias").value("GetTest"))
@@ -170,7 +186,6 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testGetPlayerProfileByAlias_Success() throws Exception {
         // Given - Create profile first
         CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
@@ -178,6 +193,7 @@ public class PlayerProfileControllerIntegrationTest {
         createRequest.setAlias("AliasTest");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated());
@@ -190,7 +206,6 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testUpdatePlayerProfile_Success() throws Exception {
         // Given - Create profile first
         CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
@@ -198,6 +213,7 @@ public class PlayerProfileControllerIntegrationTest {
         createRequest.setAlias("OriginalAlias");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated());
@@ -208,6 +224,7 @@ public class PlayerProfileControllerIntegrationTest {
 
         // Then
         mockMvc.perform(put("/api/v1/player-profiles/{atletaUuid}", testAthleteUuid)
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
@@ -215,7 +232,70 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
+    void testUpdatePlayerProfile_UpdatesIdentityAndExactlyThreePositionsAtomically() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAlias("OriginalPlayer");
+        mockMvc.perform(post("/api/v1/player-profiles")
+                        .with(jwtFor(testAthleteUuid))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        Position midfield = findOrCreatePosition("Mediocampista");
+        Position goalkeeper = findOrCreatePosition("Portero");
+        UpdatePlayerProfileRequest updateRequest = new UpdatePlayerProfileRequest();
+        updateRequest.setNombre("Nombre Actualizado");
+        updateRequest.setAlias("AliasActualizado");
+        updateRequest.setPositionIds(List.of(testPositionId, midfield.getId(), goalkeeper.getId()));
+
+        mockMvc.perform(put("/api/v1/player-profiles/{atletaUuid}", testAthleteUuid)
+                        .with(jwtFor(testAthleteUuid))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("Nombre Actualizado"))
+                .andExpect(jsonPath("$.alias").value("AliasActualizado"))
+                .andExpect(jsonPath("$.positions", hasSize(3)))
+                .andExpect(jsonPath("$.positions[0].prioridad").value(1))
+                .andExpect(jsonPath("$.positions[1].prioridad").value(2))
+                .andExpect(jsonPath("$.positions[2].prioridad").value(3));
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/public", testAthleteUuid)
+                        .with(jwtFor(testAthleteUuid)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("Nombre Actualizado"))
+                .andExpect(jsonPath("$.alias").value("AliasActualizado"));
+    }
+
+    @Test
+    void testUpdatePlayerProfile_RejectsDuplicatePositionsWithoutChangingIdentity() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAlias("OriginalPlayer");
+        mockMvc.perform(post("/api/v1/player-profiles")
+                        .with(jwtFor(testAthleteUuid))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        UpdatePlayerProfileRequest updateRequest = new UpdatePlayerProfileRequest();
+        updateRequest.setNombre("No debe persistir");
+        updateRequest.setAlias("TampocoDebePersistir");
+        updateRequest.setPositionIds(List.of(testPositionId, testPositionId, testPositionId));
+
+        mockMvc.perform(put("/api/v1/player-profiles/{atletaUuid}", testAthleteUuid)
+                        .with(jwtFor(testAthleteUuid))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateRequest)))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}", testAthleteUuid)
+                        .with(jwtFor(testAthleteUuid)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("Test Athlete"))
+                .andExpect(jsonPath("$.alias").value("OriginalPlayer"));
+    }
+
+    @Test
     void testAddPlayerPosition_Success() throws Exception {
         // Given - Create profile first
         CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
@@ -223,6 +303,7 @@ public class PlayerProfileControllerIntegrationTest {
         createRequest.setAlias("PositionTest");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated());
@@ -235,6 +316,7 @@ public class PlayerProfileControllerIntegrationTest {
 
         // Then
         mockMvc.perform(post("/api/v1/player-profiles/positions")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(positionRequest)))
                 .andExpect(status().isCreated())
@@ -244,7 +326,6 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testAddPlayerPosition_DuplicatePriority() throws Exception {
         // Given - Create profile and add first position
         CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
@@ -252,6 +333,7 @@ public class PlayerProfileControllerIntegrationTest {
         createRequest.setAlias("PriorityTest");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated());
@@ -262,6 +344,7 @@ public class PlayerProfileControllerIntegrationTest {
         firstPosition.setPrioridad(1);
 
         mockMvc.perform(post("/api/v1/player-profiles/positions")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(firstPosition)))
                 .andExpect(status().isCreated());
@@ -277,13 +360,13 @@ public class PlayerProfileControllerIntegrationTest {
 
         // Then
         mockMvc.perform(post("/api/v1/player-profiles/positions")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(secondPosition)))
                 .andExpect(status().isConflict());
     }
 
     @Test
-    @WithMockUser
     void testGetPlayerPositions_Success() throws Exception {
         // Given - Create profile and add positions
         CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
@@ -291,6 +374,7 @@ public class PlayerProfileControllerIntegrationTest {
         createRequest.setAlias("PositionsTest");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated());
@@ -302,6 +386,7 @@ public class PlayerProfileControllerIntegrationTest {
         position1.setPrioridad(1);
 
         mockMvc.perform(post("/api/v1/player-profiles/positions")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(position1)))
                 .andExpect(status().isCreated());
@@ -315,12 +400,14 @@ public class PlayerProfileControllerIntegrationTest {
         position2Request.setPrioridad(2);
 
         mockMvc.perform(post("/api/v1/player-profiles/positions")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(position2Request)))
                 .andExpect(status().isCreated());
 
         // When & Then - Get all positions
-        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/positions", testAthleteUuid))
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/positions", testAthleteUuid)
+                .with(jwtFor(testAthleteUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$[0].prioridad").value(1))
@@ -328,7 +415,6 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testRemovePlayerPosition_Success() throws Exception {
         // Given - Create profile and add position
         CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
@@ -336,6 +422,7 @@ public class PlayerProfileControllerIntegrationTest {
         createRequest.setAlias("RemoveTest");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated());
@@ -346,23 +433,25 @@ public class PlayerProfileControllerIntegrationTest {
         positionRequest.setPrioridad(1);
 
         mockMvc.perform(post("/api/v1/player-profiles/positions")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(positionRequest)))
                 .andExpect(status().isCreated());
 
         // When & Then - Remove position
         mockMvc.perform(delete("/api/v1/player-profiles/{atletaUuid}/positions/{positionId}", 
-                testAthleteUuid, testPositionId))
+                testAthleteUuid, testPositionId)
+                .with(jwtFor(testAthleteUuid)))
                 .andExpect(status().isNoContent());
 
         // Verify position was removed
-        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/positions", testAthleteUuid))
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/positions", testAthleteUuid)
+                .with(jwtFor(testAthleteUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
     }
 
     @Test
-    @WithMockUser
     void testUpdateTrustScore_Success() throws Exception {
         // Given - Create profile first
         CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
@@ -370,18 +459,19 @@ public class PlayerProfileControllerIntegrationTest {
         createRequest.setAlias("TrustTest");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated());
 
         // When - Update trust score
         UpdateTrustScoreRequest trustRequest = new UpdateTrustScoreRequest();
-        trustRequest.setPlayerUuid(testAthleteUuid);
         trustRequest.setCambio(10);
         trustRequest.setMotivo("Good behavior");
 
         // Then
         mockMvc.perform(put("/api/v1/player-profiles/trust-score")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(trustRequest)))
                 .andExpect(status().isOk())
@@ -389,7 +479,56 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
+    void testUpdateTrustScore_UsesJwtSubjectWhenBodyOmitsPlayerUuid() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAtletaUuid(testAthleteUuid);
+        createRequest.setAlias("TrustJwtSubjectTest");
+
+        mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(put("/api/v1/player-profiles/trust-score")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "cambio": 10,
+                          "motivo": "Good behavior without body uuid"
+                        }
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trustScore").value(110));
+    }
+
+    @Test
+    void testUpdateTrustScore_CapsAtMaximum() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAtletaUuid(testAthleteUuid);
+        createRequest.setAlias("TrustCapTest");
+
+        mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        UpdateTrustScoreRequest trustRequest = new UpdateTrustScoreRequest();
+        trustRequest.setPlayerUuid(testAthleteUuid);
+        trustRequest.setCambio(950);
+        trustRequest.setMotivo("Sustained reliability");
+
+        mockMvc.perform(put("/api/v1/player-profiles/trust-score")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(trustRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trustScore").value(1000));
+    }
+
+    @Test
     void testGetTrustScoreHistory_Success() throws Exception {
         // Given - Create profile and update trust score
         CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
@@ -397,6 +536,7 @@ public class PlayerProfileControllerIntegrationTest {
         createRequest.setAlias("HistoryTest");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated());
@@ -407,12 +547,14 @@ public class PlayerProfileControllerIntegrationTest {
         trustRequest.setMotivo("Excellent performance");
 
         mockMvc.perform(put("/api/v1/player-profiles/trust-score")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(trustRequest)))
                 .andExpect(status().isOk());
 
         // When & Then - Get trust history
-        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/trust-history", testAthleteUuid))
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/trust-history", testAthleteUuid)
+                .with(jwtFor(testAthleteUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].cambio").value(15))
@@ -420,7 +562,74 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
+    void testGetPublicPlayerProfile_AllowsAnotherAuthenticatedUserWithoutPrivateData() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAtletaUuid(testAthleteUuid);
+        createRequest.setAlias("PublicProfileTest");
+
+        mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/public", testAthleteUuid)
+                .with(jwtFor(UUID.randomUUID())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.atletaUuid").value(testAthleteUuid.toString()))
+                .andExpect(jsonPath("$.alias").value("PublicProfileTest"))
+                .andExpect(jsonPath("$.email").doesNotExist())
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+    }
+
+    @Test
+    void testGetPublicPlayerProfile_MissingProfileReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/public", UUID.randomUUID())
+                .with(jwtFor(testAthleteUuid)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void testTrustScoreHistory_IncludesMatchWhenRequestHasMatchId() throws Exception {
+        CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
+        createRequest.setAtletaUuid(testAthleteUuid);
+        createRequest.setAlias("TrustMatchTest");
+
+        mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(createRequest)))
+                .andExpect(status().isCreated());
+
+        PlayerProfile player = playerProfileRepository.findById(testAthleteUuid).orElseThrow();
+        Match match = new Match();
+        match.setCreador(player);
+        match.setModalidad(MatchMode.CINCO_VS_CINCO);
+        match.setFechaHoraProgramada(LocalDateTime.now().plusDays(1));
+        match = matchRepository.save(match);
+
+        UpdateTrustScoreRequest trustRequest = new UpdateTrustScoreRequest();
+        trustRequest.setPlayerUuid(testAthleteUuid);
+        trustRequest.setCambio(-5);
+        trustRequest.setMotivo("Late cancellation");
+        trustRequest.setMatchId(match.getId());
+
+        mockMvc.perform(put("/api/v1/player-profiles/trust-score")
+                .with(jwtFor(testAthleteUuid))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(trustRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trustScore").value(95));
+
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/trust-history", testAthleteUuid)
+                .with(jwtFor(testAthleteUuid)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].cambio").value(-5))
+                .andExpect(jsonPath("$[0].match.id").value(match.getId()));
+    }
+
+    @Test
     void testGetPlayersByTrustScoreRange_Success() throws Exception {
         // Given - Create multiple profiles with different trust scores
         for (int i = 0; i < 3; i++) {
@@ -436,6 +645,7 @@ public class PlayerProfileControllerIntegrationTest {
             createRequest.setAlias("TrustPlayer" + i);
 
             mockMvc.perform(post("/api/v1/player-profiles")
+                    .with(jwtFor(athlete.getAtletaUuid()))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(objectMapper.writeValueAsString(createRequest)))
                     .andExpect(status().isCreated());
@@ -447,6 +657,7 @@ public class PlayerProfileControllerIntegrationTest {
             trustRequest.setMotivo("Test adjustment");
 
             mockMvc.perform(put("/api/v1/player-profiles/trust-score")
+                    .with(jwtFor(athlete.getAtletaUuid()))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(objectMapper.writeValueAsString(trustRequest)))
                     .andExpect(status().isOk());
@@ -461,7 +672,6 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testSearchPlayersByAthleteName_Success() throws Exception {
         // Given - Create profiles with different athlete names
         Athlete athlete1 = new Athlete();
@@ -487,11 +697,13 @@ public class PlayerProfileControllerIntegrationTest {
         profile2.setAlias("JohnD");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(athlete1.getAtletaUuid()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(profile1)))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(athlete2.getAtletaUuid()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(profile2)))
                 .andExpect(status().isCreated());
@@ -505,7 +717,6 @@ public class PlayerProfileControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testAddExperienceToPosition_Success() throws Exception {
         // Given - Create profile and add position
         CreatePlayerProfileRequest createRequest = new CreatePlayerProfileRequest();
@@ -513,6 +724,7 @@ public class PlayerProfileControllerIntegrationTest {
         createRequest.setAlias("XPTest");
 
         mockMvc.perform(post("/api/v1/player-profiles")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated());
@@ -523,6 +735,7 @@ public class PlayerProfileControllerIntegrationTest {
         positionRequest.setPrioridad(1);
 
         mockMvc.perform(post("/api/v1/player-profiles/positions")
+                .with(jwtFor(testAthleteUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(positionRequest)))
                 .andExpect(status().isCreated());
@@ -530,11 +743,13 @@ public class PlayerProfileControllerIntegrationTest {
         // When & Then - Add experience
         mockMvc.perform(put("/api/v1/player-profiles/{atletaUuid}/positions/{positionId}/experience", 
                 testAthleteUuid, testPositionId)
+                .with(jwtFor(testAthleteUuid))
                 .param("xp", "50"))
                 .andExpect(status().isOk());
 
         // Verify XP was added
-        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/positions", testAthleteUuid))
+        mockMvc.perform(get("/api/v1/player-profiles/{atletaUuid}/positions", testAthleteUuid)
+                .with(jwtFor(testAthleteUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].xp").value(50));
     }
@@ -546,5 +761,9 @@ public class PlayerProfileControllerIntegrationTest {
                     position.setNombre(name);
                     return positionRepository.save(position);
                 });
+    }
+
+    private SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor jwtFor(UUID subject) {
+        return SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(subject.toString()));
     }
 }

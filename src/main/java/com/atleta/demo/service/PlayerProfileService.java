@@ -3,6 +3,7 @@ package com.atleta.demo.service;
 import com.atleta.demo.dto.request.CreatePlayerProfileRequest;
 import com.atleta.demo.dto.request.AddPlayerPositionRequest;
 import com.atleta.demo.dto.request.UpdateTrustScoreRequest;
+import com.atleta.demo.dto.request.UpdatePlayerProfileRequest;
 import com.atleta.demo.dto.response.PlayerProfileResponse;
 import com.atleta.demo.dto.response.PlayerPositionResponse;
 import com.atleta.demo.dto.response.PositionResponse;
@@ -13,10 +14,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -35,23 +44,26 @@ import java.util.stream.Collectors;
 public class PlayerProfileService {
 
     private static final Logger logger = LoggerFactory.getLogger(PlayerProfileService.class);
+    private static final long MAX_PICTURE_SIZE_BYTES = 3 * 1024 * 1024;
+    private static final List<String> ALLOWED_PICTURE_TYPES = List.of("image/png", "image/jpeg", "image/webp");
+    private static final Path PLAYER_PICTURES_DIR = Path.of("uploads", "player-pictures");
 
     private final PlayerProfileRepository playerProfileRepository;
     private final AthleteRepository athleteRepository;
     private final PlayerPositionRepository playerPositionRepository;
     private final PositionRepository positionRepository;
-    private final TrustLogRepository trustLogRepository;
+    private final TrustScoreService trustScoreService;
 
     public PlayerProfileService(PlayerProfileRepository playerProfileRepository,
                                AthleteRepository athleteRepository,
                                PlayerPositionRepository playerPositionRepository,
                                PositionRepository positionRepository,
-                               TrustLogRepository trustLogRepository) {
+                               TrustScoreService trustScoreService) {
         this.playerProfileRepository = playerProfileRepository;
         this.athleteRepository = athleteRepository;
         this.playerPositionRepository = playerPositionRepository;
         this.positionRepository = positionRepository;
-        this.trustLogRepository = trustLogRepository;
+        this.trustScoreService = trustScoreService;
     }
 
     /**
@@ -68,9 +80,11 @@ public class PlayerProfileService {
         Athlete athlete = athleteRepository.findById(request.getAtletaUuid())
                 .orElseThrow(() -> new IllegalArgumentException("No se encontró atleta con UUID: " + request.getAtletaUuid()));
 
+        // La fuente de verdad del genero vive en Athlete. Solo usamos el request
+        // como compatibilidad para atletas legacy que aun no tengan ese dato.
         if (athlete.getGenero() == null) {
             if (request.getGenero() == null) {
-                throw new IllegalArgumentException("Debe definir genero para crear el perfil de jugador");
+                throw new IllegalArgumentException("Debe definir genero al crear el atleta antes de configurar el jugador");
             }
             athlete.setGenero(request.getGenero());
             athleteRepository.save(athlete);
@@ -158,6 +172,116 @@ public class PlayerProfileService {
         logger.info("Alias actualizado exitosamente para jugador: {}", atletaUuid);
 
         return convertToResponse(updatedProfile);
+    }
+
+    public PlayerProfileResponse updateProfile(UUID atletaUuid, UpdatePlayerProfileRequest request) {
+        PlayerProfile profile = playerProfileRepository.findById(atletaUuid)
+                .orElseThrow(() -> new IllegalArgumentException("No se encontro perfil de jugador con UUID: " + atletaUuid));
+
+        String normalizedName = null;
+        if (request.getNombre() != null) {
+            normalizedName = request.getNombre().trim();
+            if (normalizedName.isEmpty()) {
+                throw new IllegalArgumentException("El nombre no puede estar vacio");
+            }
+        }
+
+        String normalizedAlias = null;
+        if (request.getAlias() != null) {
+            normalizedAlias = request.getAlias().trim();
+            if (normalizedAlias.isEmpty()) {
+                throw new IllegalArgumentException("El alias no puede estar vacio");
+            }
+            if (!normalizedAlias.equals(profile.getAlias()) && playerProfileRepository.existsByAlias(normalizedAlias)) {
+                throw new IllegalArgumentException("Ya existe un jugador con el alias: " + normalizedAlias);
+            }
+        }
+
+        List<Long> positionIds = request.getPositionIds();
+        Map<Long, Position> positionsById = null;
+        Map<Long, Integer> xpByPosition = null;
+        if (request.getPositionIds() != null) {
+            if (positionIds.size() != 3 || positionIds.stream().distinct().count() != 3) {
+                throw new IllegalArgumentException("Debes seleccionar exactamente 3 posiciones distintas");
+            }
+
+            Map<Long, Position> loadedPositions = new LinkedHashMap<>();
+            positionRepository.findAllById(positionIds)
+                    .forEach(position -> loadedPositions.put(position.getId(), position));
+            if (loadedPositions.size() != 3) {
+                throw new IllegalArgumentException("Una o mas posiciones no existen");
+            }
+            positionsById = loadedPositions;
+
+            xpByPosition = playerPositionRepository.findByPlayerOrderByPrioridad(profile)
+                    .stream()
+                    .collect(Collectors.toMap(item -> item.getPosition().getId(), PlayerPosition::getXp));
+        }
+
+        if (normalizedName != null) {
+            profile.getAthlete().setNombre(normalizedName);
+        }
+        if (normalizedAlias != null) {
+            profile.setAlias(normalizedAlias);
+        }
+
+        List<PlayerPosition> updatedPositions = null;
+        if (positionIds != null && positionsById != null && xpByPosition != null) {
+            playerPositionRepository.deleteByPlayer(profile);
+            playerPositionRepository.flush();
+
+            updatedPositions = new java.util.ArrayList<>();
+            for (int index = 0; index < positionIds.size(); index++) {
+                Long positionId = positionIds.get(index);
+                updatedPositions.add(new PlayerPosition(
+                        profile,
+                        positionsById.get(positionId),
+                        index + 1,
+                        xpByPosition.getOrDefault(positionId, 0)
+                ));
+            }
+            updatedPositions = playerPositionRepository.saveAll(updatedPositions);
+        }
+
+        if (normalizedName != null) {
+            athleteRepository.save(profile.getAthlete());
+        }
+        PlayerProfile updatedProfile = playerProfileRepository.save(profile);
+        PlayerProfileResponse response = convertToResponse(updatedProfile);
+        if (updatedPositions != null) {
+            response.setPositions(updatedPositions.stream().map(this::convertToPlayerPositionResponse).toList());
+        }
+        return response;
+    }
+
+    /** Guarda una foto de perfil validada y la asocia al atleta autenticado. */
+    public PlayerProfileResponse updatePicture(UUID atletaUuid, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Debes seleccionar una imagen");
+        }
+        if (file.getSize() > MAX_PICTURE_SIZE_BYTES) {
+            throw new IllegalArgumentException("La imagen excede el tamano maximo permitido (3 MB)");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_PICTURE_TYPES.contains(contentType)) {
+            throw new IllegalArgumentException("Formato de imagen no permitido");
+        }
+        validateImageSignature(file, contentType);
+
+        Athlete athlete = athleteRepository.findById(atletaUuid)
+                .orElseThrow(() -> new IllegalArgumentException("No se encontro atleta con UUID: " + atletaUuid));
+        String fileName = UUID.randomUUID() + "." + resolveImageExtension(contentType);
+        try {
+            Files.createDirectories(PLAYER_PICTURES_DIR);
+            Files.copy(file.getInputStream(), PLAYER_PICTURES_DIR.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("No se pudo guardar la imagen");
+        }
+        athlete.setPictureUrl("/uploads/player-pictures/" + fileName);
+        athleteRepository.save(athlete);
+        PlayerProfile profile = playerProfileRepository.findById(atletaUuid)
+                .orElseThrow(() -> new IllegalArgumentException("No se encontro perfil de jugador con UUID: " + atletaUuid));
+        return convertToResponse(profile);
     }
 
     /**
@@ -249,40 +373,12 @@ public class PlayerProfileService {
         logger.info("Actualizando trust score del jugador: {} con cambio: {}", 
                    request.getPlayerUuid(), request.getCambio());
 
-        PlayerProfile player = playerProfileRepository.findById(request.getPlayerUuid())
+        trustScoreService.updateTrustScore(request, null);
+        PlayerProfile updatedPlayer = playerProfileRepository.findById(request.getPlayerUuid())
                 .orElseThrow(() -> new IllegalArgumentException("No se encontró jugador con UUID: " + request.getPlayerUuid()));
 
-        // Calcular nuevo trust score
-        Integer currentTrustScore = player.getTrustScore();
-        Integer newTrustScore = currentTrustScore + request.getCambio();
-
-        // Asegurar que el trust score esté en rango válido (0-1000)
-        newTrustScore = Math.max(0, Math.min(1000, newTrustScore));
-
-        // Requisito 2.5: Registrar el cambio en trust_logs
-        TrustLog trustLog = new TrustLog(
-                player,
-                request.getCambio(),
-                currentTrustScore,
-                newTrustScore,
-                request.getMotivo()
-        );
-
-        // Si hay un partido relacionado, agregarlo al log
-        if (request.getMatchId() != null) {
-            // Nota: Aquí se podría buscar el partido, pero para evitar dependencias circulares
-            // se deja para implementar cuando se tenga MatchService
-        }
-
-        // Actualizar trust score del jugador
-        player.setTrustScore(newTrustScore);
-
-        // Guardar cambios
-        trustLogRepository.save(trustLog);
-        PlayerProfile updatedPlayer = playerProfileRepository.save(player);
-
-        logger.info("Trust score actualizado exitosamente para jugador: {} (anterior: {}, nuevo: {})", 
-                   request.getPlayerUuid(), currentTrustScore, newTrustScore);
+        logger.info("Trust score actualizado exitosamente para jugador: {} (nuevo: {})",
+                   request.getPlayerUuid(), updatedPlayer.getTrustScore());
 
         return convertToResponse(updatedPlayer);
     }
@@ -297,10 +393,7 @@ public class PlayerProfileService {
     public List<TrustLogResponse> getTrustScoreHistory(UUID atletaUuid) {
         logger.debug("Obteniendo historial de trust score del jugador: {}", atletaUuid);
 
-        return trustLogRepository.findByPlayerAtletaUuidOrderByCreatedAtDesc(atletaUuid)
-                .stream()
-                .map(this::convertToTrustLogResponse)
-                .collect(Collectors.toList());
+        return trustScoreService.getTrustHistory(atletaUuid);
     }
 
     /**
@@ -377,6 +470,8 @@ public class PlayerProfileService {
                 playerProfile.getTrustScore(),
                 playerProfile.getCreatedAt()
         );
+        response.setNombre(playerProfile.getAthlete() != null ? playerProfile.getAthlete().getNombre() : null);
+        response.setPictureUrl(playerProfile.getAthlete() != null ? playerProfile.getAthlete().getPictureUrl() : null);
 
         // Incluir posiciones si están cargadas
         if (playerProfile.getPositions() != null && !playerProfile.getPositions().isEmpty()) {
@@ -388,6 +483,39 @@ public class PlayerProfileService {
         }
 
         return response;
+    }
+
+    private void validateImageSignature(MultipartFile file, String contentType) {
+        byte[] signature;
+        try {
+            signature = file.getInputStream().readNBytes(12);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("No se pudo leer la imagen");
+        }
+        boolean valid = switch (contentType) {
+            case "image/png" -> hasPrefix(signature, new byte[] {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A});
+            case "image/jpeg" -> hasPrefix(signature, new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF});
+            case "image/webp" -> hasPrefix(signature, new byte[] {0x52, 0x49, 0x46, 0x46})
+                    && signature.length >= 12
+                    && Arrays.equals(Arrays.copyOfRange(signature, 8, 12), new byte[] {0x57, 0x45, 0x42, 0x50});
+            default -> false;
+        };
+        if (!valid) {
+            throw new IllegalArgumentException("El archivo no corresponde a una imagen valida");
+        }
+    }
+
+    private boolean hasPrefix(byte[] source, byte[] prefix) {
+        return source.length >= prefix.length && Arrays.equals(Arrays.copyOf(source, prefix.length), prefix);
+    }
+
+    private String resolveImageExtension(String contentType) {
+        return switch (contentType) {
+            case "image/png" -> "png";
+            case "image/jpeg" -> "jpg";
+            case "image/webp" -> "webp";
+            default -> throw new IllegalArgumentException("Formato de imagen no permitido");
+        };
     }
 
     /**
@@ -410,29 +538,4 @@ public class PlayerProfileService {
         );
     }
 
-    /**
-     * Convierte una entidad TrustLog a TrustLogResponse.
-     * 
-     * @param trustLog Entidad a convertir
-     * @return DTO de respuesta
-     */
-    private TrustLogResponse convertToTrustLogResponse(TrustLog trustLog) {
-        // Crear respuesta básica del jugador para evitar recursión
-        PlayerProfileResponse playerResponse = new PlayerProfileResponse(
-                trustLog.getPlayer().getAtletaUuid(),
-                trustLog.getPlayer().getAlias(),
-                trustLog.getPlayer().getAthlete() != null ? trustLog.getPlayer().getAthlete().getGenero() : null,
-                trustLog.getPlayer().getTrustScore(),
-                trustLog.getPlayer().getCreatedAt()
-        );
-
-        return new TrustLogResponse(
-                trustLog.getId(),
-                playerResponse,
-                null, // Match response se implementará cuando esté MatchService
-                trustLog.getCambio(),
-                trustLog.getMotivo(),
-                trustLog.getCreatedAt()
-        );
-    }
 }

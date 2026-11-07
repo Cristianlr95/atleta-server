@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
  */
 public class MatchEventResponse {
 
+    /** Version of the event payload contract for additive client evolution. */
+    private Integer schemaVersion = 1;
+
     /**
      * ID del evento
      */
@@ -77,6 +80,14 @@ public class MatchEventResponse {
     // Getters and Setters
     public Long getId() {
         return id;
+    }
+
+    public Integer getSchemaVersion() {
+        return schemaVersion;
+    }
+
+    public void setSchemaVersion(Integer schemaVersion) {
+        this.schemaVersion = schemaVersion;
     }
 
     public void setId(Long id) {

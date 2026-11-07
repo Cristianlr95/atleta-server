@@ -1,6 +1,7 @@
 package com.atleta.demo.service;
 
 import com.atleta.demo.dto.request.PlayerPerformanceDto;
+import com.atleta.demo.dto.request.RotativeGoalkeeperRequest;
 import com.atleta.demo.entity.Match;
 import com.atleta.demo.entity.PlayerProfile;
 import com.atleta.demo.entity.PlayerRating;
@@ -18,10 +19,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -60,6 +63,66 @@ class RatingServiceTest {
 
     private RatingService ratingService;
 
+    @Test
+    void rotativeRatingsUseOnlyProvidedPlayersAndTheirOwnResults() {
+        Match match = new Match();
+        PlayerProfile home = new PlayerProfile();
+        home.setAtletaUuid(UUID.randomUUID());
+        PlayerProfile away = new PlayerProfile();
+        away.setAtletaUuid(UUID.randomUUID());
+        PlayerRating homeRating = new PlayerRating(home, RoleType.ARQUERO, PriorityLevel.PRINCIPAL);
+        homeRating.setMatchesPlayed(1);
+        PlayerRating awayRating = new PlayerRating(away, RoleType.ARQUERO, PriorityLevel.TERCIARIA);
+        when(playerRatingRepository.findByPlayerProfileIdAndRoleType(home.getAtletaUuid(), RoleType.ARQUERO))
+                .thenReturn(List.of(homeRating));
+        when(playerRatingRepository.findByPlayerProfileIdAndRoleType(away.getAtletaUuid(), RoleType.ARQUERO))
+                .thenReturn(List.of(awayRating));
+        when(calculationEngine.calculateRotativeGoalkeeperRating(any())).thenReturn(BigDecimal.valueOf(75));
+        PlayerPerformanceDto homePerformance = new PlayerPerformanceDto();
+        homePerformance.setPlayerProfileId(home.getAtletaUuid());
+        homePerformance.setRoleType(RoleType.ARQUERO);
+        homePerformance.setPriorityLevel(PriorityLevel.PRINCIPAL);
+        homePerformance.setMatchResult(MatchResultType.GANADO);
+        PlayerPerformanceDto awayPerformance = new PlayerPerformanceDto();
+        awayPerformance.setPlayerProfileId(away.getAtletaUuid());
+        awayPerformance.setMatchResult(MatchResultType.PERDIDO);
+
+        ratingService.updateConfirmedRotativeGoalkeeperRatings(match, List.of(homePerformance, awayPerformance));
+
+        ArgumentCaptor<RotativeGoalkeeperRequest> calculations = ArgumentCaptor.forClass(RotativeGoalkeeperRequest.class);
+        verify(calculationEngine, org.mockito.Mockito.times(2)).calculateRotativeGoalkeeperRating(calculations.capture());
+        assertEquals(MatchResultType.GANADO, calculations.getAllValues().get(0).getMatchResult());
+        assertEquals(MatchResultType.PERDIDO, calculations.getAllValues().get(1).getMatchResult());
+        ArgumentCaptor<RatingHistory> histories = ArgumentCaptor.forClass(RatingHistory.class);
+        verify(ratingHistoryRepository, org.mockito.Mockito.times(2)).save(histories.capture());
+        assertEquals(homeRating, histories.getAllValues().get(0).getPlayerRating());
+        assertEquals(awayRating, histories.getAllValues().get(1).getPlayerRating());
+        assertTrue(histories.getAllValues().stream().allMatch(RatingHistory::getRotativeGoalkeeperMode));
+        assertEquals(1, homeRating.getMatchesPlayed());
+        assertEquals(1, awayRating.getMatchesPlayed());
+    }
+
+    @Test
+    void rotativeRatingCreatesTheGoalkeeperRoleWhenMissing() {
+        PlayerProfile player = new PlayerProfile();
+        player.setAtletaUuid(UUID.randomUUID());
+        PlayerPerformanceDto performance = new PlayerPerformanceDto();
+        performance.setPlayerProfileId(player.getAtletaUuid());
+        performance.setMatchResult(MatchResultType.EMPATE);
+        when(playerRatingRepository.findByPlayerProfileIdAndRoleType(player.getAtletaUuid(), RoleType.ARQUERO))
+                .thenReturn(List.of());
+        when(playerProfileRepository.findById(player.getAtletaUuid())).thenReturn(Optional.of(player));
+        when(playerRatingRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(calculationEngine.calculateRotativeGoalkeeperRating(any())).thenReturn(BigDecimal.valueOf(50));
+
+        ratingService.updateConfirmedRotativeGoalkeeperRatings(new Match(), List.of(performance));
+
+        ArgumentCaptor<RatingHistory> history = ArgumentCaptor.forClass(RatingHistory.class);
+        verify(ratingHistoryRepository).save(history.capture());
+        assertEquals(RoleType.ARQUERO, history.getValue().getPlayerRating().getRoleType());
+        assertEquals(PriorityLevel.TERCIARIA, history.getValue().getPlayerRating().getPriorityLevel());
+    }
+
     @BeforeEach
     void setUp() {
         ratingService = new RatingService(
@@ -70,6 +133,29 @@ class RatingServiceTest {
                 playerPositionRepository,
                 matchRepository
         );
+    }
+
+    @Test
+    void calculateHybridOvrBatchUsesOneRepositoryQueryAndGroupsPlayers() {
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        PlayerProfile first = new PlayerProfile();
+        first.setAtletaUuid(firstId);
+        PlayerProfile second = new PlayerProfile();
+        second.setAtletaUuid(secondId);
+
+        PlayerRating firstHigh = new PlayerRating(first, RoleType.ATAQUE, PriorityLevel.PRINCIPAL, BigDecimal.valueOf(80));
+        PlayerRating firstLow = new PlayerRating(first, RoleType.DEFENSA, PriorityLevel.SECUNDARIA, BigDecimal.valueOf(70));
+        PlayerRating secondOnly = new PlayerRating(second, RoleType.MEDIOCAMPO, PriorityLevel.PRINCIPAL, BigDecimal.valueOf(60));
+        List<UUID> requested = List.of(firstId, secondId);
+        when(playerRatingRepository.findByPlayerProfileIds(requested))
+                .thenReturn(List.of(firstHigh, firstLow, secondOnly));
+
+        Map<UUID, BigDecimal> result = ratingService.calculateHybridOVRBatch(requested);
+
+        assertEquals(new BigDecimal("77.00"), result.get(firstId));
+        assertEquals(new BigDecimal("60.00"), result.get(secondId));
+        verify(playerRatingRepository).findByPlayerProfileIds(requested);
     }
 
     @Test
@@ -202,34 +288,15 @@ class RatingServiceTest {
     }
 
     @Test
-    void testUpdateRotativeGoalkeeperRatings_ValidInput_Success() {
-        Long matchId = 1L;
-        MatchResultType matchResult = MatchResultType.GANADO;
+    void manualRotativeUpdateProcessesExistingMatchOutsideBeta() {
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(new Match()));
+        when(playerRatingRepository.findByRoleType(RoleType.ARQUERO)).thenReturn(List.of());
 
-        Match match = new Match();
-        match.setId(matchId);
+        assertDoesNotThrow(() -> ratingService.updateRotativeGoalkeeperRatings(1L, MatchResultType.GANADO));
 
-        PlayerProfile playerProfile = new PlayerProfile();
-        playerProfile.setAtletaUuid(UUID.randomUUID());
-
-        PlayerRating goalkeeperRating = new PlayerRating(playerProfile, RoleType.ARQUERO, PriorityLevel.PRINCIPAL);
-        goalkeeperRating.setCurrentRating(BigDecimal.valueOf(70.0));
-
-        when(matchRepository.findById(matchId)).thenReturn(Optional.of(match));
-        when(playerRatingRepository.findByRoleType(RoleType.ARQUERO)).thenReturn(List.of(goalkeeperRating));
-        when(calculationEngine.calculateRotativeGoalkeeperRating(any())).thenReturn(BigDecimal.valueOf(72.0));
-        when(playerRatingRepository.save(any())).thenReturn(goalkeeperRating);
-        when(ratingHistoryRepository.save(any())).thenReturn(new RatingHistory());
-
-        assertDoesNotThrow(() -> ratingService.updateRotativeGoalkeeperRatings(matchId, matchResult));
-
-        verify(matchRepository).findById(matchId);
+        verify(matchRepository).findById(1L);
         verify(playerRatingRepository).findByRoleType(RoleType.ARQUERO);
-        verify(calculationEngine).calculateRotativeGoalkeeperRating(any());
-        verify(playerRatingRepository).save(any());
-        verify(ratingHistoryRepository).save(any());
     }
-
     @Test
     void testUpdateRotativeGoalkeeperRatings_NullMatchId_ThrowsException() {
         InvalidPlayerDataException exception = assertThrows(

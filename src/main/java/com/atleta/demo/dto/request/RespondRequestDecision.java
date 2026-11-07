@@ -5,7 +5,6 @@ import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
 public class RespondRequestDecision {
-    @NotNull
     private UUID actorUuid;
     @NotNull
     private Boolean accept;

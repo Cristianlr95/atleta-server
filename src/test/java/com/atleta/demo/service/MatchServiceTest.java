@@ -3,6 +3,7 @@ package com.atleta.demo.service;
 import com.atleta.demo.dto.request.CreateMatchRequest;
 import com.atleta.demo.dto.request.CreateMatchEventRequest;
 import com.atleta.demo.dto.request.JoinMatchRequest;
+import com.atleta.demo.dto.request.MatchClosePreviewRequest;
 import com.atleta.demo.dto.response.MatchResponse;
 import com.atleta.demo.dto.response.MatchPlayerResponse;
 import com.atleta.demo.entity.*;
@@ -15,7 +16,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -67,6 +70,14 @@ class MatchServiceTest {
     @Mock
     private RatingService ratingService;
 
+    @Spy
+    private MatchRosterPolicy matchRosterPolicy = new MatchRosterPolicy();
+
+    private MatchStatusPolicy matchStatusPolicy;
+    private MatchFinalScoreService matchFinalScoreService;
+    private MatchPlayerHistoryService matchPlayerHistoryService;
+    private MatchPendingEventClosureService matchPendingEventClosureService;
+
     private MatchService matchService;
 
     private CreateMatchRequest validCreateRequest;
@@ -76,8 +87,56 @@ class MatchServiceTest {
     private Position samplePosition;
     private Match sampleMatch;
 
+    @Test
+    void liveStreamAllowsCreator() {
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchPlayerRepository.findByMatchAndPlayerAtletaUuid(sampleMatch, samplePlayer.getAtletaUuid()))
+                .thenReturn(Optional.empty());
+
+        assertDoesNotThrow(() -> matchService.requireLiveStreamAccess(1L, samplePlayer.getAtletaUuid()));
+    }
+
+    @Test
+    void liveStreamAllowsParticipant() {
+        PlayerProfile participant = new PlayerProfile();
+        participant.setAtletaUuid(UUID.randomUUID());
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchPlayerRepository.findByMatchAndPlayerAtletaUuid(sampleMatch, participant.getAtletaUuid()))
+                .thenReturn(Optional.of(new MatchPlayer()));
+
+        assertDoesNotThrow(() -> matchService.requireLiveStreamAccess(1L, participant.getAtletaUuid()));
+    }
+
+    @Test
+    void liveStreamRejectsOutsider() {
+        UUID outsider = UUID.randomUUID();
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchPlayerRepository.findByMatchAndPlayerAtletaUuid(sampleMatch, outsider))
+                .thenReturn(Optional.empty());
+
+        assertThrows(AccessDeniedException.class,
+                () -> matchService.requireLiveStreamAccess(1L, outsider));
+    }
+
     @BeforeEach
     void setUp() {
+        matchStatusPolicy = new MatchStatusPolicy();
+        matchFinalScoreService = new MatchFinalScoreService(
+                matchEventRepository,
+                matchPlayerRepository,
+                matchTeamRepository
+        );
+        matchPlayerHistoryService = new MatchPlayerHistoryService(
+                matchPlayerRepository,
+                matchEventRepository,
+                matchTeamRepository,
+                playerHistoryRepository,
+                playerPositionRepository
+        );
+        matchPendingEventClosureService = new MatchPendingEventClosureService(
+                matchEventRepository,
+                matchTeamRepository
+        );
         matchService = new MatchService(
                 matchRepository,
                 matchTeamRepository,
@@ -88,8 +147,47 @@ class MatchServiceTest {
                 positionRepository,
                 teamMemberRepository,
                 playerPositionRepository,
-                playerHistoryRepository,
-                ratingService
+                ratingService,
+                matchStatusPolicy,
+                matchFinalScoreService,
+                matchPlayerHistoryService,
+                matchPendingEventClosureService,
+                matchRosterPolicy,
+                new MatchPostMatchRatingService(
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        ratingService
+                ),
+                new MatchResponseMapper(
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        matchStatusPolicy
+                ),
+                new MatchQueryService(
+                        matchRepository,
+                        matchTeamRepository,
+                        matchPlayerRepository,
+                        matchEventRepository,
+                        playerProfileRepository,
+                        teamRepository,
+                        positionRepository,
+                        playerPositionRepository,
+                        new MatchAutomatedStatusService(
+                                matchRepository,
+                                matchTeamRepository,
+                                matchPlayerRepository,
+                                matchPlayerHistoryService,
+                                new MatchRosterPolicy()
+                        ),
+                        new MatchResponseMapper(
+                                matchTeamRepository,
+                                matchPlayerRepository,
+                                matchEventRepository,
+                                matchStatusPolicy
+                        )
+                )
         );
 
         UUID playerId = UUID.randomUUID();
@@ -358,6 +456,8 @@ class MatchServiceTest {
         when(matchRepository.save(any(Match.class))).thenReturn(sampleMatch);
         when(matchTeamRepository.findByMatch(sampleMatch)).thenReturn(java.util.Collections.emptyList());
         when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(java.util.Collections.emptyList());
+        doReturn(true).when(matchRosterPolicy)
+                .hasMinimumConfirmedPlayers(sampleMatch, java.util.Collections.emptyList());
         when(matchEventRepository.findByMatchOrderByCreatedAt(sampleMatch)).thenReturn(java.util.Collections.emptyList());
 
         // Act
@@ -370,6 +470,55 @@ class MatchServiceTest {
 
         verify(matchRepository).findById(matchId);
         verify(matchRepository).save(sampleMatch);
+    }
+
+    @Test
+    void closePreview_RejectsInvalidMatchBeforeLoadingPlayers() {
+        sampleMatch.setEstado(MatchStatus.INVALIDO);
+        sampleMatch.setValidationReason("Partido vencido automaticamente por no cerrarse en la ventana permitida");
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> matchService.getClosePreview(1L, new MatchClosePreviewRequest())
+        );
+
+        assertEquals(sampleMatch.getValidationReason(), exception.getMessage());
+        verify(matchPlayerRepository, never()).findByMatch(sampleMatch);
+    }
+
+    @Test
+    void closePreview_RejectsFinalizedMatchBeforeLoadingPlayers() {
+        sampleMatch.setEstado(MatchStatus.FINALIZADO);
+        when(matchRepository.findById(1L)).thenReturn(Optional.of(sampleMatch));
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> matchService.getClosePreview(1L, new MatchClosePreviewRequest())
+        );
+
+        assertTrue(exception.getMessage().contains("ya fue finalizado"));
+        verify(matchPlayerRepository, never()).findByMatch(sampleMatch);
+    }
+
+    @Test
+    void changeMatchStatus_StartWithoutMinimumConfirmedPlayers_ShouldFail() {
+        Long matchId = 2L;
+        sampleMatch.setEstado(MatchStatus.CREADO);
+        sampleMatch.getMatchTeams().add(new MatchTeam(sampleMatch, sampleTeam, true));
+
+        when(matchRepository.findById(matchId)).thenReturn(Optional.of(sampleMatch));
+        when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(java.util.Collections.emptyList());
+        when(matchRosterPolicy.hasMinimumConfirmedPlayers(sampleMatch, java.util.Collections.emptyList()))
+                .thenReturn(false);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> matchService.changeMatchStatus(matchId, MatchStatus.INICIADO)
+        );
+
+        assertEquals("No se puede iniciar: faltan jugadores confirmados para la modalidad", exception.getMessage());
+        verify(matchRepository, never()).save(any(Match.class));
     }
 
     @Test
@@ -408,7 +557,7 @@ class MatchServiceTest {
         startedMatch.setStartedAt(LocalDateTime.now().minusMinutes(10));
         startedMatch.setCreador(samplePlayer);
 
-        when(matchRepository.findById(100L)).thenReturn(Optional.of(startedMatch));
+        when(matchRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(startedMatch));
         when(matchPlayerRepository.findCaptainsByMatch(startedMatch)).thenReturn(java.util.Collections.emptyList());
 
         // Act + Assert
@@ -426,7 +575,7 @@ class MatchServiceTest {
         MatchStatus newStatus = MatchStatus.FINALIZADO;
         sampleMatch.setEstado(MatchStatus.CREADO); // Can't go directly from CREADO to FINALIZADO
 
-        when(matchRepository.findById(matchId)).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.findByIdForUpdate(matchId)).thenReturn(Optional.of(sampleMatch));
 
         // Act & Assert
         IllegalArgumentException exception = assertThrows(
@@ -435,7 +584,7 @@ class MatchServiceTest {
         );
 
         assertEquals("Desde CREADO solo se puede pasar a INICIADO o INVALIDO", exception.getMessage());
-        verify(matchRepository).findById(matchId);
+        verify(matchRepository).findByIdForUpdate(matchId);
         verify(matchRepository, never()).save(any(Match.class));
     }
 }

@@ -27,7 +27,7 @@ public class TrustScoreService {
     // Constantes para el sistema de confianza
     private static final int TRUST_SCORE_INICIAL = 100;
     private static final int TRUST_SCORE_MINIMO = 0;
-    private static final int TRUST_SCORE_MAXIMO = 200;
+    private static final int TRUST_SCORE_MAXIMO = 1000;
 
     public TrustScoreService(TrustLogRepository trustLogRepository,
                              PlayerProfileRepository playerProfileRepository,
@@ -63,12 +63,13 @@ public class TrustScoreService {
         // Calcular nuevo trust score
         Integer trustScoreAnterior = player.getTrustScore();
         Integer nuevoTrustScore = calculateNewTrustScore(trustScoreAnterior, request.getCambio());
+        Integer cambioEfectivo = nuevoTrustScore - trustScoreAnterior;
 
         // Crear el log de cambio (Requisito 10.3, 10.4)
         TrustLog trustLog = new TrustLog(
                 player,
                 match,
-                request.getCambio(),
+                cambioEfectivo,
                 trustScoreAnterior,
                 nuevoTrustScore,
                 request.getMotivo(),
@@ -96,11 +97,12 @@ public class TrustScoreService {
 
         Integer trustScoreAnterior = player.getTrustScore();
         Integer nuevoTrustScore = calculateNewTrustScore(trustScoreAnterior, cambio);
+        Integer cambioEfectivo = nuevoTrustScore - trustScoreAnterior;
 
         // Crear log automático (sin changedBy)
         TrustLog trustLog = new TrustLog(
                 player,
-                cambio,
+                cambioEfectivo,
                 trustScoreAnterior,
                 nuevoTrustScore,
                 motivo
@@ -308,10 +310,24 @@ public class TrustScoreService {
             response.setPlayer(convertToPlayerProfileResponse(trustLog.getPlayer()));
         }
 
-        // Note: Match conversion simplified to avoid circular dependencies
-        // In a real implementation, you might want to create a simplified MatchResponse
-        // or handle this differently to avoid loading too much data
+        response.setMatch(convertToMinimalMatchResponse(trustLog.getMatch()));
 
+        return response;
+    }
+
+    private com.atleta.demo.dto.response.MatchResponse convertToMinimalMatchResponse(Match match) {
+        if (match == null) {
+            return null;
+        }
+
+        com.atleta.demo.dto.response.MatchResponse response = new com.atleta.demo.dto.response.MatchResponse();
+        response.setId(match.getId());
+        response.setModalidad(match.getModalidad());
+        response.setCategoriaGenero(match.getCategoriaGenero());
+        response.setMatchType(match.getMatchType());
+        response.setFechaHoraProgramada(match.getFechaHoraProgramada());
+        response.setEstado(match.getEstado());
+        response.setCreatedAt(match.getCreatedAt());
         return response;
     }
 

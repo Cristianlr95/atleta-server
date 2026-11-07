@@ -17,6 +17,7 @@ public class AuthResponse {
     private GenderType genero;
     private String authProvider; // "LOCAL" o "GOOGLE"
     private String accessToken;
+    private String refreshToken;
     private LocalDateTime authenticatedAt;
     
     public AuthResponse() {
@@ -24,12 +25,18 @@ public class AuthResponse {
     
     public AuthResponse(UUID atletaUuid, String email, String nombre, GenderType genero,
                        String authProvider, String accessToken) {
+        this(atletaUuid, email, nombre, genero, authProvider, accessToken, null);
+    }
+
+    public AuthResponse(UUID atletaUuid, String email, String nombre, GenderType genero,
+                       String authProvider, String accessToken, String refreshToken) {
         this.atletaUuid = atletaUuid;
         this.email = email;
         this.nombre = nombre;
         this.genero = genero;
         this.authProvider = authProvider;
         this.accessToken = accessToken;
+        this.refreshToken = refreshToken;
         this.authenticatedAt = LocalDateTime.now();
     }
     
@@ -81,6 +88,14 @@ public class AuthResponse {
     
     public void setAccessToken(String accessToken) {
         this.accessToken = accessToken;
+    }
+
+    public String getRefreshToken() {
+        return refreshToken;
+    }
+
+    public void setRefreshToken(String refreshToken) {
+        this.refreshToken = refreshToken;
     }
     
     public LocalDateTime getAuthenticatedAt() {

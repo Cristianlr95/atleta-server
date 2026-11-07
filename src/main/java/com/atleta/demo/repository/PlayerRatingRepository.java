@@ -27,8 +27,12 @@ public interface PlayerRatingRepository extends JpaRepository<PlayerRating, Long
      * @param playerProfileId UUID del perfil del jugador
      * @return Lista de calificaciones del jugador
      */
-    @Query("SELECT pr FROM PlayerRating pr WHERE pr.playerProfile.atletaUuid = :playerProfileId ORDER BY pr.roleType, pr.priorityLevel")
+    @Query("SELECT pr FROM PlayerRating pr JOIN FETCH pr.playerProfile WHERE pr.playerProfile.atletaUuid = :playerProfileId ORDER BY pr.roleType, pr.priorityLevel")
     List<PlayerRating> findByPlayerProfileId(@Param("playerProfileId") UUID playerProfileId);
+
+    @Query("SELECT pr FROM PlayerRating pr JOIN FETCH pr.playerProfile " +
+           "WHERE pr.playerProfile.atletaUuid IN :playerProfileIds")
+    List<PlayerRating> findByPlayerProfileIds(@Param("playerProfileIds") List<UUID> playerProfileIds);
 
     /**
      * Busca la calificación específica de un jugador para un rol y prioridad dados
@@ -49,7 +53,7 @@ public interface PlayerRatingRepository extends JpaRepository<PlayerRating, Long
      * @param roleType Tipo de rol
      * @return Lista de calificaciones del jugador para el rol especificado
      */
-    @Query("SELECT pr FROM PlayerRating pr WHERE pr.playerProfile.atletaUuid = :playerProfileId AND pr.roleType = :roleType ORDER BY pr.priorityLevel")
+    @Query("SELECT pr FROM PlayerRating pr JOIN FETCH pr.playerProfile WHERE pr.playerProfile.atletaUuid = :playerProfileId AND pr.roleType = :roleType ORDER BY pr.priorityLevel")
     List<PlayerRating> findByPlayerProfileIdAndRoleType(
             @Param("playerProfileId") UUID playerProfileId,
             @Param("roleType") RoleType roleType);
@@ -60,7 +64,7 @@ public interface PlayerRatingRepository extends JpaRepository<PlayerRating, Long
      * @param priorityLevel Nivel de prioridad
      * @return Lista de calificaciones del jugador para el nivel de prioridad especificado
      */
-    @Query("SELECT pr FROM PlayerRating pr WHERE pr.playerProfile.atletaUuid = :playerProfileId AND pr.priorityLevel = :priorityLevel ORDER BY pr.roleType")
+    @Query("SELECT pr FROM PlayerRating pr JOIN FETCH pr.playerProfile WHERE pr.playerProfile.atletaUuid = :playerProfileId AND pr.priorityLevel = :priorityLevel ORDER BY pr.roleType")
     List<PlayerRating> findByPlayerProfileIdAndPriorityLevel(
             @Param("playerProfileId") UUID playerProfileId,
             @Param("priorityLevel") PriorityLevel priorityLevel);

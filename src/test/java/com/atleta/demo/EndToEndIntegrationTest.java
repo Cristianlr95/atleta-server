@@ -5,8 +5,11 @@ import com.atleta.demo.dto.request.CreateAthleteRequest;
 import com.atleta.demo.dto.request.CreatePlayerProfileRequest;
 import com.atleta.demo.dto.request.CreateTeamRequest;
 import com.atleta.demo.dto.request.CreateMatchRequest;
+import com.atleta.demo.entity.Athlete;
 import com.atleta.demo.enums.GenderType;
 import com.atleta.demo.enums.MatchMode;
+import com.atleta.demo.repository.AthleteRepository;
+import com.atleta.demo.service.JwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +59,12 @@ public class EndToEndIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private DataSource dataSource;
+
+    @Autowired
+    private AthleteRepository athleteRepository;
+
+    @Autowired
+    private JwtService jwtService;
 
     @Test
     void testCompleteApplicationStartupFlow() {
@@ -108,13 +117,18 @@ public class EndToEndIntegrationTest extends BaseIntegrationTest {
         assertThat(athleteResponse.getBody()).isNotNull();
         String athleteUuid = (String) athleteResponse.getBody().get("atletaUuid");
         assertThat(athleteUuid).isNotNull();
+
+        Athlete athlete = athleteRepository.findById(UUID.fromString(athleteUuid)).orElseThrow();
+        HttpHeaders authHeaders = new HttpHeaders();
+        authHeaders.setContentType(MediaType.APPLICATION_JSON);
+        authHeaders.setBearerAuth(jwtService.generateToken(athlete));
         
         // Step 2: Create player profile
         CreatePlayerProfileRequest profileRequest = new CreatePlayerProfileRequest();
         profileRequest.setAtletaUuid(UUID.fromString(athleteUuid));
         profileRequest.setAlias("JourneyPlayer");
         
-        HttpEntity<CreatePlayerProfileRequest> profileEntity = new HttpEntity<>(profileRequest, headers);
+        HttpEntity<CreatePlayerProfileRequest> profileEntity = new HttpEntity<>(profileRequest, authHeaders);
         
         ResponseEntity<Map> profileResponse = restTemplate.postForEntity(
             baseUrl + "/player-profiles", 
@@ -130,7 +144,7 @@ public class EndToEndIntegrationTest extends BaseIntegrationTest {
         teamRequest.setCreadorUuid(UUID.fromString(athleteUuid));
         teamRequest.setAnioFundacion(2024);
         
-        HttpEntity<CreateTeamRequest> teamEntity = new HttpEntity<>(teamRequest, headers);
+        HttpEntity<CreateTeamRequest> teamEntity = new HttpEntity<>(teamRequest, authHeaders);
         
         ResponseEntity<Map> teamResponse = restTemplate.postForEntity(
             baseUrl + "/teams", 
@@ -152,7 +166,7 @@ public class EndToEndIntegrationTest extends BaseIntegrationTest {
         matchRequest.setCuota(new BigDecimal("25.00"));
         matchRequest.setCreadorUuid(UUID.fromString(athleteUuid));
         
-        HttpEntity<CreateMatchRequest> matchEntity = new HttpEntity<>(matchRequest, headers);
+        HttpEntity<CreateMatchRequest> matchEntity = new HttpEntity<>(matchRequest, authHeaders);
         
         ResponseEntity<Map> matchResponse = restTemplate.postForEntity(
             baseUrl + "/matches", 

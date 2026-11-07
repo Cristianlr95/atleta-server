@@ -2,6 +2,7 @@ package com.atleta.demo.dto.request;
 
 import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.enums.MatchGenderCategory;
+import com.atleta.demo.enums.MatchType;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
@@ -26,6 +27,13 @@ public class CreateMatchRequest {
      * Categoria de convocatoria por genero.
      */
     private MatchGenderCategory categoriaGenero = MatchGenderCategory.MIXTO;
+
+    /**
+     * Competitive context. Defaults to FRIENDLY for backwards compatibility.
+     */
+    private MatchType matchType = MatchType.FRIENDLY;
+
+    private boolean rotativeGoalkeeper = false;
 
     /**
      * Fecha y hora programada para el partido
@@ -96,6 +104,18 @@ public class CreateMatchRequest {
         this.categoriaGenero = categoriaGenero;
     }
 
+    public MatchType getMatchType() {
+        return matchType;
+    }
+
+    public void setMatchType(MatchType matchType) {
+        this.matchType = matchType;
+    }
+
+    public boolean isRotativeGoalkeeper() { return rotativeGoalkeeper; }
+
+    public void setRotativeGoalkeeper(boolean rotativeGoalkeeper) { this.rotativeGoalkeeper = rotativeGoalkeeper; }
+
     public LocalDateTime getFechaHoraProgramada() {
         return fechaHoraProgramada;
     }
@@ -141,6 +161,7 @@ public class CreateMatchRequest {
         return "CreateMatchRequest{" +
                 "modalidad=" + modalidad +
                 ", categoriaGenero=" + categoriaGenero +
+                ", matchType=" + matchType +
                 ", fechaHoraProgramada=" + fechaHoraProgramada +
                 ", latitud=" + latitud +
                 ", longitud=" + longitud +

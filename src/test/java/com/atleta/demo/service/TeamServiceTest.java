@@ -1,17 +1,22 @@
 package com.atleta.demo.service;
 
 import com.atleta.demo.dto.request.CreateTeamRequest;
-import com.atleta.demo.dto.request.JoinTeamRequest;
+import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.dto.response.TeamResponse;
 import com.atleta.demo.entity.*;
-import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,10 +52,12 @@ class TeamServiceTest {
     @Mock
     private MatchInviteRepository matchInviteRepository;
 
+    @Mock
+    private RatingService ratingService;
+
     private TeamService teamService;
 
     private CreateTeamRequest validCreateRequest;
-    private JoinTeamRequest validJoinRequest;
     private PlayerProfile samplePlayer;
     private Team sampleTeam;
     private TeamStats sampleStats;
@@ -64,7 +71,8 @@ class TeamServiceTest {
                 teamStatsRepository,
                 playerPositionRepository,
                 teamInviteRepository,
-                matchInviteRepository
+                matchInviteRepository,
+                ratingService
         );
 
         UUID playerId = UUID.randomUUID();
@@ -91,10 +99,22 @@ class TeamServiceTest {
         sampleStats.setId(1L);
         sampleStats.setTeam(sampleTeam);
 
-        validJoinRequest = new JoinTeamRequest();
-        validJoinRequest.setPlayerUuid(playerId);
-        validJoinRequest.setTeamId(1L);
-        validJoinRequest.setRol(PlayerRole.JUGADOR);
+    }
+
+    @Test
+    void getActiveMembersByTeamReturnsAggregatedOvrWithoutPerPlayerRatingCalls() {
+        TeamMember member = new TeamMember(sampleTeam, samplePlayer, com.atleta.demo.enums.PlayerRole.JUGADOR);
+        when(teamRepository.findById(sampleTeam.getId())).thenReturn(Optional.of(sampleTeam));
+        when(teamMemberRepository.findActiveByTeam(sampleTeam)).thenReturn(List.of(member));
+        when(playerPositionRepository.findPrimaryPositionByPlayer(samplePlayer)).thenReturn(Optional.empty());
+        when(ratingService.calculateHybridOVRBatch(List.of(samplePlayer.getAtletaUuid())))
+                .thenReturn(Map.of(samplePlayer.getAtletaUuid(), BigDecimal.valueOf(78.25)));
+
+        List<TeamActiveMemberResponse> members = teamService.getActiveMembersByTeam(sampleTeam.getId());
+
+        assertEquals(1, members.size());
+        assertEquals(BigDecimal.valueOf(78.25), members.getFirst().getOvr());
+        verify(ratingService).calculateHybridOVRBatch(List.of(samplePlayer.getAtletaUuid()));
     }
 
     @Test
@@ -157,170 +177,61 @@ class TeamServiceTest {
         verify(teamRepository, never()).saveAndFlush(any(Team.class));
     }
 
-    // TODO: Uncomment these tests when the corresponding methods are implemented in TeamService
-    /*
     @Test
-    void joinTeam_ValidRequest_ShouldAddMember() {
-        // Arrange
-        when(teamRepository.findById(validJoinRequest.getTeamId())).thenReturn(Optional.of(sampleTeam));
-        when(playerProfileRepository.findById(validJoinRequest.getPlayerUuid())).thenReturn(Optional.of(samplePlayer));
-        when(teamMemberRepository.findActiveByTeamAndPlayer(sampleTeam, samplePlayer)).thenReturn(Optional.empty());
-        
-        TeamMember newMember = new TeamMember(sampleTeam, samplePlayer, validJoinRequest.getRol());
-        newMember.setId(1L);
-        when(teamMemberRepository.save(any(TeamMember.class))).thenReturn(newMember);
+    void getTeamById_ActiveTeam_ShouldReturnPublicDetail() {
+        when(teamRepository.findById(1L)).thenReturn(Optional.of(sampleTeam));
 
-        // Act
-        TeamMemberResponse response = teamService.joinTeam(validJoinRequest);
+        TeamResponse response = teamService.getTeamById(1L);
 
-        // Assert
-        assertNotNull(response);
-        assertEquals(validJoinRequest.getRol(), response.getRol());
-        assertTrue(response.getActivo());
-
-        verify(teamRepository).findById(validJoinRequest.getTeamId());
-        verify(playerProfileRepository).findById(validJoinRequest.getPlayerUuid());
-        verify(teamMemberRepository).findActiveByTeamAndPlayer(sampleTeam, samplePlayer);
-        verify(teamMemberRepository).save(any(TeamMember.class));
+        assertEquals(1L, response.getId());
+        assertEquals("Test Team", response.getNombre());
+        assertEquals(samplePlayer.getAtletaUuid(), response.getCreador().getAtletaUuid());
     }
 
     @Test
-    void joinTeam_TeamNotFound_ShouldThrowException() {
-        // Arrange
-        when(teamRepository.findById(validJoinRequest.getTeamId())).thenReturn(Optional.empty());
+    void getTeamById_ArchivedTeam_ShouldBehaveAsMissing() {
+        sampleTeam.setArchived(true);
+        when(teamRepository.findById(1L)).thenReturn(Optional.of(sampleTeam));
 
-        // Act & Assert
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> teamService.joinTeam(validJoinRequest)
+        assertThrows(IllegalArgumentException.class, () -> teamService.getTeamById(1L));
+    }
+
+    @Test
+    void storeTeamLogo_ValidPng_ShouldStoreFile() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "logo.png",
+                "image/png",
+                new byte[] {
+                        (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+                        0x00, 0x00, 0x00, 0x0D
+                }
         );
 
-        assertEquals("Equipo no encontrado: " + validJoinRequest.getTeamId(), exception.getMessage());
-        verify(teamRepository).findById(validJoinRequest.getTeamId());
-        verify(playerProfileRepository, never()).findById(any());
+        String storedPath = teamService.storeTeamLogo(file);
+
+        assertTrue(storedPath.startsWith("/uploads/team-logos/"));
+        assertTrue(storedPath.endsWith(".png"));
+        Path created = Path.of(storedPath.substring(1));
+        assertTrue(Files.exists(created));
+        Files.deleteIfExists(created);
     }
 
     @Test
-    void joinTeam_PlayerNotFound_ShouldThrowException() {
-        // Arrange
-        when(teamRepository.findById(validJoinRequest.getTeamId())).thenReturn(Optional.of(sampleTeam));
-        when(playerProfileRepository.findById(validJoinRequest.getPlayerUuid())).thenReturn(Optional.empty());
-
-        // Act & Assert
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> teamService.joinTeam(validJoinRequest)
+    void storeTeamLogo_SpoofedContentType_ShouldThrowException() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "logo.png",
+                "image/png",
+                "not-an-image".getBytes()
         );
 
-        assertEquals("Jugador no encontrado: " + validJoinRequest.getPlayerUuid(), exception.getMessage());
-        verify(teamRepository).findById(validJoinRequest.getTeamId());
-        verify(playerProfileRepository).findById(validJoinRequest.getPlayerUuid());
-    }
-
-    @Test
-    void joinTeam_AlreadyActiveMember_ShouldThrowException() {
-        // Arrange
-        TeamMember existingMember = new TeamMember(sampleTeam, samplePlayer);
-        when(teamRepository.findById(validJoinRequest.getTeamId())).thenReturn(Optional.of(sampleTeam));
-        when(playerProfileRepository.findById(validJoinRequest.getPlayerUuid())).thenReturn(Optional.of(samplePlayer));
-        when(teamMemberRepository.findActiveByTeamAndPlayer(sampleTeam, samplePlayer)).thenReturn(Optional.of(existingMember));
-
-        // Act & Assert
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> teamService.joinTeam(validJoinRequest)
+                () -> teamService.storeTeamLogo(file)
         );
 
-        assertEquals("El jugador ya es miembro activo del equipo", exception.getMessage());
-        verify(teamRepository).findById(validJoinRequest.getTeamId());
-        verify(playerProfileRepository).findById(validJoinRequest.getPlayerUuid());
-        verify(teamMemberRepository).findActiveByTeamAndPlayer(sampleTeam, samplePlayer);
-        verify(teamMemberRepository, never()).save(any(TeamMember.class));
+        assertEquals("El contenido del logo no coincide con una imagen valida", exception.getMessage());
     }
 
-    @Test
-    void getTeamById_ExistingTeam_ShouldReturnTeam() {
-        // Arrange
-        Long teamId = 1L;
-        when(teamRepository.findById(teamId)).thenReturn(Optional.of(sampleTeam));
-        when(teamMemberRepository.findActiveByTeam(sampleTeam)).thenReturn(java.util.Collections.emptyList());
-
-        // Act
-        TeamResponse response = teamService.getTeamById(teamId);
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(sampleTeam.getId(), response.getId());
-        assertEquals(sampleTeam.getNombre(), response.getNombre());
-
-        verify(teamRepository).findById(teamId);
-        verify(teamMemberRepository).findActiveByTeam(sampleTeam);
-    }
-
-    @Test
-    void getTeamById_NonExistingTeam_ShouldThrowException() {
-        // Arrange
-        Long nonExistingId = 999L;
-        when(teamRepository.findById(nonExistingId)).thenReturn(Optional.empty());
-
-        // Act & Assert
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> teamService.getTeamById(nonExistingId)
-        );
-
-        assertEquals("Equipo no encontrado: " + nonExistingId, exception.getMessage());
-        verify(teamRepository).findById(nonExistingId);
-    }
-
-    @Test
-    void deactivateMember_ValidRequest_ShouldDeactivateMember() {
-        // Arrange
-        Long teamId = 1L;
-        UUID playerUuid = samplePlayer.getAtletaUuid();
-        TeamMember activeMember = new TeamMember(sampleTeam, samplePlayer);
-        activeMember.setActivo(true);
-
-        when(teamRepository.findById(teamId)).thenReturn(Optional.of(sampleTeam));
-        when(playerProfileRepository.findById(playerUuid)).thenReturn(Optional.of(samplePlayer));
-        when(teamMemberRepository.findActiveByTeamAndPlayer(sampleTeam, samplePlayer)).thenReturn(Optional.of(activeMember));
-        when(teamMemberRepository.save(any(TeamMember.class))).thenReturn(activeMember);
-
-        // Act
-        teamService.deactivateMember(teamId, playerUuid);
-
-        // Assert
-        verify(teamRepository).findById(teamId);
-        verify(playerProfileRepository).findById(playerUuid);
-        verify(teamMemberRepository).findActiveByTeamAndPlayer(sampleTeam, samplePlayer);
-        verify(teamMemberRepository).save(activeMember);
-    }
-
-    @Test
-    void changeRole_ValidRequest_ShouldChangeRole() {
-        // Arrange
-        Long teamId = 1L;
-        UUID playerUuid = samplePlayer.getAtletaUuid();
-        PlayerRole newRole = PlayerRole.CAPITAN;
-        TeamMember member = new TeamMember(sampleTeam, samplePlayer, PlayerRole.JUGADOR);
-        member.setId(1L);
-
-        when(teamRepository.findById(teamId)).thenReturn(Optional.of(sampleTeam));
-        when(playerProfileRepository.findById(playerUuid)).thenReturn(Optional.of(samplePlayer));
-        when(teamMemberRepository.findActiveByTeamAndPlayer(sampleTeam, samplePlayer)).thenReturn(Optional.of(member));
-        when(teamMemberRepository.save(any(TeamMember.class))).thenReturn(member);
-
-        // Act
-        TeamMemberResponse response = teamService.changeRole(teamId, playerUuid, newRole);
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(newRole, response.getRol());
-
-        verify(teamRepository).findById(teamId);
-        verify(playerProfileRepository).findById(playerUuid);
-        verify(teamMemberRepository).findActiveByTeamAndPlayer(sampleTeam, samplePlayer);
-        verify(teamMemberRepository).save(member);
-    }
-    */
 }

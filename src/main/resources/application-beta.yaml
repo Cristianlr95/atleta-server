@@ -1,0 +1,97 @@
+# Standalone profile: do not combine with dev/prod (large pools and local seeds).
+spring:
+  datasource:
+    url: ${DB_JDBC_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 4
+      minimum-idle: 0
+      idle-timeout: 60000
+      connection-timeout: 30000
+      max-lifetime: 300000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 20
+  flyway:
+    enabled: true
+    url: ${DB_MIGRATION_JDBC_URL:${DB_JDBC_URL}}
+    user: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    clean-disabled: true
+    connect-retries: 3
+  servlet:
+    multipart:
+      max-file-size: 3MB
+      max-request-size: 4MB
+
+server:
+  port: ${PORT:8080}
+  address: 0.0.0.0
+  forward-headers-strategy: framework
+  tomcat:
+    threads:
+      max: 20
+      min-spare: 2
+    max-connections: 100
+    accept-count: 20
+
+security:
+  jwt:
+    issuer: atleta-beta
+    secret: ${JWT_SECRET}
+    expiration: PT1H
+
+app:
+  frontend-url: ${FRONTEND_URL}
+  beta:
+    invitation-code: ${BETA_INVITE_CODE:}
+  cors:
+    allowed-origin-patterns: ${FRONTEND_URL}
+    allowed-headers: Authorization,Content-Type,Accept,Origin,X-Requested-With,Idempotency-Key,X-Beta-Invite
+  uploads:
+    enabled: false
+
+atleta:
+  matches:
+    scheduler:
+      # Render sleeps; periodic queries also prevent Neon from becoming idle.
+      enabled: false
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+  metrics:
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": false
+      percentiles:
+        "[http.server.requests]": []
+  prometheus:
+    metrics:
+      export:
+        enabled: false
+
+logging:
+  level:
+    root: INFO
+    "[org.hibernate.SQL]": WARN

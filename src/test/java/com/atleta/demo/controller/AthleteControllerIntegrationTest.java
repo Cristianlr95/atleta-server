@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -200,7 +201,8 @@ public class AthleteControllerIntegrationTest {
         String uuid = objectMapper.readTree(response).get("atletaUuid").asText();
 
         // When & Then
-        mockMvc.perform(get("/api/v1/athletes/{atletaUuid}", uuid))
+        mockMvc.perform(get("/api/v1/athletes/{atletaUuid}", uuid)
+                .with(jwtFor(UUID.fromString(uuid))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("get@example.com"))
                 .andExpect(jsonPath("$.nombre").value("Get Test"))
@@ -213,7 +215,8 @@ public class AthleteControllerIntegrationTest {
         UUID randomUuid = UUID.randomUUID();
 
         // When & Then
-        mockMvc.perform(get("/api/v1/athletes/{atletaUuid}", randomUuid))
+        mockMvc.perform(get("/api/v1/athletes/{atletaUuid}", randomUuid)
+                .with(jwtFor(randomUuid)))
                 .andExpect(status().isNotFound());
     }
 
@@ -261,6 +264,7 @@ public class AthleteControllerIntegrationTest {
 
         // Then
         mockMvc.perform(put("/api/v1/athletes/{atletaUuid}", uuid)
+                .with(jwtFor(UUID.fromString(uuid)))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isOk())
@@ -292,6 +296,7 @@ public class AthleteControllerIntegrationTest {
 
         // Then
         mockMvc.perform(put("/api/v1/athletes/{atletaUuid}/password", uuid)
+                .with(jwtFor(UUID.fromString(uuid)))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(changeRequest)))
                 .andExpect(status().isOk());
@@ -428,5 +433,9 @@ public class AthleteControllerIntegrationTest {
                 .param("fecha", yesterday.toString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].email", hasItem("recent@example.com")));
+    }
+
+    private SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor jwtFor(UUID subject) {
+        return SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(subject.toString()));
     }
 }

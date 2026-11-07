@@ -6,21 +6,24 @@ import com.atleta.demo.dto.request.JoinMatchRequest;
 import com.atleta.demo.entity.*;
 import com.atleta.demo.enums.EventType;
 import com.atleta.demo.enums.MatchMode;
+import com.atleta.demo.enums.MatchType;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.repository.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.web.context.WebApplicationContext;
 
 import com.atleta.demo.config.TestConfig;
@@ -28,8 +31,11 @@ import com.atleta.demo.config.TestConfig;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.List;
+import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -76,6 +82,21 @@ public class MatchControllerIntegrationTest {
 
     @Autowired
     private PositionRepository positionRepository;
+
+    @Autowired
+    private MatchRepository matchRepository;
+
+    @Autowired
+    private MatchInviteRepository matchInviteRepository;
+
+    @Autowired
+    private MatchTeamRepository matchTeamRepository;
+
+    @Autowired
+    private MatchPlayerRepository matchPlayerRepository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -141,7 +162,6 @@ public class MatchControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testCreateMatch_Success() throws Exception {
         // Given
         CreateMatchRequest request = new CreateMatchRequest();
@@ -154,10 +174,13 @@ public class MatchControllerIntegrationTest {
 
         // When & Then
         mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.modalidad").value("CINCO_VS_CINCO"))
+                .andExpect(jsonPath("$.matchType").value("FRIENDLY"))
+                .andExpect(jsonPath("$.rotativeGoalkeeper").value(false))
                 .andExpect(jsonPath("$.latitud").value(40.7128))
                 .andExpect(jsonPath("$.longitud").value(-74.0060))
                 .andExpect(jsonPath("$.cuota").value(25.00))
@@ -167,26 +190,146 @@ public class MatchControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
+    void goalkeeperModeIsPersistedAcrossCreationAndReload() throws Exception {
+        Map<String, Object> payload = Map.of("modalidad", "CINCO_VS_CINCO",
+                "fechaHoraProgramada", LocalDateTime.now().plusDays(1).toString(),
+                "creadorUuid", testCreatorUuid.toString(), "rotativeGoalkeeper", true);
+        String response = mockMvc.perform(post("/api/v1/matches")
+                        .with(jwtFor(testCreatorUuid)).contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.rotativeGoalkeeper").value(true))
+                .andReturn().getResponse().getContentAsString();
+        long id = objectMapper.readTree(response).get("id").asLong();
+        entityManager.flush();
+        entityManager.clear();
+        mockMvc.perform(get("/api/v1/matches/{matchId}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rotativeGoalkeeper").value(true));
+    }
+
+    @Test
+    void testCreateMatchOrchestrated_IsAtomicAndIdempotent() throws Exception {
+        Map<String, Object> payload = orchestratedPayload(List.of(testPlayerUuid));
+
+        String firstResponse = mockMvc.perform(post("/api/v1/matches/orchestrated")
+                        .with(jwtFor(testCreatorUuid))
+                        .header("Idempotency-Key", "create-match-abc-123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.replayed").value(false))
+                .andExpect(jsonPath("$.match.matchType").value("POINTS"))
+                .andExpect(jsonPath("$.match.rotativeGoalkeeper").value(true))
+                .andExpect(jsonPath("$.match.matchTeams", hasSize(1)))
+                .andExpect(jsonPath("$.invitations", hasSize(1)))
+                .andExpect(jsonPath("$.invitations[0].targetUuid").value(testPlayerUuid.toString()))
+                .andReturn().getResponse().getContentAsString();
+
+        long matchId = objectMapper.readTree(firstResponse).path("match").path("id").asLong();
+
+        mockMvc.perform(post("/api/v1/matches/orchestrated")
+                        .with(jwtFor(testCreatorUuid))
+                        .header("Idempotency-Key", "create-match-abc-123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.match.id").value(matchId))
+                .andExpect(jsonPath("$.match.rotativeGoalkeeper").value(true))
+                .andExpect(jsonPath("$.invitations", hasSize(1)));
+
+        assertThat(matchRepository.count(), is(1L));
+        assertThat(matchTeamRepository.count(), is(1L));
+        assertThat(matchInviteRepository.count(), is(1L));
+    }
+
+    @Test
+    void testCreateMatchOrchestrated_RollsBackEverythingWhenAnInviteFails() throws Exception {
+        Map<String, Object> payload = orchestratedPayload(List.of(testPlayerUuid, UUID.randomUUID()));
+
+        mockMvc.perform(post("/api/v1/matches/orchestrated")
+                        .with(jwtFor(testCreatorUuid))
+                        .header("Idempotency-Key", "create-match-rollback-123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isBadRequest());
+
+        TestTransaction.end();
+        TestTransaction.start();
+
+        assertThat(matchRepository.count(), is(0L));
+        assertThat(matchTeamRepository.count(), is(0L));
+        assertThat(matchInviteRepository.count(), is(0L));
+    }
+
+    private Map<String, Object> orchestratedPayload(List<UUID> targetUuids) {
+        Map<String, Object> match = Map.of(
+                "creadorUuid", testCreatorUuid,
+                "modalidad", "CINCO_VS_CINCO",
+                "matchType", "POINTS",
+                "rotativeGoalkeeper", true,
+                "categoriaGenero", "MIXTO",
+                "fechaHoraProgramada", LocalDateTime.now().plusDays(1).toString()
+        );
+        return Map.of(
+                "match", match,
+                "teamId", testTeamId,
+                "targetUuids", targetUuids,
+                "invitationMessage", "Sumate al partido"
+        );
+    }
+
+    @Test
+    void testCreateMatch_PersistsEveryMatchTypeAcrossCreateGetAndList() throws Exception {
+        for (MatchType matchType : MatchType.values()) {
+            CreateMatchRequest request = new CreateMatchRequest();
+            request.setModalidad(MatchMode.CINCO_VS_CINCO);
+            request.setMatchType(matchType);
+            request.setFechaHoraProgramada(LocalDateTime.now().plusDays(1));
+            request.setCreadorUuid(testCreatorUuid);
+
+            String response = mockMvc.perform(post("/api/v1/matches")
+                            .with(jwtFor(testCreatorUuid))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.matchType").value(matchType.name()))
+                    .andReturn().getResponse().getContentAsString();
+
+            long matchId = objectMapper.readTree(response).get("id").asLong();
+
+            mockMvc.perform(get("/api/v1/matches/{matchId}", matchId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.matchType").value(matchType.name()));
+
+            mockMvc.perform(get("/api/v1/matches"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id == " + matchId + ")].matchType").value(matchType.name()));
+        }
+    }
+
+    @Test
     void testCreateMatch_CreatorNotFound() throws Exception {
         // Given - Non-existent creator UUID
+        UUID missingCreatorUuid = UUID.randomUUID();
         CreateMatchRequest request = new CreateMatchRequest();
         request.setModalidad(MatchMode.CINCO_VS_CINCO);
         request.setFechaHoraProgramada(LocalDateTime.now().plusDays(1));
         request.setLatitud(new BigDecimal("40.7128"));
         request.setLongitud(new BigDecimal("-74.0060"));
         request.setCuota(new BigDecimal("25.00"));
-        request.setCreadorUuid(UUID.randomUUID());
+        request.setCreadorUuid(missingCreatorUuid);
 
         // When & Then
         mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(missingCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @WithMockUser
     void testCreateMatch_InvalidCoordinates() throws Exception {
         // Given - Invalid latitude (out of range)
         CreateMatchRequest request = new CreateMatchRequest();
@@ -199,13 +342,13 @@ public class MatchControllerIntegrationTest {
 
         // When & Then
         mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    @WithMockUser
     void testCreateMatch_AllModalidades() throws Exception {
         // Test all match modes
         MatchMode[] modes = {MatchMode.CINCO_VS_CINCO, MatchMode.SEIS_VS_SEIS, MatchMode.SIETE_VS_SIETE};
@@ -220,6 +363,7 @@ public class MatchControllerIntegrationTest {
             request.setCreadorUuid(testCreatorUuid);
 
             mockMvc.perform(post("/api/v1/matches")
+                    .with(jwtFor(testCreatorUuid))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
@@ -228,7 +372,6 @@ public class MatchControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testGetMatchById_Success() throws Exception {
         // Given - Create match first
         CreateMatchRequest createRequest = new CreateMatchRequest();
@@ -240,6 +383,7 @@ public class MatchControllerIntegrationTest {
         createRequest.setCreadorUuid(testCreatorUuid);
 
         String response = mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -256,7 +400,6 @@ public class MatchControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testGetMatchById_NotFound() throws Exception {
         // Given - Non-existent match ID
         Long nonExistentId = 999L;
@@ -267,7 +410,6 @@ public class MatchControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testGetAllMatches_Success() throws Exception {
         // Given - Create multiple matches
         for (int i = 0; i < 3; i++) {
@@ -280,6 +422,7 @@ public class MatchControllerIntegrationTest {
             request.setCreadorUuid(testCreatorUuid);
 
             mockMvc.perform(post("/api/v1/matches")
+                    .with(jwtFor(testCreatorUuid))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated());
@@ -292,7 +435,6 @@ public class MatchControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testGetUpcomingMatches_Success() throws Exception {
         // Given - Create matches with different dates
         CreateMatchRequest pastMatch = new CreateMatchRequest();
@@ -312,11 +454,13 @@ public class MatchControllerIntegrationTest {
         futureMatch.setCreadorUuid(testCreatorUuid);
 
         mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(pastMatch)))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(futureMatch)))
                 .andExpect(status().isCreated());
@@ -328,7 +472,6 @@ public class MatchControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testChangeMatchStatus_Success() throws Exception {
         // Given - Create match first
         CreateMatchRequest createRequest = new CreateMatchRequest();
@@ -340,6 +483,7 @@ public class MatchControllerIntegrationTest {
         createRequest.setCreadorUuid(testCreatorUuid);
 
         String response = mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -348,11 +492,15 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
+        addConfirmedPlayers(matchId, 9);
+
         // When & Then - Change status to INICIADO
         mockMvc.perform(put("/api/v1/matches/{matchId}/status", matchId)
+                .with(jwtFor(testCreatorUuid))
                 .param("status", "INICIADO"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estado").value("INICIADO"))
@@ -360,7 +508,6 @@ public class MatchControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testAddTeamToMatch_Success() throws Exception {
         // Given - Create match first
         CreateMatchRequest createRequest = new CreateMatchRequest();
@@ -372,6 +519,7 @@ public class MatchControllerIntegrationTest {
         createRequest.setCreadorUuid(testCreatorUuid);
 
         String response = mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -381,6 +529,7 @@ public class MatchControllerIntegrationTest {
 
         // When & Then - Add team as local
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.matchTeams", hasSize(1)))
@@ -389,7 +538,6 @@ public class MatchControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testJoinMatch_Success() throws Exception {
         // Given - Create match and add team first
         CreateMatchRequest createRequest = new CreateMatchRequest();
@@ -401,6 +549,7 @@ public class MatchControllerIntegrationTest {
         createRequest.setCreadorUuid(testCreatorUuid);
 
         String response = mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -410,6 +559,7 @@ public class MatchControllerIntegrationTest {
 
         // Add team to match
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
@@ -423,6 +573,7 @@ public class MatchControllerIntegrationTest {
 
         // Then
         mockMvc.perform(post("/api/v1/matches/join")
+                .with(jwtFor(testPlayerUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(joinRequest)))
                 .andExpect(status().isCreated())
@@ -434,7 +585,6 @@ public class MatchControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testConfirmParticipation_Success() throws Exception {
         // Given - Create match, add team, and join match
         CreateMatchRequest createRequest = new CreateMatchRequest();
@@ -446,6 +596,7 @@ public class MatchControllerIntegrationTest {
         createRequest.setCreadorUuid(testCreatorUuid);
 
         String response = mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -454,6 +605,7 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
@@ -465,19 +617,20 @@ public class MatchControllerIntegrationTest {
         joinRequest.setRol(PlayerRole.JUGADOR);
 
         mockMvc.perform(post("/api/v1/matches/join")
+                .with(jwtFor(testPlayerUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(joinRequest)))
                 .andExpect(status().isCreated());
 
         // When & Then - Confirm participation
         mockMvc.perform(put("/api/v1/matches/{matchId}/players/{playerUuid}/confirm", 
-                matchId, testPlayerUuid))
+                matchId, testPlayerUuid)
+                .with(jwtFor(testPlayerUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.confirmado").value(true));
     }
 
     @Test
-    @WithMockUser
     void testRegisterEvent_Success() throws Exception {
         // Given - Create match, add team, join match, and confirm participation
         CreateMatchRequest createRequest = new CreateMatchRequest();
@@ -489,6 +642,7 @@ public class MatchControllerIntegrationTest {
         createRequest.setCreadorUuid(testCreatorUuid);
 
         String response = mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -497,6 +651,7 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
@@ -508,15 +663,22 @@ public class MatchControllerIntegrationTest {
         joinRequest.setRol(PlayerRole.JUGADOR);
 
         mockMvc.perform(post("/api/v1/matches/join")
+                .with(jwtFor(testPlayerUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(joinRequest)))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(put("/api/v1/matches/{matchId}/players/{playerUuid}/confirm", 
-                matchId, testPlayerUuid))
+                matchId, testPlayerUuid)
+                .with(jwtFor(testPlayerUuid)))
                 .andExpect(status().isOk());
 
+        // Complete the roster after the player joins so the service-level per-team
+        // capacity validation remains meaningful for the participant under test.
+        addConfirmedPlayers(matchId, 8);
+
         mockMvc.perform(put("/api/v1/matches/{matchId}/status", matchId)
+                .with(jwtFor(testCreatorUuid))
                 .param("status", "INICIADO"))
                 .andExpect(status().isOk());
 
@@ -530,6 +692,7 @@ public class MatchControllerIntegrationTest {
 
         // Then
         mockMvc.perform(post("/api/v1/matches/events")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(eventRequest)))
                 .andExpect(status().isCreated())
@@ -539,8 +702,32 @@ public class MatchControllerIntegrationTest {
                 .andExpect(jsonPath("$.confirmedByVisitante").value(true));
     }
 
+    private void addConfirmedPlayers(Long matchId, int amount) {
+        Match match = matchRepository.findById(matchId).orElseThrow();
+        Team team = teamRepository.findById(testTeamId).orElseThrow();
+        Position position = positionRepository.findById(testPositionId).orElseThrow();
+
+        for (int index = 0; index < amount; index++) {
+            Athlete athlete = new Athlete();
+            athlete.setEmail("confirmed-" + matchId + "-" + index + "@example.com");
+            athlete.setPasswordHash("hashedpassword");
+            athlete.setNombre("Confirmed " + index);
+            athlete = athleteRepository.save(athlete);
+
+            PlayerProfile profile = new PlayerProfile();
+            profile.setAtletaUuid(athlete.getAtletaUuid());
+            profile.setAthlete(athlete);
+            profile.setAlias("Confirmed" + index);
+            profile.setTrustScore(100);
+            profile = playerProfileRepository.save(profile);
+
+            MatchPlayer participation = new MatchPlayer(match, team, profile, position, PlayerRole.JUGADOR);
+            participation.setConfirmado(true);
+            matchPlayerRepository.save(participation);
+        }
+    }
+
     @Test
-    @WithMockUser
     void testGetMatchEvents_Success() throws Exception {
         // Given - Create match with events (simplified setup)
         CreateMatchRequest createRequest = new CreateMatchRequest();
@@ -552,6 +739,7 @@ public class MatchControllerIntegrationTest {
         createRequest.setCreadorUuid(testCreatorUuid);
 
         String response = mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -566,7 +754,6 @@ public class MatchControllerIntegrationTest {
     }
 
     @Test
-    @WithMockUser
     void testGetMatchesByPlayer_Success() throws Exception {
         // Given - Create match and have player join
         CreateMatchRequest createRequest = new CreateMatchRequest();
@@ -578,6 +765,7 @@ public class MatchControllerIntegrationTest {
         createRequest.setCreadorUuid(testCreatorUuid);
 
         String response = mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -586,6 +774,7 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
@@ -597,19 +786,20 @@ public class MatchControllerIntegrationTest {
         joinRequest.setRol(PlayerRole.JUGADOR);
 
         mockMvc.perform(post("/api/v1/matches/join")
+                .with(jwtFor(testPlayerUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(joinRequest)))
                 .andExpect(status().isCreated());
 
         // When & Then - Get matches by player
-        mockMvc.perform(get("/api/v1/matches/by-player/{playerUuid}", testPlayerUuid))
+        mockMvc.perform(get("/api/v1/matches/by-player/{playerUuid}", testPlayerUuid)
+                .with(jwtFor(testPlayerUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].id").value(matchId));
     }
 
     @Test
-    @WithMockUser
     void testGetMatchesByTeam_Success() throws Exception {
         // Given - Create match and add team
         CreateMatchRequest createRequest = new CreateMatchRequest();
@@ -621,6 +811,7 @@ public class MatchControllerIntegrationTest {
         createRequest.setCreadorUuid(testCreatorUuid);
 
         String response = mockMvc.perform(post("/api/v1/matches")
+                .with(jwtFor(testCreatorUuid))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
@@ -629,6 +820,7 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}", matchId, testTeamId)
+                .with(jwtFor(testCreatorUuid))
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
@@ -637,5 +829,9 @@ public class MatchControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].id").value(matchId));
+    }
+
+    private SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor jwtFor(UUID subject) {
+        return SecurityMockMvcRequestPostProcessors.jwt().jwt(jwt -> jwt.subject(subject.toString()));
     }
 }

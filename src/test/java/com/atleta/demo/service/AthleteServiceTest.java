@@ -4,6 +4,7 @@ import com.atleta.demo.dto.request.CreateAthleteRequest;
 import com.atleta.demo.dto.response.AthleteResponse;
 import com.atleta.demo.entity.Athlete;
 import com.atleta.demo.repository.AthleteRepository;
+import com.atleta.demo.repository.PlayerProfileRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +27,9 @@ class AthleteServiceTest {
     private AthleteRepository athleteRepository;
 
     @Mock
+    private PlayerProfileRepository playerProfileRepository;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     private AthleteService athleteService;
@@ -46,7 +50,7 @@ class AthleteServiceTest {
         sampleAthlete.setPasswordHash("hashedPassword");
         sampleAthlete.setNombre("Test Athlete");
 
-        athleteService = new AthleteService(athleteRepository, passwordEncoder);
+        athleteService = new AthleteService(athleteRepository, playerProfileRepository, passwordEncoder);
     }
 
     @Test

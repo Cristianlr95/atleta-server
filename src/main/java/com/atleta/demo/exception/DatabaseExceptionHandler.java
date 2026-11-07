@@ -7,13 +7,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.context.request.WebRequest;
 
-import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -30,6 +31,11 @@ import java.util.Map;
 public class DatabaseExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(DatabaseExceptionHandler.class);
+    private final Environment environment;
+
+    public DatabaseExceptionHandler(Environment environment) {
+        this.environment = environment;
+    }
 
     /**
      * Handles database configuration validation failures.
@@ -282,7 +288,6 @@ public class DatabaseExceptionHandler {
      * Determines if the application is running in development environment.
      */
     private boolean isDevelopmentEnvironment() {
-        String activeProfile = System.getProperty("spring.profiles.active", "dev");
-        return "dev".equals(activeProfile) || "test".equals(activeProfile);
+        return environment.acceptsProfiles(Profiles.of("dev", "test"));
     }
 }
