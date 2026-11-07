@@ -602,6 +602,7 @@ public class MatchService {
             validateResponsibleActor(match, effectiveActorUuid);
             validateMatchIniciado(match);
             matchStatusPolicy.validateCloseWindow(match, LocalDateTime.now());
+            matchPostMatchRatingService.validateFriendlyMatchTeamCount(match);
             if (!matchRosterPolicy.hasMinimumConfirmedPlayers(match, matchPlayerRepository.findByMatch(match))) {
                 match.setEstado(MatchStatus.INVALIDO);
                 match.setValidationStatus(MatchValidationStatus.INVALID_CONFIRMATION_THRESHOLD);

@@ -233,7 +233,7 @@ public class RatingCalculationEngine {
             return minimumRating;
         }
         
-        return newRating.setScale(2, RoundingMode.HALF_UP);
+        return newRating.min(BigDecimal.valueOf(100)).setScale(2, RoundingMode.HALF_UP);
     }
 
     /**

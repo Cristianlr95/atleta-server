@@ -46,18 +46,16 @@ public class MatchPostMatchRatingService {
         this.ratingService = ratingService;
     }
 
+    public void validateFriendlyMatchTeamCount(Match match) {
+        validateFriendlyMatchTeamCount(match, matchTeamRepository.findByMatch(match));
+    }
+
     public void updatePlayerRatingsAfterMatch(Match match) {
         logger.debug("Iniciando actualizacion de calificaciones para el partido {}", match.getId());
 
         List<MatchTeam> matchTeams = matchTeamRepository.findByMatch(match);
+        validateFriendlyMatchTeamCount(match, matchTeams);
         boolean internalMatch = match.getMatchType() == MatchType.INTERNAL;
-        if (!internalMatch && matchTeams.size() != 2) {
-            if (match.isRotativeGoalkeeper()) {
-                throw new IllegalStateException("Se requieren dos equipos para calcular arquero rotativo");
-            }
-            logger.warn("El partido {} no tiene exactamente 2 equipos, saltando actualizacion de calificaciones", match.getId());
-            return;
-        }
 
         MatchResultType matchResult = internalMatch
                 ? resultForScore(match.getFinalScoreLocal(), match.getFinalScoreAway())
@@ -144,6 +142,15 @@ public class MatchPostMatchRatingService {
                     performanceData.size(),
                     match.getId()
             );
+        }
+    }
+
+    private void validateFriendlyMatchTeamCount(Match match, List<MatchTeam> matchTeams) {
+        if (match.getMatchType() != MatchType.INTERNAL && matchTeams.size() != 2) {
+            if (match.isRotativeGoalkeeper()) {
+                throw new IllegalStateException("Se requieren dos equipos para calcular arquero rotativo");
+            }
+            throw new IllegalArgumentException("Se requieren dos equipos para finalizar el partido y actualizar las calificaciones");
         }
     }
 

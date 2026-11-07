@@ -132,10 +132,8 @@ public class RatingController {
     @Operation(summary = "Actualizar calificaciones en modo arquero rotativo",
                description = "Actualiza las calificaciones de arquero para todos los jugadores en un partido con modo arquero rotativo")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Calificaciones de arquero rotativo actualizadas exitosamente"),
-        @ApiResponse(responseCode = "400", description = "Datos de entrada invÃ¡lidos"),
-        @ApiResponse(responseCode = "404", description = "Partido no encontrado"),
-        @ApiResponse(responseCode = "500", description = "Error interno en el cÃ¡lculo de calificaciones")
+        @ApiResponse(responseCode = "403", description = "Operacion temporalmente deshabilitada"),
+        @ApiResponse(responseCode = "400", description = "Datos de entrada invÃ¡lidos")
     })
     public ResponseEntity<String> updateRotativeGoalkeeperRatings(
             @Valid @RequestBody UpdateRotativeGoalkeeperRequest request) {
@@ -628,6 +626,8 @@ public class RatingController {
      * Convierte una entidad RatingHistory a RatingHistoryResponse.
      */
     private RatingHistoryResponse convertToRatingHistoryResponse(RatingHistory history) {
+        BigDecimal previousRating = history.getPreviousRating().min(BigDecimal.valueOf(100));
+        BigDecimal newRating = history.getNewRating().min(BigDecimal.valueOf(100));
         RatingHistoryResponse response = new RatingHistoryResponse(
                 history.getId(),
                 history.getPlayerRating().getPlayerProfile().getAtletaUuid(),
@@ -635,9 +635,9 @@ public class RatingController {
                 history.getPlayerRating().getRoleType(),
                 history.getPlayerRating().getPriorityLevel(),
                 history.getMatch().getId(),
-                history.getPreviousRating(),
-                history.getNewRating(),
-                history.getRatingDelta(),
+                previousRating,
+                newRating,
+                newRating.subtract(previousRating),
                 history.getGoalsScored(),
                 history.getAssistsMade(),
                 history.getGoalsConceded(),
@@ -648,6 +648,8 @@ public class RatingController {
         );
         
         // Agregar componentes detallados del cÃ¡lculo si estÃ¡n disponibles
+        response.setLegacyValuesCapped(history.getPreviousRating().compareTo(previousRating) != 0
+                || history.getNewRating().compareTo(newRating) != 0);
         response.setResultPoints(history.getResultPoints());
         response.setWeightedGoalPoints(history.getWeightedGoalPoints());
         response.setWeightedAssistPoints(history.getWeightedAssistPoints());

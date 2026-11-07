@@ -268,10 +268,24 @@ class MatchRatingIntegrationTest {
 
         when(matchRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleMatch));
         when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(matchTeamRepository.findByMatch(any(Match.class))).thenReturn(matchTeams);
         when(matchPlayerRepository.findByMatch(sampleMatch)).thenReturn(List.of());
 
         matchService.changeMatchStatus(1L, MatchStatus.FINALIZADO);
 
+        verify(ratingService, never()).updatePlayerRatings(any(), any());
+    }
+
+    @Test
+    void changeMatchStatus_RejectsFriendlyWithOneTeam() {
+        sampleMatch.setEstado(MatchStatus.INICIADO);
+        when(matchRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleMatch));
+        when(matchTeamRepository.findByMatch(any(Match.class))).thenReturn(List.of(matchTeams.get(0)));
+
+        assertThrows(IllegalArgumentException.class, () -> matchService.changeMatchStatus(1L, MatchStatus.FINALIZADO));
+        assertEquals(MatchStatus.INICIADO, sampleMatch.getEstado());
+        verify(matchRepository, never()).save(any(Match.class));
+        verify(matchPlayerRepository, never()).findByMatch(any(Match.class));
         verify(ratingService, never()).updatePlayerRatings(any(), any());
     }
 

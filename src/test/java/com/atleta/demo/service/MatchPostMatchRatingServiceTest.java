@@ -186,11 +186,11 @@ class MatchPostMatchRatingServiceTest {
     }
 
     @Test
-    void updatePlayerRatingsAfterMatch_SkipsWhenTeamsAreIncomplete() {
+    void updatePlayerRatingsAfterMatch_RejectsIncompleteTeams() {
         Match match = match(42L);
         when(matchTeamRepository.findByMatch(match)).thenReturn(List.of(matchTeam(match, team(1L), true, 0)));
 
-        service.updatePlayerRatingsAfterMatch(match);
+        assertThrows(IllegalArgumentException.class, () -> service.updatePlayerRatingsAfterMatch(match));
 
         verify(ratingService, never()).updatePlayerRatings(any(), any());
     }

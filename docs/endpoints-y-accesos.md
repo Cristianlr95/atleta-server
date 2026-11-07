@@ -12,6 +12,7 @@
 - **Tipo**: OAuth2 con JWT (JSON Web Tokens)
 - **Esquema**: Bearer Token
 - **Header**: `Authorization: Bearer <token>`
+- **Edición de canchas:** `PUT /api/v1/fields/{id}` permite editar o desactivar únicamente al creador autenticado. Las canchas anteriores sin creador verificable responden 403; la creación registra el usuario de la sesión. La creación y lectura permanecen disponibles para usuarios autenticados. Cambio local pendiente de despliegue.
 
 ### Perfiles de Ejecución
 1. **dev** (desarrollo): Puerto 8080, base de datos local
@@ -246,6 +247,7 @@ Authorization: Bearer <token>
 ```
 
 #### Agregar Experiencia a Posición
+**Bloqueado temporalmente:** responde 403 para usuarios autenticados hasta que la experiencia provenga de una operación verificada.
 ```http
 PUT /api/v1/player-profiles/{atletaUuid}/positions/{positionId}/experience?xp={cantidad}
 Authorization: Bearer <token>
@@ -254,6 +256,7 @@ Authorization: Bearer <token>
 ### 2.3 Trust Score
 
 #### Actualizar Trust Score
+**Bloqueado temporalmente:** responde 403 para usuarios autenticados hasta definir una regla autorizada de actualización.
 ```http
 PUT /api/v1/player-profiles/trust-score
 Authorization: Bearer <token>
@@ -465,6 +468,7 @@ Authorization: Bearer <token>
 ### 6.1 Actualización de Calificaciones
 
 #### Actualizar Calificaciones Manualmente
+**Bloqueado temporalmente:** responde 403 para usuarios autenticados; el cálculo interno durante el cierre del partido sigue disponible.
 ```http
 POST /api/v1/ratings/update
 Authorization: Bearer <token>
@@ -486,6 +490,8 @@ Content-Type: application/json
 ```
 
 #### Actualizar Calificaciones en Modo Arquero Rotativo
+**Bloqueado:** el endpoint responde 403 para evitar modificaciones globales no autorizadas. El modo se selecciona al crear el partido mediante `rotativeGoalkeeper` y se calcula al cierre con participantes confirmados y resultado del partido.
+
 ```http
 POST /api/v1/ratings/update-rotative-goalkeeper
 Authorization: Bearer <token>
