@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -132,6 +133,11 @@ public class AthleteService {
         logger.debug("Intentando autenticar atleta con email: {}", email);
 
         Optional<Athlete> athleteOpt = athleteRepository.findByEmail(email);
+        String canonicalEmail = email.toLowerCase(Locale.ROOT);
+        if (!email.equals(canonicalEmail)) {
+            // Keep exact matches for legacy accounts before falling back to the registration format.
+            athleteOpt = athleteOpt.or(() -> athleteRepository.findByEmail(canonicalEmail));
+        }
         
         if (athleteOpt.isPresent()) {
             Athlete athlete = athleteOpt.get();

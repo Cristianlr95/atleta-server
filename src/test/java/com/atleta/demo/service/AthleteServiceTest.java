@@ -159,6 +159,17 @@ class AthleteServiceTest {
     }
 
     @Test
+    void authenticate_MixedCaseEmail_ShouldFindCanonicalAccount() {
+        String password = "password123";
+        when(athleteRepository.findByEmail("Test@Example.com")).thenReturn(Optional.empty());
+        when(athleteRepository.findByEmail("test@example.com")).thenReturn(Optional.of(sampleAthlete));
+        when(passwordEncoder.matches(password, sampleAthlete.getPasswordHash())).thenReturn(true);
+
+        assertEquals(sampleAthlete.getAtletaUuid(),
+                athleteService.authenticate("Test@Example.com", password).orElseThrow().getAtletaUuid());
+    }
+
+    @Test
     void authenticate_IncorrectCredentials_ShouldReturnEmpty() {
         String email = "test@example.com";
         String wrongPassword = "wrongPassword";
