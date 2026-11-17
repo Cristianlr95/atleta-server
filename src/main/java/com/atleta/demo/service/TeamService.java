@@ -194,6 +194,7 @@ public class TeamService {
             );
             var goals = goalsByPlayer.get(member.getPlayer().getAtletaUuid());
             if (goals != null) {
+                item.setTeamMatches(goals.getTeamMatches() > 0 ? goals.getTeamMatches() : null);
                 item.setTotalGoals(goals.getTotalGoals());
                 item.setTotalAssists(goals.getTotalAssists());
                 item.setTeamAssists(goals.getTeamMatches() > 0 ? goals.getTeamAssists() : null);

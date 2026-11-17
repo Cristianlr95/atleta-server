@@ -13,6 +13,9 @@ public class TeamActiveMemberResponse {
     private String primaryPositionName;
     private BigDecimal ovr;
     private Long teamGoals;
+    private Long teamMatches;
+    public Long getTeamMatches() { return teamMatches; }
+    public void setTeamMatches(Long teamMatches) { this.teamMatches = teamMatches; }
     private Long totalGoals;
     private Long teamAssists;
     private Long totalAssists;

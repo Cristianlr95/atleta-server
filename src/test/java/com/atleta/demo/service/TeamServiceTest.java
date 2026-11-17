@@ -127,6 +127,7 @@ class TeamServiceTest {
         assertEquals(BigDecimal.valueOf(78.25), members.getFirst().getOvr());
         assertEquals(0L, members.getFirst().getTeamGoals());
         assertEquals(12L, members.getFirst().getTotalGoals());
+        assertEquals(1L, members.getFirst().getTeamMatches());
         verify(playerHistoryRepository).summarizeGoals(List.of(samplePlayer.getAtletaUuid()), sampleTeam.getId());
         verify(ratingService).calculateHybridOVRBatch(List.of(samplePlayer.getAtletaUuid()));
 
@@ -134,6 +135,7 @@ class TeamServiceTest {
         var withoutTeamHistory = teamService.getActiveMembersByTeam(sampleTeam.getId()).getFirst();
         assertNull(withoutTeamHistory.getTeamGoals());
         assertEquals(12L, withoutTeamHistory.getTotalGoals());
+        assertNull(withoutTeamHistory.getTeamMatches());
     }
 
     @Test
@@ -144,6 +146,7 @@ class TeamServiceTest {
         var member = teamService.getActiveMembersByTeam(1L).getFirst();
         assertNull(member.getTeamGoals());
         assertNull(member.getTotalGoals());
+        assertNull(member.getTeamMatches());
         clearInvocations(playerHistoryRepository);
         when(teamMemberRepository.findActiveByTeam(sampleTeam)).thenReturn(List.of());
         assertTrue(teamService.getActiveMembersByTeam(1L).isEmpty());

@@ -1,5 +1,9 @@
 # Memoria Viva del Backend Atleta
 
+## PJ con el equipo · 17/11/2026
+
+- El DTO de integrantes activos añade `teamMatches`: cuenta partidos finalizados distintos con historial del jugador para el equipo solicitado. Sin historial de ese equipo devuelve null. Se reutiliza el agregado existente, sin migración ni escritura histórica; incluye las participaciones históricas registradas, incluso anteriores a una salida y reingreso. Beta y PostgreSQL pendientes.
+
 ## Asistencias del plantel · 17/11/2026
 
 - El agregado de integrantes activos incorpora asistencias con el equipo y de trayectoria desde el mismo historial de partidos finalizados; respeta cero y ausencia. Sin migración ni escritura histórica. Verificación beta pendiente.
