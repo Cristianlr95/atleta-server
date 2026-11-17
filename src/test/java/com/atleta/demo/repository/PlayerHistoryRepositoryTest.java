@@ -111,7 +111,7 @@ class PlayerHistoryRepositoryTest {
         Match other = matchRepository.save(new Match(MatchMode.CINCO_VS_CINCO, LocalDateTime.now(), testPlayer1));
         other.setEstado(MatchStatus.FINALIZADO);
         matchRepository.save(other);
-        playerHistoryRepository.save(new PlayerHistory(other, testPlayer1, testTeam2, testPosition, 3, 0, MatchResult.VICTORIA, 5));
+        playerHistoryRepository.save(new PlayerHistory(other, testPlayer1, testTeam2, testPosition, 3, 4, MatchResult.VICTORIA, 5));
 
         var result = playerHistoryRepository.summarizeGoals(List.of(testPlayer1.getAtletaUuid()), testTeam1.getId());
         assertThat(result).hasSize(1);
@@ -119,6 +119,8 @@ class PlayerHistoryRepositoryTest {
         assertThat(result.getFirst().getTeamGoals()).isEqualTo(2L);
         assertThat(result.getFirst().getTotalGoals()).isEqualTo(5L);
         assertThat(result.getFirst().getTeamMatches()).isEqualTo(2L);
+        assertThat(result.getFirst().getTeamAssists()).isEqualTo(3L);
+        assertThat(result.getFirst().getTotalAssists()).isEqualTo(7L);
 
         var withoutTeamHistory = playerHistoryRepository.summarizeGoals(List.of(testPlayer2.getAtletaUuid()), testTeam1.getId()).getFirst();
         assertThat(withoutTeamHistory.getTeamMatches()).isZero();

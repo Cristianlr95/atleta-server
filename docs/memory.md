@@ -1,5 +1,9 @@
 # Memoria Viva del Backend Atleta
 
+## Asistencias del plantel · 17/11/2026
+
+- El agregado de integrantes activos incorpora asistencias con el equipo y de trayectoria desde el mismo historial de partidos finalizados; respeta cero y ausencia. Sin migración ni escritura histórica. Verificación beta pendiente.
+
 ## Plantel: goles por equipo y trayectoria · 17/11/2026
 
 - Suite completa en esta rama: 731 pruebas, cero fallos, errores u omisiones (JDK 21/H2). La cifra corresponde a esta base y no se suma a inventarios históricos.

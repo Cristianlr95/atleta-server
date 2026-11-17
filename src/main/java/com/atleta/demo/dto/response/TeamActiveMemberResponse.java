@@ -14,6 +14,12 @@ public class TeamActiveMemberResponse {
     private BigDecimal ovr;
     private Long teamGoals;
     private Long totalGoals;
+    private Long teamAssists;
+    private Long totalAssists;
+    public Long getTeamAssists() { return teamAssists; }
+    public void setTeamAssists(Long value) { this.teamAssists = value; }
+    public Long getTotalAssists() { return totalAssists; }
+    public void setTotalAssists(Long value) { this.totalAssists = value; }
 
     public Long getTeamGoals() { return teamGoals; }
     public void setTeamGoals(Long teamGoals) { this.teamGoals = teamGoals; }

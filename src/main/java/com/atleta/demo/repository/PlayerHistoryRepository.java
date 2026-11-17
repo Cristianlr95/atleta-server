@@ -31,12 +31,14 @@ public interface PlayerHistoryRepository extends JpaRepository<PlayerHistory, Lo
         Long getTeamGoals();
         Long getTotalGoals();
         Long getTeamMatches();
+        Long getTeamAssists();
+        Long getTotalAssists();
     }
 
     @Query("""
             SELECT ph.player.atletaUuid AS playerUuid, SUM(ph.goles) AS totalGoals,
                    SUM(CASE WHEN ph.team.id = :teamId THEN ph.goles ELSE 0 END) AS teamGoals,
-                   SUM(CASE WHEN ph.team.id = :teamId THEN 1 ELSE 0 END) AS teamMatches
+                   SUM(CASE WHEN ph.team.id = :teamId THEN 1 ELSE 0 END) AS teamMatches, SUM(ph.asistencias) AS totalAssists, SUM(CASE WHEN ph.team.id = :teamId THEN ph.asistencias ELSE 0 END) AS teamAssists
             FROM PlayerHistory ph
             WHERE ph.player.atletaUuid IN :playerIds AND ph.match.estado = 'FINALIZADO'
             GROUP BY ph.player.atletaUuid
