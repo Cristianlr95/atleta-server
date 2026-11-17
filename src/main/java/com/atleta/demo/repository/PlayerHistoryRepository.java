@@ -64,7 +64,7 @@ public interface PlayerHistoryRepository extends JpaRepository<PlayerHistory, Lo
     List<RankingGoals> summarizeRankingGoals(@Param("playerIds") List<UUID> playerIds, @Param("teamId") Long teamId);
 
     interface RankingResult {
-        UUID getPlayerUuid();
+        String getPlayerUuid();
         String getPositionName();
         String getResult();
         LocalDateTime getMatchDate();
@@ -74,7 +74,7 @@ public interface PlayerHistoryRepository extends JpaRepository<PlayerHistory, Lo
     @Query(value = """
             SELECT r.player_uuid AS "playerUuid", r.position_name AS "positionName", r.result AS "result",
                    r.match_date AS "matchDate", r.match_id AS "matchId"
-            FROM (SELECT ph.user_id AS player_uuid, p.nombre AS position_name, ph.resultado AS result,
+            FROM (SELECT CAST(ph.user_id AS VARCHAR(36)) AS player_uuid, p.nombre AS position_name, ph.resultado AS result,
                          m.fecha_hora_programada AS match_date, m.id AS match_id,
                          ROW_NUMBER() OVER (PARTITION BY ph.user_id, ph.position_id
                            ORDER BY m.fecha_hora_programada DESC, m.id DESC) AS rn
@@ -87,7 +87,7 @@ public interface PlayerHistoryRepository extends JpaRepository<PlayerHistory, Lo
     @Query(value = """
             SELECT r.player_uuid AS "playerUuid", r.position_name AS "positionName", r.result AS "result",
                    r.match_date AS "matchDate", r.match_id AS "matchId"
-            FROM (SELECT ph.user_id AS player_uuid, p.nombre AS position_name, ph.resultado AS result,
+            FROM (SELECT CAST(ph.user_id AS VARCHAR(36)) AS player_uuid, p.nombre AS position_name, ph.resultado AS result,
                          m.fecha_hora_programada AS match_date, m.id AS match_id,
                          ROW_NUMBER() OVER (PARTITION BY ph.user_id, ph.position_id
                            ORDER BY m.fecha_hora_programada DESC, m.id DESC) AS rn

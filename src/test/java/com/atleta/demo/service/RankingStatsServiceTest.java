@@ -59,7 +59,7 @@ class RankingStatsServiceTest {
         var matches = new java.util.ArrayList<PlayerHistoryRepository.RankingResult>();
         for (int i = 1; i <= 6; i++) {
             var item = mock(PlayerHistoryRepository.RankingResult.class);
-            when(item.getPlayerUuid()).thenReturn(id);
+            when(item.getPlayerUuid()).thenReturn(id.toString());
             when(item.getPositionName()).thenReturn(i == 6 ? "Defensa" : "Delantero");
             when(item.getMatchDate()).thenReturn(java.time.LocalDateTime.of(2026, 1, i, 12, 0));
             when(item.getMatchId()).thenReturn((long) i);
@@ -81,7 +81,7 @@ class RankingStatsServiceTest {
         var first = mock(PlayerHistoryRepository.RankingResult.class);
         var second = mock(PlayerHistoryRepository.RankingResult.class);
         for (var item : List.of(first, second)) {
-            when(item.getPlayerUuid()).thenReturn(id);
+            when(item.getPlayerUuid()).thenReturn(id.toString());
             when(item.getPositionName()).thenReturn("Delantero");
             when(item.getMatchDate()).thenReturn(java.time.LocalDateTime.of(2026, 1, 1, 12, 0));
         }

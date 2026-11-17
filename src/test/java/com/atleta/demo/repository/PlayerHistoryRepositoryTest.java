@@ -4,6 +4,8 @@ import com.atleta.demo.entity.*;
 import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.enums.MatchResult;
 import com.atleta.demo.enums.MatchStatus;
+import com.atleta.demo.enums.RoleType;
+import com.atleta.demo.service.RankingStatsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +31,9 @@ class PlayerHistoryRepositoryTest {
 
     @Autowired
     private PlayerHistoryRepository playerHistoryRepository;
+
+    @Autowired
+    private RankingStatsService rankingStatsService;
 
     @Autowired
     private AthleteRepository athleteRepository;
@@ -129,6 +134,14 @@ class PlayerHistoryRepositoryTest {
         assertThat(careerGoals.getFirst().getMvps()).isEqualTo(1L);
         assertThat(playerHistoryRepository.summarizeRankingGoals(List.of(testPlayer1.getAtletaUuid()), testTeam1.getId()).getFirst().getGoals()).isEqualTo(2L);
         assertThat(playerHistoryRepository.summarizeRankingGoals(List.of(testPlayer1.getAtletaUuid()), testTeam2.getId()).getFirst().getMvps()).isZero();
+        var careerStats = rankingStatsService.calculate(List.of(testPlayer1.getAtletaUuid()), null, RoleType.ATAQUE).get(testPlayer1.getAtletaUuid());
+        assertThat(careerStats.total()).isEqualTo(5L);
+        assertThat(careerStats.role()).isEqualTo(5L);
+        assertThat(careerStats.mvpTotal()).isEqualTo(1L);
+        assertThat(careerStats.recentResults()).containsExactly("EMPATE", "VICTORIA", "VICTORIA");
+        var teamStats = rankingStatsService.calculate(List.of(testPlayer1.getAtletaUuid()), testTeam1.getId(), null).get(testPlayer1.getAtletaUuid());
+        assertThat(teamStats.total()).isEqualTo(2L);
+        assertThat(teamStats.recentResults()).containsExactly("EMPATE", "VICTORIA");
         testMatch1.setMvpUser(testPlayer2);
         matchRepository.saveAndFlush(testMatch1);
         assertThat(playerHistoryRepository.summarizeRankingGoals(List.of(testPlayer1.getAtletaUuid()), -1L).getFirst().getMvps()).isZero();

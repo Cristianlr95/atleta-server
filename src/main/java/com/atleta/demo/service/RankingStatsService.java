@@ -51,7 +51,7 @@ public class RankingStatsService {
         var recent = teamId == null ? history.findRecentRankingResults(playerIds)
                 : history.findRecentRankingTeamResults(playerIds, teamId);
         for (var item : recent) {
-            var entry = totals.get(item.getPlayerUuid());
+            var entry = totals.get(UUID.fromString(item.getPlayerUuid()));
             if (entry == null) continue;
             entry.recent.add(item);
             if (role != null && RatingService.mapPositionToRole(item.getPositionName()) == role) entry.recentRole.add(item);
