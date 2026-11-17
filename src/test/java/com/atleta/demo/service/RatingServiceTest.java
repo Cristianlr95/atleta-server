@@ -61,6 +61,9 @@ class RatingServiceTest {
     @Mock
     private MatchRepository matchRepository;
 
+    @Mock
+    private RankingGoalsService rankingGoalsService;
+
     private RatingService ratingService;
 
     @Test
@@ -131,8 +134,24 @@ class RatingServiceTest {
                 ratingHistoryRepository,
                 playerProfileRepository,
                 playerPositionRepository,
-                matchRepository
+                matchRepository,
+                rankingGoalsService
         );
+    }
+
+    @Test
+    void leaderboardReturnsCareerAndFilteredRoleGoals() {
+        var id = UUID.randomUUID();
+        var player = new PlayerProfile();
+        player.setAtletaUuid(id);
+        player.setAlias("Jugador");
+        var rating = new PlayerRating(player, RoleType.ATAQUE, PriorityLevel.PRINCIPAL, BigDecimal.valueOf(70));
+        when(playerRatingRepository.findByRoleType(RoleType.ATAQUE)).thenReturn(List.of(rating));
+        when(rankingGoalsService.calculate(List.of(id), null, RoleType.ATAQUE))
+                .thenReturn(Map.of(id, new RankingGoalsService.Goals(5L, 3L)));
+        var rows = ratingService.getLeaderboard(RoleType.ATAQUE, 10);
+        assertEquals(5L, rows.getFirst().getGoalsScored());
+        assertEquals(3L, rows.getFirst().getGoalsForRole());
     }
 
     @Test

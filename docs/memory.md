@@ -1,5 +1,9 @@
 # Memoria Viva del Backend Atleta
 
+## Ranking: goles · 17/11/2026
+
+- Avance local BE-RANK-01 en `feature/ranking-stats-20261117`: suma agrupada por jugador y posición de `PlayerHistory` finalizado, global o por equipo; rating por múltiples roles no duplica eventos. En posición se informa trayectoria y posición; posición histórica no clasificable conserva null para ese alcance. 66 pruebas backend dirigidas correctas en H2. MVP, resultados, PostgreSQL y beta pendientes.
+
 ## BE-PLANTEL-03 · 17/11/2026
 
 - Se comprobó el contrato existente: historial de partidos finalizados, generado al cierre para participantes confirmados y eventos confirmados; cero, ausencia y errores separados. Lectura de integrantes activos requiere JWT, sin restricción de membresía en la política actual. Pruebas añadidas para jugador/evento sin confirmar y rechazo sin sesión; registros antiguos y beta no auditados.

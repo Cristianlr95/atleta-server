@@ -40,6 +40,7 @@ class TeamLeaderboardServiceTest {
     @Mock private TeamMemberRepository teamMemberRepository;
     @Mock private PlayerRatingRepository playerRatingRepository;
     @Mock private MatchTeamRepository matchTeamRepository;
+    @Mock private RankingGoalsService rankingGoalsService;
 
     private TeamLeaderboardService service;
     private Team team;
@@ -49,7 +50,7 @@ class TeamLeaderboardServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TeamLeaderboardService(teamRepository, teamMemberRepository, playerRatingRepository, matchTeamRepository);
+        service = new TeamLeaderboardService(teamRepository, teamMemberRepository, playerRatingRepository, matchTeamRepository, rankingGoalsService);
         alpha = player("11111111-1111-1111-1111-111111111111", "Alpha");
         beta = player("22222222-2222-2222-2222-222222222222", "Beta");
         unrated = player("33333333-3333-3333-3333-333333333333", "Sin rating");
@@ -65,12 +66,16 @@ class TeamLeaderboardServiceTest {
         when(playerRatingRepository.findByPlayerProfileIds(List.of(
                 alpha.getAtletaUuid(), beta.getAtletaUuid(), unrated.getAtletaUuid())))
                 .thenReturn(List.of(rating(alpha, 80, 4), rating(beta, 80, 3)));
+        when(rankingGoalsService.calculate(List.of(alpha.getAtletaUuid(), beta.getAtletaUuid(), unrated.getAtletaUuid()), 77L, null))
+                .thenReturn(java.util.Map.of(alpha.getAtletaUuid(), new RankingGoalsService.Goals(0L, null)));
 
         List<TeamLeaderboardEntryResponse> result = service.getLeaderboard(77L, alpha.getAtletaUuid());
 
         assertEquals(List.of("Alpha", "Beta", "Sin rating"), result.stream().map(TeamLeaderboardEntryResponse::alias).toList());
         assertEquals(1, result.get(0).rank());
         assertEquals(1, result.get(1).rank());
+        assertEquals(0L, result.get(0).goalsScored());
+        assertNull(result.get(1).goalsScored());
         assertEquals(BigDecimal.valueOf(80).setScale(2), result.get(0).score());
         assertNull(result.get(2).score());
         assertEquals(false, result.get(2).rated());

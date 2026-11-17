@@ -18,6 +18,12 @@ public class LeaderboardEntryResponse {
     private Long wins;
     private Long losses;
     private Long draws;
+    private Long goalsScored;
+    private Long goalsForRole;
+    public Long getGoalsScored() { return goalsScored; }
+    public void setGoalsScored(Long goalsScored) { this.goalsScored = goalsScored; }
+    public Long getGoalsForRole() { return goalsForRole; }
+    public void setGoalsForRole(Long goalsForRole) { this.goalsForRole = goalsForRole; }
 
     public LeaderboardEntryResponse() {
     }

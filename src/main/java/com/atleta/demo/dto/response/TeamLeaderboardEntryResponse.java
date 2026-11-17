@@ -9,6 +9,10 @@ public record TeamLeaderboardEntryResponse(
         String alias,
         BigDecimal score,
         int matchesPlayed,
-        boolean rated
+        boolean rated,
+        Long goalsScored
 ) {
+    public TeamLeaderboardEntryResponse(int rank, UUID playerProfileId, String alias, BigDecimal score, int matchesPlayed, boolean rated) {
+        this(rank, playerProfileId, alias, score, matchesPlayed, rated, null);
+    }
 }

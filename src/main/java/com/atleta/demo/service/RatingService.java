@@ -63,19 +63,22 @@ public class RatingService {
     private final PlayerProfileRepository playerProfileRepository;
     private final PlayerPositionRepository playerPositionRepository;
     private final MatchRepository matchRepository;
+    private final RankingGoalsService rankingGoalsService;
 
     public RatingService(RatingCalculationEngine calculationEngine,
                         PlayerRatingRepository playerRatingRepository,
                         RatingHistoryRepository ratingHistoryRepository,
                         PlayerProfileRepository playerProfileRepository,
                         PlayerPositionRepository playerPositionRepository,
-                        MatchRepository matchRepository) {
+                        MatchRepository matchRepository,
+                        RankingGoalsService rankingGoalsService) {
         this.calculationEngine = calculationEngine;
         this.playerRatingRepository = playerRatingRepository;
         this.ratingHistoryRepository = ratingHistoryRepository;
         this.playerProfileRepository = playerProfileRepository;
         this.playerPositionRepository = playerPositionRepository;
         this.matchRepository = matchRepository;
+        this.rankingGoalsService = rankingGoalsService;
     }
 
     /**
@@ -895,6 +898,14 @@ public class RatingService {
             }
         }
 
+        var goals = rankingGoalsService.calculate(rows.stream().map(LeaderboardEntryResponse::getPlayerProfileId).toList(), null, roleType);
+        for (var row : rows) {
+            var playerGoals = goals.get(row.getPlayerProfileId());
+            if (playerGoals != null) {
+                row.setGoalsScored(playerGoals.total());
+                row.setGoalsForRole(playerGoals.role());
+            }
+        }
         return rows;
     }
 

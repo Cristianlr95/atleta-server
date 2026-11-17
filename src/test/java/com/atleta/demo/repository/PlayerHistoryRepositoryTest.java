@@ -121,6 +121,10 @@ class PlayerHistoryRepositoryTest {
         assertThat(result.getFirst().getTeamMatches()).isEqualTo(2L);
         assertThat(result.getFirst().getTeamAssists()).isEqualTo(3L);
         assertThat(result.getFirst().getTotalAssists()).isEqualTo(7L);
+        var careerGoals = playerHistoryRepository.summarizeRankingGoals(List.of(testPlayer1.getAtletaUuid()), null);
+        assertThat(careerGoals).hasSize(1);
+        assertThat(careerGoals.getFirst().getGoals()).isEqualTo(5L);
+        assertThat(playerHistoryRepository.summarizeRankingGoals(List.of(testPlayer1.getAtletaUuid()), testTeam1.getId()).getFirst().getGoals()).isEqualTo(2L);
 
         var withoutTeamHistory = playerHistoryRepository.summarizeGoals(List.of(testPlayer2.getAtletaUuid()), testTeam1.getId()).getFirst();
         assertThat(withoutTeamHistory.getTeamMatches()).isZero();

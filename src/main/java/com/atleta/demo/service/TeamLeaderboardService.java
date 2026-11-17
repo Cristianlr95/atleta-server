@@ -29,17 +29,20 @@ public class TeamLeaderboardService {
     private final TeamMemberRepository teamMemberRepository;
     private final PlayerRatingRepository playerRatingRepository;
     private final MatchTeamRepository matchTeamRepository;
+    private final RankingGoalsService rankingGoalsService;
 
     public TeamLeaderboardService(
             TeamRepository teamRepository,
             TeamMemberRepository teamMemberRepository,
             PlayerRatingRepository playerRatingRepository,
-            MatchTeamRepository matchTeamRepository
+            MatchTeamRepository matchTeamRepository,
+            RankingGoalsService rankingGoalsService
     ) {
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
         this.playerRatingRepository = playerRatingRepository;
         this.matchTeamRepository = matchTeamRepository;
+        this.rankingGoalsService = rankingGoalsService;
     }
 
     @Transactional(readOnly = true)
@@ -74,6 +77,7 @@ public class TeamLeaderboardService {
                 .toList();
 
         List<TeamLeaderboardEntryResponse> result = new ArrayList<>();
+        var goals = rankingGoalsService.calculate(playerIds, teamId, null);
         BigDecimal previousScore = null;
         int currentRank = 0;
         for (int index = 0; index < entries.size(); index++) {
@@ -87,7 +91,8 @@ public class TeamLeaderboardService {
                     entry.alias(),
                     entry.score(),
                     entry.matchesPlayed(),
-                    entry.rated()
+                    entry.rated(),
+                    goals.containsKey(entry.playerProfileId()) ? goals.get(entry.playerProfileId()).total() : null
             ));
             previousScore = entry.score();
         }

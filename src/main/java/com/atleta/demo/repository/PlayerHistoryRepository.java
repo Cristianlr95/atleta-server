@@ -45,6 +45,22 @@ public interface PlayerHistoryRepository extends JpaRepository<PlayerHistory, Lo
             """)
     List<GoalTotals> summarizeGoals(@Param("playerIds") List<UUID> playerIds, @Param("teamId") Long teamId);
 
+    interface RankingGoals {
+        UUID getPlayerUuid();
+        String getPositionName();
+        Long getGoals();
+    }
+
+    @Query("""
+            SELECT ph.player.atletaUuid AS playerUuid, ph.position.nombre AS positionName,
+                   SUM(ph.goles) AS goals
+            FROM PlayerHistory ph
+            WHERE ph.player.atletaUuid IN :playerIds AND ph.match.estado = 'FINALIZADO'
+              AND (:teamId IS NULL OR ph.team.id = :teamId)
+            GROUP BY ph.player.atletaUuid, ph.position.nombre
+            """)
+    List<RankingGoals> summarizeRankingGoals(@Param("playerIds") List<UUID> playerIds, @Param("teamId") Long teamId);
+
     /**
      * Busca todo el historial de un jugador específico
      * @param player Perfil del jugador

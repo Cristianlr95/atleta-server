@@ -42,7 +42,7 @@ class RatingMaximumTest {
 
     @Test
     void hybridAndWeightedOverallReachButDoNotExceedOneHundred() {
-        var service = new RatingService(null, null, null, null, null, null);
+        var service = new RatingService(null, null, null, null, null, null, null);
         var profile = new PlayerProfile();
         List<PlayerRating> ratings = new ArrayList<>();
         for (RoleType role : RoleType.values()) {
