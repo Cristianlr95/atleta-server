@@ -110,7 +110,8 @@ public class TeamController {
 
     @GetMapping("/{teamId}/members/active")
     @Operation(summary = "Listar miembros activos de equipo",
-            description = "Retorna jugadores activos del equipo con su posicion principal")
+            description = "Retorna jugadores activos con posicion principal, goles con el equipo y goles totales "
+                    + "del historial de partidos finalizados; sin historial para el alcance, goles null")
     public ResponseEntity<List<TeamActiveMemberResponse>> getActiveMembersByTeam(@PathVariable Long teamId) {
         try {
             return ResponseEntity.ok(teamService.getActiveMembersByTeam(teamId));

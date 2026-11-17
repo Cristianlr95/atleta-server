@@ -55,6 +55,9 @@ class TeamServiceTest {
     @Mock
     private RatingService ratingService;
 
+    @Mock
+    private PlayerHistoryRepository playerHistoryRepository;
+
     private TeamService teamService;
 
     private CreateTeamRequest validCreateRequest;
@@ -72,7 +75,8 @@ class TeamServiceTest {
                 playerPositionRepository,
                 teamInviteRepository,
                 matchInviteRepository,
-                ratingService
+                ratingService,
+                playerHistoryRepository
         );
 
         UUID playerId = UUID.randomUUID();
@@ -109,12 +113,41 @@ class TeamServiceTest {
         when(playerPositionRepository.findPrimaryPositionByPlayer(samplePlayer)).thenReturn(Optional.empty());
         when(ratingService.calculateHybridOVRBatch(List.of(samplePlayer.getAtletaUuid())))
                 .thenReturn(Map.of(samplePlayer.getAtletaUuid(), BigDecimal.valueOf(78.25)));
+        var goals = mock(PlayerHistoryRepository.GoalTotals.class);
+        when(goals.getPlayerUuid()).thenReturn(samplePlayer.getAtletaUuid());
+        when(goals.getTeamMatches()).thenReturn(1L);
+        when(goals.getTeamGoals()).thenReturn(0L);
+        when(goals.getTotalGoals()).thenReturn(12L);
+        when(playerHistoryRepository.summarizeGoals(List.of(samplePlayer.getAtletaUuid()), sampleTeam.getId()))
+                .thenReturn(List.of(goals));
 
         List<TeamActiveMemberResponse> members = teamService.getActiveMembersByTeam(sampleTeam.getId());
 
         assertEquals(1, members.size());
         assertEquals(BigDecimal.valueOf(78.25), members.getFirst().getOvr());
+        assertEquals(0L, members.getFirst().getTeamGoals());
+        assertEquals(12L, members.getFirst().getTotalGoals());
+        verify(playerHistoryRepository).summarizeGoals(List.of(samplePlayer.getAtletaUuid()), sampleTeam.getId());
         verify(ratingService).calculateHybridOVRBatch(List.of(samplePlayer.getAtletaUuid()));
+
+        when(goals.getTeamMatches()).thenReturn(0L);
+        var withoutTeamHistory = teamService.getActiveMembersByTeam(sampleTeam.getId()).getFirst();
+        assertNull(withoutTeamHistory.getTeamGoals());
+        assertEquals(12L, withoutTeamHistory.getTotalGoals());
+    }
+
+    @Test
+    void memberWithoutHistoryKeepsMissingGoalsAndEmptyTeamSkipsAggregation() {
+        when(teamRepository.findById(1L)).thenReturn(Optional.of(sampleTeam));
+        when(teamMemberRepository.findActiveByTeam(sampleTeam)).thenReturn(List.of(new TeamMember(sampleTeam, samplePlayer, com.atleta.demo.enums.PlayerRole.JUGADOR)));
+        when(ratingService.calculateHybridOVRBatch(any())).thenReturn(Map.of());
+        var member = teamService.getActiveMembersByTeam(1L).getFirst();
+        assertNull(member.getTeamGoals());
+        assertNull(member.getTotalGoals());
+        clearInvocations(playerHistoryRepository);
+        when(teamMemberRepository.findActiveByTeam(sampleTeam)).thenReturn(List.of());
+        assertTrue(teamService.getActiveMembersByTeam(1L).isEmpty());
+        verifyNoInteractions(playerHistoryRepository);
     }
 
     @Test

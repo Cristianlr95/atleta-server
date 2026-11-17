@@ -26,6 +26,23 @@ import java.util.UUID;
 @Repository
 public interface PlayerHistoryRepository extends JpaRepository<PlayerHistory, Long> {
 
+    interface GoalTotals {
+        UUID getPlayerUuid();
+        Long getTeamGoals();
+        Long getTotalGoals();
+        Long getTeamMatches();
+    }
+
+    @Query("""
+            SELECT ph.player.atletaUuid AS playerUuid, SUM(ph.goles) AS totalGoals,
+                   SUM(CASE WHEN ph.team.id = :teamId THEN ph.goles ELSE 0 END) AS teamGoals,
+                   SUM(CASE WHEN ph.team.id = :teamId THEN 1 ELSE 0 END) AS teamMatches
+            FROM PlayerHistory ph
+            WHERE ph.player.atletaUuid IN :playerIds AND ph.match.estado = 'FINALIZADO'
+            GROUP BY ph.player.atletaUuid
+            """)
+    List<GoalTotals> summarizeGoals(@Param("playerIds") List<UUID> playerIds, @Param("teamId") Long teamId);
+
     /**
      * Busca todo el historial de un jugador específico
      * @param player Perfil del jugador

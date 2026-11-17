@@ -12,6 +12,13 @@ public class TeamActiveMemberResponse {
     private Long primaryPositionId;
     private String primaryPositionName;
     private BigDecimal ovr;
+    private Long teamGoals;
+    private Long totalGoals;
+
+    public Long getTeamGoals() { return teamGoals; }
+    public void setTeamGoals(Long teamGoals) { this.teamGoals = teamGoals; }
+    public Long getTotalGoals() { return totalGoals; }
+    public void setTotalGoals(Long totalGoals) { this.totalGoals = totalGoals; }
 
     public TeamActiveMemberResponse() {
     }

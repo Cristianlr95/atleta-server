@@ -12,6 +12,7 @@ import com.atleta.demo.entity.TeamMember;
 import com.atleta.demo.entity.TeamStats;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.repository.PlayerProfileRepository;
+import com.atleta.demo.repository.PlayerHistoryRepository;
 import com.atleta.demo.repository.PlayerPositionRepository;
 import com.atleta.demo.repository.MatchInviteRepository;
 import com.atleta.demo.repository.TeamMemberRepository;
@@ -53,6 +54,7 @@ public class TeamService {
     private final TeamInviteRepository teamInviteRepository;
     private final MatchInviteRepository matchInviteRepository;
     private final RatingService ratingService;
+    private final PlayerHistoryRepository playerHistoryRepository;
 
     public TeamService(TeamRepository teamRepository,
                        PlayerProfileRepository playerProfileRepository,
@@ -61,7 +63,8 @@ public class TeamService {
                        PlayerPositionRepository playerPositionRepository,
                        TeamInviteRepository teamInviteRepository,
                        MatchInviteRepository matchInviteRepository,
-                       RatingService ratingService) {
+                       RatingService ratingService,
+                       PlayerHistoryRepository playerHistoryRepository) {
         this.teamRepository = teamRepository;
         this.playerProfileRepository = playerProfileRepository;
         this.teamMemberRepository = teamMemberRepository;
@@ -70,6 +73,7 @@ public class TeamService {
         this.teamInviteRepository = teamInviteRepository;
         this.matchInviteRepository = matchInviteRepository;
         this.ratingService = ratingService;
+        this.playerHistoryRepository = playerHistoryRepository;
     }
 
     public TeamResponse createTeam(CreateTeamRequest request) {
@@ -160,6 +164,14 @@ public class TeamService {
         }
 
         List<TeamMember> activeMembers = teamMemberRepository.findActiveByTeam(team);
+        if (activeMembers.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, PlayerHistoryRepository.GoalTotals> goalsByPlayer = new LinkedHashMap<>();
+        for (var totals : playerHistoryRepository.summarizeGoals(
+                activeMembers.stream().map(member -> member.getPlayer().getAtletaUuid()).distinct().toList(), teamId)) {
+            goalsByPlayer.put(totals.getPlayerUuid(), totals);
+        }
         List<TeamActiveMemberResponse> response = new ArrayList<>();
         Map<UUID, BigDecimal> overallByPlayer = ratingService.calculateHybridOVRBatch(
                 activeMembers.stream()
@@ -172,14 +184,20 @@ public class TeamService {
                     .findPrimaryPositionByPlayer(member.getPlayer())
                     .orElse(null);
 
-            response.add(new TeamActiveMemberResponse(
+            TeamActiveMemberResponse item = new TeamActiveMemberResponse(
                     member.getPlayer().getAtletaUuid(),
                     member.getPlayer().getAlias(),
                     member.getRol(),
                     primaryPosition != null && primaryPosition.getPosition() != null ? primaryPosition.getPosition().getId() : null,
                     primaryPosition != null && primaryPosition.getPosition() != null ? primaryPosition.getPosition().getNombre() : null,
                     overallByPlayer.getOrDefault(member.getPlayer().getAtletaUuid(), BigDecimal.valueOf(65))
-            ));
+            );
+            var goals = goalsByPlayer.get(member.getPlayer().getAtletaUuid());
+            if (goals != null) {
+                item.setTotalGoals(goals.getTotalGoals());
+                item.setTeamGoals(goals.getTeamMatches() > 0 ? goals.getTeamGoals() : null);
+            }
+            response.add(item);
         }
 
         return response;

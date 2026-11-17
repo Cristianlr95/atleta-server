@@ -1,5 +1,13 @@
 # Memoria Viva del Backend Atleta
 
+## Plantel: goles por equipo y trayectoria · 17/11/2026
+
+- Suite completa en esta rama: 731 pruebas, cero fallos, errores u omisiones (JDK 21/H2). La cifra corresponde a esta base y no se suma a inventarios históricos.
+
+- El usuario eligió ambos valores. `GET /api/v1/teams/{teamId}/members/active` añade `teamGoals`/`totalGoals`, sumados en una consulta de PlayerHistory para integrantes activos y partidos FINALIZADO. Equipo = equipo registrado en cada participación, incluso antes de una salida/reingreso; trayectoria = todos los equipos. Sin historial para el alcance, null; cero registrado se conserva.
+- Se mantiene la política JWT existente para lecturas deportivas; no se entregan historiales privados ni se cambian permisos de administración. Sin migraciones, escrituras históricas o recálculos de OVR. El plantel vacío evita consultar agregados.
+- Pruebas dirigidas de repositorio H2, servicio y contrato MVC aprobadas (54). Frontend derivado de 1e1ddd8 consume ambos valores en tabla/modal; 272 unitarias y dos E2E simulados aprobados. Rama backend `feature/team-goal-totals-20261117`, derivada de 7cf72ef. Sin publicación; PostgreSQL y datos reales no verificados. Asistencias y beta permanecen pendientes.
+
 ## Vision general
 
 Backend monolitico en Java 21 con Spring Boot 3.3.2 orientado a gestionar identidad de atletas, perfiles futbolisticos, equipos, partidos, rating/OVR, XP, invitaciones sociales y notificaciones internas.

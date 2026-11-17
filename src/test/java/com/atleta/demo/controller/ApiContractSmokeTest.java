@@ -378,6 +378,8 @@ class ApiContractSmokeTest {
                 BigDecimal.valueOf(82.5)
         );
 
+        member.setTeamGoals(0L);
+        member.setTotalGoals(12L);
         when(teamService.createTeam(any())).thenReturn(team);
         when(teamService.getTeamsByCreator(USER_ID)).thenReturn(List.of(team));
         when(teamService.getTeamsByPlayer(USER_ID)).thenReturn(List.of(team));
@@ -409,7 +411,9 @@ class ApiContractSmokeTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].playerUuid").value(USER_ID.toString()))
                 .andExpect(jsonPath("$[0].primaryPositionName").value("Delantero"))
-                .andExpect(jsonPath("$[0].ovr").value(82.5));
+                .andExpect(jsonPath("$[0].ovr").value(82.5))
+                .andExpect(jsonPath("$[0].teamGoals").value(0))
+                .andExpect(jsonPath("$[0].totalGoals").value(12));
 
         mockMvc.perform(delete("/api/v1/teams/{teamId}", 77L)
                         .with(jwtFor(USER_ID))

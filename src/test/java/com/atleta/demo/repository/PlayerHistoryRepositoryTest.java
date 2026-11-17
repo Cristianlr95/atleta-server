@@ -107,6 +107,36 @@ class PlayerHistoryRepositoryTest {
     }
 
     @Test
+    void aggregatesGoalsForRequestedPlayersSeparatingTeamAndCareer() {
+        Match other = matchRepository.save(new Match(MatchMode.CINCO_VS_CINCO, LocalDateTime.now(), testPlayer1));
+        other.setEstado(MatchStatus.FINALIZADO);
+        matchRepository.save(other);
+        playerHistoryRepository.save(new PlayerHistory(other, testPlayer1, testTeam2, testPosition, 3, 0, MatchResult.VICTORIA, 5));
+
+        var result = playerHistoryRepository.summarizeGoals(List.of(testPlayer1.getAtletaUuid()), testTeam1.getId());
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().getPlayerUuid()).isEqualTo(testPlayer1.getAtletaUuid());
+        assertThat(result.getFirst().getTeamGoals()).isEqualTo(2L);
+        assertThat(result.getFirst().getTotalGoals()).isEqualTo(5L);
+        assertThat(result.getFirst().getTeamMatches()).isEqualTo(2L);
+
+        var withoutTeamHistory = playerHistoryRepository.summarizeGoals(List.of(testPlayer2.getAtletaUuid()), testTeam1.getId()).getFirst();
+        assertThat(withoutTeamHistory.getTeamMatches()).isZero();
+        assertThat(withoutTeamHistory.getTotalGoals()).isEqualTo(1L);
+
+        testMatch1.setEstado(MatchStatus.INVALIDO);
+        matchRepository.saveAndFlush(testMatch1);
+        var filtered = playerHistoryRepository.summarizeGoals(List.of(testPlayer1.getAtletaUuid()), testTeam1.getId()).getFirst();
+        assertThat(filtered.getTeamGoals()).isZero();
+        assertThat(filtered.getTotalGoals()).isEqualTo(3L);
+        assertThat(filtered.getTeamMatches()).isEqualTo(1L);
+
+        assertThat(playerHistoryRepository.summarizeGoals(List.of(java.util.UUID.randomUUID()), testTeam1.getId())).isEmpty();
+        var away = playerHistoryRepository.summarizeGoals(List.of(testPlayer2.getAtletaUuid()), testTeam1.getId());
+        assertThat(away).isEmpty();
+    }
+
+    @Test
     void testFindByPlayerOrderByCreatedAtDesc_ValidPlayer_ReturnsPlayerHistory() {
         // When
         List<PlayerHistory> results = playerHistoryRepository.findByPlayerOrderByCreatedAtDesc(testPlayer1);
