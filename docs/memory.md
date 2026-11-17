@@ -1,8 +1,12 @@
 # Memoria Viva del Backend Atleta
 
+## Revisión de XP independiente · 17/11/2026
+
+- `XPService` no tiene consumidores de producción identificados. El cierre y su preview usan `MatchXpCalculator`; las fórmulas difieren (victoria y gol delantero: 30 frente a 14 XP), y el motor independiente no aplica el límite 25. Límites numéricos, negativos y posiciones requieren resolución antes de conectarlo. [Detalle](revision-xp-independiente-2026-11-17.md). No se cambiaron reglas ni datos; balance pendiente con datos reales.
+
 ## Ranking: MVP y resultados · 17/11/2026
 
-- Implementación local en `feature/ranking-stats-20261117`: agrega goles, ganador MVP oficial y hasta cinco resultados por trayectoria/posición/equipo desde `PlayerHistory` de partidos finalizados. Dos consultas en lote, con ventana por jugador y posición para limitar resultados. Histórico sin clasificación deja estadísticas por posición desconocidas. 738 pruebas backend H2 y dos pruebas de repositorio PostgreSQL 18 con datos sintéticos aprobadas; Flyway advierte que su soporte probado llega a PostgreSQL 16. Sin auditoría de datos históricos, beta ni publicación.
+- Implementación local en `feature/ranking-stats-20261117`: agrega goles, ganador MVP oficial y hasta cinco resultados por trayectoria/posición/equipo desde `PlayerHistory` de partidos finalizados. Dos consultas en lote, con ventana por jugador y posición para limitar resultados. Histórico sin clasificación deja estadísticas por posición desconocidas. 739 pruebas backend H2 y dos pruebas de repositorio PostgreSQL 18 con datos sintéticos aprobadas; Flyway advierte que su soporte probado llega a PostgreSQL 16. Sin auditoría de datos históricos, beta ni publicación.
 
 ## Ranking: goles · 17/11/2026
 
