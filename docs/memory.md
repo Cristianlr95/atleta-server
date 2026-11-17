@@ -1,5 +1,9 @@
 # Memoria Viva del Backend Atleta
 
+## Integración local de Ranking · 17/11/2026
+
+- La rama `feature/ranking-stats-20261117` se incorporó por avance directo a `main` local en `9a913c5`; frontend también integrado. Tras la integración pasaron 36 pruebas dirigidas de repositorio y servicios de Ranking. Sin push ni despliegue; validación beta y datos reales pendientes.
+
 ## Revisión de XP independiente · 17/11/2026
 
 - `XPService` no tiene consumidores de producción identificados. El cierre y su preview usan `MatchXpCalculator`; las fórmulas difieren (victoria y gol delantero: 30 frente a 14 XP), y el motor independiente no aplica el límite 25. Límites numéricos, negativos y posiciones requieren resolución antes de conectarlo. [Detalle](revision-xp-independiente-2026-11-17.md). No se cambiaron reglas ni datos; balance pendiente con datos reales.
