@@ -63,7 +63,7 @@ public class RatingService {
     private final PlayerProfileRepository playerProfileRepository;
     private final PlayerPositionRepository playerPositionRepository;
     private final MatchRepository matchRepository;
-    private final RankingGoalsService rankingGoalsService;
+    private final RankingStatsService rankingGoalsService;
 
     public RatingService(RatingCalculationEngine calculationEngine,
                         PlayerRatingRepository playerRatingRepository,
@@ -71,7 +71,7 @@ public class RatingService {
                         PlayerProfileRepository playerProfileRepository,
                         PlayerPositionRepository playerPositionRepository,
                         MatchRepository matchRepository,
-                        RankingGoalsService rankingGoalsService) {
+                        RankingStatsService rankingGoalsService) {
         this.calculationEngine = calculationEngine;
         this.playerRatingRepository = playerRatingRepository;
         this.ratingHistoryRepository = ratingHistoryRepository;
@@ -904,6 +904,10 @@ public class RatingService {
             if (playerGoals != null) {
                 row.setGoalsScored(playerGoals.total());
                 row.setGoalsForRole(playerGoals.role());
+                row.setMvpCount(playerGoals.mvpTotal());
+                row.setMvpForRole(playerGoals.mvpRole());
+                row.setRecentResults(playerGoals.recentResults());
+                row.setResultsForRole(playerGoals.roleResults());
             }
         }
         return rows;

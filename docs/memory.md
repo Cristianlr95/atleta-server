@@ -1,5 +1,9 @@
 # Memoria Viva del Backend Atleta
 
+## Ranking: MVP y resultados · 17/11/2026
+
+- Implementación local en `feature/ranking-stats-20261117`: agrega goles, ganador MVP oficial y hasta cinco resultados por trayectoria/posición/equipo desde `PlayerHistory` de partidos finalizados. Dos consultas en lote, con ventana por jugador y posición para limitar resultados. Histórico sin clasificación deja estadísticas por posición desconocidas. 738 pruebas backend H2 y dos pruebas de repositorio PostgreSQL 18 con datos sintéticos aprobadas; Flyway advierte que su soporte probado llega a PostgreSQL 16. Sin auditoría de datos históricos, beta ni publicación.
+
 ## Ranking: goles · 17/11/2026
 
 - Avance local BE-RANK-01 en `feature/ranking-stats-20261117`: suma agrupada por jugador y posición de `PlayerHistory` finalizado, global o por equipo; rating por múltiples roles no duplica eventos. En posición se informa trayectoria y posición; posición histórica no clasificable conserva null para ese alcance. 66 pruebas backend dirigidas correctas en H2. MVP, resultados, PostgreSQL y beta pendientes.

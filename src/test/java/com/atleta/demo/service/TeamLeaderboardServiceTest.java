@@ -40,7 +40,7 @@ class TeamLeaderboardServiceTest {
     @Mock private TeamMemberRepository teamMemberRepository;
     @Mock private PlayerRatingRepository playerRatingRepository;
     @Mock private MatchTeamRepository matchTeamRepository;
-    @Mock private RankingGoalsService rankingGoalsService;
+    @Mock private RankingStatsService rankingGoalsService;
 
     private TeamLeaderboardService service;
     private Team team;
@@ -67,7 +67,7 @@ class TeamLeaderboardServiceTest {
                 alpha.getAtletaUuid(), beta.getAtletaUuid(), unrated.getAtletaUuid())))
                 .thenReturn(List.of(rating(alpha, 80, 4), rating(beta, 80, 3)));
         when(rankingGoalsService.calculate(List.of(alpha.getAtletaUuid(), beta.getAtletaUuid(), unrated.getAtletaUuid()), 77L, null))
-                .thenReturn(java.util.Map.of(alpha.getAtletaUuid(), new RankingGoalsService.Goals(0L, null)));
+                .thenReturn(java.util.Map.of(alpha.getAtletaUuid(), new RankingStatsService.Goals(0L, null)));
 
         List<TeamLeaderboardEntryResponse> result = service.getLeaderboard(77L, alpha.getAtletaUuid());
 

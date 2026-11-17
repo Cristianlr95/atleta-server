@@ -62,7 +62,7 @@ class RatingServiceTest {
     private MatchRepository matchRepository;
 
     @Mock
-    private RankingGoalsService rankingGoalsService;
+    private RankingStatsService rankingGoalsService;
 
     private RatingService ratingService;
 
@@ -148,7 +148,7 @@ class RatingServiceTest {
         var rating = new PlayerRating(player, RoleType.ATAQUE, PriorityLevel.PRINCIPAL, BigDecimal.valueOf(70));
         when(playerRatingRepository.findByRoleType(RoleType.ATAQUE)).thenReturn(List.of(rating));
         when(rankingGoalsService.calculate(List.of(id), null, RoleType.ATAQUE))
-                .thenReturn(Map.of(id, new RankingGoalsService.Goals(5L, 3L)));
+                .thenReturn(Map.of(id, new RankingStatsService.Goals(5L, 3L)));
         var rows = ratingService.getLeaderboard(RoleType.ATAQUE, 10);
         assertEquals(5L, rows.getFirst().getGoalsScored());
         assertEquals(3L, rows.getFirst().getGoalsForRole());

@@ -49,17 +49,53 @@ public interface PlayerHistoryRepository extends JpaRepository<PlayerHistory, Lo
         UUID getPlayerUuid();
         String getPositionName();
         Long getGoals();
+        Long getMvps();
     }
 
     @Query("""
             SELECT ph.player.atletaUuid AS playerUuid, ph.position.nombre AS positionName,
-                   SUM(ph.goles) AS goals
-            FROM PlayerHistory ph
+                   SUM(ph.goles) AS goals,
+                   SUM(CASE WHEN winner.atletaUuid = ph.player.atletaUuid THEN 1 ELSE 0 END) AS mvps
+            FROM PlayerHistory ph LEFT JOIN ph.match.mvpUser winner
             WHERE ph.player.atletaUuid IN :playerIds AND ph.match.estado = 'FINALIZADO'
-              AND (:teamId IS NULL OR ph.team.id = :teamId)
+              AND (:teamId = -1 OR ph.team.id = :teamId)
             GROUP BY ph.player.atletaUuid, ph.position.nombre
             """)
     List<RankingGoals> summarizeRankingGoals(@Param("playerIds") List<UUID> playerIds, @Param("teamId") Long teamId);
+
+    interface RankingResult {
+        UUID getPlayerUuid();
+        String getPositionName();
+        String getResult();
+        LocalDateTime getMatchDate();
+        Long getMatchId();
+    }
+
+    @Query(value = """
+            SELECT r.player_uuid AS "playerUuid", r.position_name AS "positionName", r.result AS "result",
+                   r.match_date AS "matchDate", r.match_id AS "matchId"
+            FROM (SELECT ph.user_id AS player_uuid, p.nombre AS position_name, ph.resultado AS result,
+                         m.fecha_hora_programada AS match_date, m.id AS match_id,
+                         ROW_NUMBER() OVER (PARTITION BY ph.user_id, ph.position_id
+                           ORDER BY m.fecha_hora_programada DESC, m.id DESC) AS rn
+                  FROM player_history ph JOIN matches m ON m.id = ph.match_id
+                  JOIN positions p ON p.id = ph.position_id
+                  WHERE ph.user_id IN (:playerIds) AND m.estado = 'FINALIZADO') r WHERE r.rn <= 5
+            """, nativeQuery = true)
+    List<RankingResult> findRecentRankingResults(@Param("playerIds") List<UUID> playerIds);
+
+    @Query(value = """
+            SELECT r.player_uuid AS "playerUuid", r.position_name AS "positionName", r.result AS "result",
+                   r.match_date AS "matchDate", r.match_id AS "matchId"
+            FROM (SELECT ph.user_id AS player_uuid, p.nombre AS position_name, ph.resultado AS result,
+                         m.fecha_hora_programada AS match_date, m.id AS match_id,
+                         ROW_NUMBER() OVER (PARTITION BY ph.user_id, ph.position_id
+                           ORDER BY m.fecha_hora_programada DESC, m.id DESC) AS rn
+                  FROM player_history ph JOIN matches m ON m.id = ph.match_id
+                  JOIN positions p ON p.id = ph.position_id
+                  WHERE ph.user_id IN (:playerIds) AND ph.team_id = :teamId AND m.estado = 'FINALIZADO') r WHERE r.rn <= 5
+            """, nativeQuery = true)
+    List<RankingResult> findRecentRankingTeamResults(@Param("playerIds") List<UUID> playerIds, @Param("teamId") Long teamId);
 
     /**
      * Busca todo el historial de un jugador específico

@@ -108,6 +108,8 @@ class PlayerHistoryRepositoryTest {
 
     @Test
     void aggregatesGoalsForRequestedPlayersSeparatingTeamAndCareer() {
+        testMatch1.setMvpUser(testPlayer1);
+        matchRepository.saveAndFlush(testMatch1);
         Match other = matchRepository.save(new Match(MatchMode.CINCO_VS_CINCO, LocalDateTime.now(), testPlayer1));
         other.setEstado(MatchStatus.FINALIZADO);
         matchRepository.save(other);
@@ -121,10 +123,19 @@ class PlayerHistoryRepositoryTest {
         assertThat(result.getFirst().getTeamMatches()).isEqualTo(2L);
         assertThat(result.getFirst().getTeamAssists()).isEqualTo(3L);
         assertThat(result.getFirst().getTotalAssists()).isEqualTo(7L);
-        var careerGoals = playerHistoryRepository.summarizeRankingGoals(List.of(testPlayer1.getAtletaUuid()), null);
+        var careerGoals = playerHistoryRepository.summarizeRankingGoals(List.of(testPlayer1.getAtletaUuid()), -1L);
         assertThat(careerGoals).hasSize(1);
         assertThat(careerGoals.getFirst().getGoals()).isEqualTo(5L);
+        assertThat(careerGoals.getFirst().getMvps()).isEqualTo(1L);
         assertThat(playerHistoryRepository.summarizeRankingGoals(List.of(testPlayer1.getAtletaUuid()), testTeam1.getId()).getFirst().getGoals()).isEqualTo(2L);
+        assertThat(playerHistoryRepository.summarizeRankingGoals(List.of(testPlayer1.getAtletaUuid()), testTeam2.getId()).getFirst().getMvps()).isZero();
+        testMatch1.setMvpUser(testPlayer2);
+        matchRepository.saveAndFlush(testMatch1);
+        assertThat(playerHistoryRepository.summarizeRankingGoals(List.of(testPlayer1.getAtletaUuid()), -1L).getFirst().getMvps()).isZero();
+        var recentCareer = playerHistoryRepository.findRecentRankingResults(List.of(testPlayer1.getAtletaUuid()));
+        assertThat(recentCareer).hasSize(3);
+        assertThat(recentCareer.stream().map(PlayerHistoryRepository.RankingResult::getMatchId)).contains(testMatch1.getId(), testMatch2.getId(), other.getId());
+        assertThat(playerHistoryRepository.findRecentRankingTeamResults(List.of(testPlayer1.getAtletaUuid()), testTeam1.getId())).hasSize(2);
 
         var withoutTeamHistory = playerHistoryRepository.summarizeGoals(List.of(testPlayer2.getAtletaUuid()), testTeam1.getId()).getFirst();
         assertThat(withoutTeamHistory.getTeamMatches()).isZero();
@@ -136,10 +147,26 @@ class PlayerHistoryRepositoryTest {
         assertThat(filtered.getTeamGoals()).isZero();
         assertThat(filtered.getTotalGoals()).isEqualTo(3L);
         assertThat(filtered.getTeamMatches()).isEqualTo(1L);
+        assertThat(playerHistoryRepository.findRecentRankingResults(List.of(testPlayer1.getAtletaUuid()))).hasSize(2);
 
         assertThat(playerHistoryRepository.summarizeGoals(List.of(java.util.UUID.randomUUID()), testTeam1.getId())).isEmpty();
         var away = playerHistoryRepository.summarizeGoals(List.of(testPlayer2.getAtletaUuid()), testTeam1.getId());
         assertThat(away).isEmpty();
+    }
+
+    @Test
+    void recentRankingResultsAreLimitedToFivePerPlayerAndPosition() {
+        for (int day = 1; day <= 6; day++) {
+            Match match = new Match(MatchMode.CINCO_VS_CINCO, LocalDateTime.of(2030, 1, day, 12, 0), testPlayer1);
+            match.setEstado(MatchStatus.FINALIZADO);
+            match = matchRepository.save(match);
+            playerHistoryRepository.save(new PlayerHistory(match, testPlayer1, testTeam1, testPosition, 0, 0, MatchResult.EMPATE, 0));
+        }
+        var results = playerHistoryRepository.findRecentRankingResults(List.of(testPlayer1.getAtletaUuid()));
+        assertThat(results).hasSize(5);
+        assertThat(results.stream().map(PlayerHistoryRepository.RankingResult::getMatchDate))
+                .doesNotContain(LocalDateTime.of(2030, 1, 1, 12, 0))
+                .contains(LocalDateTime.of(2030, 1, 6, 12, 0));
     }
 
     @Test

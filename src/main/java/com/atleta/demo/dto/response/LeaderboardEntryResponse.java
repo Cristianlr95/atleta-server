@@ -20,6 +20,18 @@ public class LeaderboardEntryResponse {
     private Long draws;
     private Long goalsScored;
     private Long goalsForRole;
+    private Long mvpCount;
+    private Long mvpForRole;
+    private java.util.List<String> recentResults;
+    private java.util.List<String> resultsForRole;
+    public java.util.List<String> getRecentResults() { return recentResults; }
+    public void setRecentResults(java.util.List<String> value) { recentResults = value; }
+    public java.util.List<String> getResultsForRole() { return resultsForRole; }
+    public void setResultsForRole(java.util.List<String> value) { resultsForRole = value; }
+    public Long getMvpCount() { return mvpCount; }
+    public void setMvpCount(Long value) { this.mvpCount = value; }
+    public Long getMvpForRole() { return mvpForRole; }
+    public void setMvpForRole(Long value) { this.mvpForRole = value; }
     public Long getGoalsScored() { return goalsScored; }
     public void setGoalsScored(Long goalsScored) { this.goalsScored = goalsScored; }
     public Long getGoalsForRole() { return goalsForRole; }

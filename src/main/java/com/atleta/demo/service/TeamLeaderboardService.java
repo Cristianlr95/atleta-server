@@ -29,14 +29,14 @@ public class TeamLeaderboardService {
     private final TeamMemberRepository teamMemberRepository;
     private final PlayerRatingRepository playerRatingRepository;
     private final MatchTeamRepository matchTeamRepository;
-    private final RankingGoalsService rankingGoalsService;
+    private final RankingStatsService rankingGoalsService;
 
     public TeamLeaderboardService(
             TeamRepository teamRepository,
             TeamMemberRepository teamMemberRepository,
             PlayerRatingRepository playerRatingRepository,
             MatchTeamRepository matchTeamRepository,
-            RankingGoalsService rankingGoalsService
+            RankingStatsService rankingGoalsService
     ) {
         this.teamRepository = teamRepository;
         this.teamMemberRepository = teamMemberRepository;
@@ -92,7 +92,9 @@ public class TeamLeaderboardService {
                     entry.score(),
                     entry.matchesPlayed(),
                     entry.rated(),
-                    goals.containsKey(entry.playerProfileId()) ? goals.get(entry.playerProfileId()).total() : null
+                    goals.containsKey(entry.playerProfileId()) ? goals.get(entry.playerProfileId()).total() : null,
+                    goals.containsKey(entry.playerProfileId()) ? goals.get(entry.playerProfileId()).mvpTotal() : null,
+                    goals.containsKey(entry.playerProfileId()) ? goals.get(entry.playerProfileId()).recentResults() : null
             ));
             previousScore = entry.score();
         }

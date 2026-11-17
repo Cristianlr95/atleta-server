@@ -428,7 +428,7 @@ class ApiContractSmokeTest {
     @Test
     void teamLeaderboardUsesAuthenticatedViewerAndStableContract() throws Exception {
         when(teamLeaderboardService.getLeaderboard(77L, USER_ID)).thenReturn(List.of(
-                new TeamLeaderboardEntryResponse(1, USER_ID, "Demo10", BigDecimal.valueOf(82.5), 9, true),
+                new TeamLeaderboardEntryResponse(1, USER_ID, "Demo10", BigDecimal.valueOf(82.5), 9, true, 2L, 1L, List.of("VICTORIA", "EMPATE")),
                 new TeamLeaderboardEntryResponse(2, OTHER_USER_ID, "Rival9", null, 0, false)
         ));
 
@@ -436,6 +436,9 @@ class ApiContractSmokeTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].playerProfileId").value(USER_ID.toString()))
                 .andExpect(jsonPath("$[0].score").value(82.5))
+                .andExpect(jsonPath("$[0].goalsScored").value(2))
+                .andExpect(jsonPath("$[0].mvpCount").value(1))
+                .andExpect(jsonPath("$[0].recentResults[1]").value("EMPATE"))
                 .andExpect(jsonPath("$[1].rated").value(false))
                 .andExpect(jsonPath("$[1].score").doesNotExist());
 
