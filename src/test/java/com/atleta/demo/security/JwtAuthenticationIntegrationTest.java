@@ -116,6 +116,8 @@ class JwtAuthenticationIntegrationTest {
 
     @Test
     void globalReadEndpointsRejectMissingToken() throws Exception {
+        mockMvc.perform(get("/api/v1/teams/999999/members/active"))
+            .andExpect(status().isUnauthorized());
         mockMvc.perform(get("/api/v1/positions"))
             .andExpect(status().isUnauthorized());
 

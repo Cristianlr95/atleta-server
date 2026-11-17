@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class MatchPlayerHistoryServiceTest {
@@ -106,6 +107,35 @@ class MatchPlayerHistoryServiceTest {
         assertEquals(MatchResult.VICTORIA, history.getResultado());
         assertEquals(14, history.getXpGanada());
         assertEquals(14, playerPosition.getXp());
+    }
+
+    @Test
+    void skipsUnconfirmedPlayersAndUnconfirmedGoals() {
+        Match match = new Match();
+        match.setId(43L);
+        Team team = team(1L);
+        Position position = position("Delantero");
+        PlayerProfile confirmed = player();
+        PlayerProfile unconfirmed = player();
+        MatchPlayer active = new MatchPlayer(match, team, confirmed, position, PlayerRole.JUGADOR);
+        active.setConfirmado(true);
+        active.setTeamSide(MatchTeamSide.LOCAL);
+        MatchPlayer pending = new MatchPlayer(match, team, unconfirmed, position, PlayerRole.JUGADOR);
+        pending.setConfirmado(false);
+        MatchEvent goal = new MatchEvent(match, EventType.GOL, confirmed, team, null, confirmed);
+        goal.confirmByHome();
+        when(matchPlayerRepository.findByMatch(match)).thenReturn(List.of(active, pending));
+        when(matchEventRepository.findByMatchOrderByCreatedAt(match)).thenReturn(List.of(goal));
+        when(playerHistoryRepository.findByMatchAndPlayer(match, confirmed)).thenReturn(Optional.empty());
+        when(playerPositionRepository.findByPlayerAndPosition(confirmed, position)).thenReturn(Optional.empty());
+
+        service.persistForFinalization(match);
+
+        ArgumentCaptor<PlayerHistory> history = ArgumentCaptor.forClass(PlayerHistory.class);
+        verify(playerHistoryRepository).save(history.capture());
+        assertEquals(confirmed, history.getValue().getPlayer());
+        assertEquals(0, history.getValue().getGoles());
+        verify(playerHistoryRepository, never()).findByMatchAndPlayer(match, unconfirmed);
     }
 
     @Test

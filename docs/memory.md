@@ -1,5 +1,9 @@
 # Memoria Viva del Backend Atleta
 
+## BE-PLANTEL-03 · 17/11/2026
+
+- Se comprobó el contrato existente: historial de partidos finalizados, generado al cierre para participantes confirmados y eventos confirmados; cero, ausencia y errores separados. Lectura de integrantes activos requiere JWT, sin restricción de membresía en la política actual. Pruebas añadidas para jugador/evento sin confirmar y rechazo sin sesión; registros antiguos y beta no auditados.
+
 ## PJ con el equipo · 17/11/2026
 
 - El DTO de integrantes activos añade `teamMatches`: cuenta partidos finalizados distintos con historial del jugador para el equipo solicitado. Sin historial de ese equipo devuelve null. Se reutiliza el agregado existente, sin migración ni escritura histórica; incluye las participaciones históricas registradas, incluso anteriores a una salida y reingreso. Beta y PostgreSQL pendientes.
