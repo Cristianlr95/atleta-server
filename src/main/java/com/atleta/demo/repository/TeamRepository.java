@@ -2,7 +2,9 @@ package com.atleta.demo.repository;
 
 import com.atleta.demo.entity.Team;
 import com.atleta.demo.entity.PlayerProfile;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -25,6 +27,10 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
      * @return Optional con el equipo si existe
      */
     Optional<Team> findByNombre(String nombre);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM Team t WHERE t.nombre = :nombre")
+    Optional<Team> findByNombreForUpdate(@Param("nombre") String nombre);
 
     /**
      * Verifica si existe un equipo con el nombre especificado

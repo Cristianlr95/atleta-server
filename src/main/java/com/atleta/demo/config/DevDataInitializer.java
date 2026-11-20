@@ -115,7 +115,14 @@ public class DevDataInitializer implements ApplicationRunner {
 
     private void seedTeam(Map<String, PlayerProfile> players) {
         PlayerProfile captain = players.get("capitan.dev@atleta.test");
-        Team team = teamRepository.findByNombre("Atleta Dev FC").orElseGet(() -> {
+        var existing = teamRepository.findByNombreForUpdate("Atleta Dev FC");
+        if (existing.isPresent()) {
+            var captains = teamMemberRepository.findCaptainsByTeam(existing.get());
+            if (captains.size() != 1 || !captains.get(0).getPlayer().getAtletaUuid().equals(captain.getAtletaUuid())) {
+                throw new IllegalStateException("Revisar la capitanía del equipo antes de reactivar o actualizar la plantilla de desarrollo");
+            }
+        }
+        Team team = existing.orElseGet(() -> {
             Team createdTeam = teamRepository.saveAndFlush(new Team("Atleta Dev FC", captain, null, 2026));
             TeamStats stats = teamStatsRepository.save(new TeamStats(createdTeam));
             createdTeam.setStats(stats);

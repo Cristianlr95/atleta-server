@@ -5,6 +5,7 @@ import com.atleta.demo.enums.PlayerRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests unitarios para TeamMemberRepository.
@@ -388,18 +390,10 @@ class TeamMemberRepositoryTest {
     }
 
     @Test
-    void testRoleChange_ExistingTeamMember_UpdatesRoleSuccessfully() {
-        // Given
+    void rejectsSecondActiveCaptainOnFlush() {
         testMember2.setRol(PlayerRole.CAPITAN);
-
-        // When
-        TeamMember updated = teamMemberRepository.save(testMember2);
-
-        // Then
-        assertThat(updated.getRol()).isEqualTo(PlayerRole.CAPITAN);
-        
-        // Verify we now have 2 captains in testTeam1
-        List<TeamMember> captains = teamMemberRepository.findCaptainsByTeam(testTeam1);
-        assertThat(captains).hasSize(2);
+        assertThatThrownBy(() -> teamMemberRepository.saveAndFlush(testMember2))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasStackTraceContaining("uq_team_active_captain");
     }
 }

@@ -23,6 +23,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -121,6 +122,10 @@ public class TeamControllerIntegrationTest {
                 .andExpect(jsonPath("$.stats.partidosEmpatados").value(0))
                 .andExpect(jsonPath("$.stats.golesAnotados").value(0))
                 .andExpect(jsonPath("$.stats.golesRecibidos").value(0));
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT m.user_id FROM teams t JOIN team_members m ON m.team_id = t.id
+                WHERE t.nombre = ? AND NOT t.archived AND m.activo AND m.rol = 'CAPITAN'
+                """, UUID.class, request.getNombre())).containsExactly(testCreatorUuid);
     }
 
     @Test
