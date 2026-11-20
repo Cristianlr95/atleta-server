@@ -32,6 +32,10 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
     @Query("SELECT t FROM Team t WHERE t.nombre = :nombre")
     Optional<Team> findByNombreForUpdate(@Param("nombre") String nombre);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM Team t WHERE t.id = :teamId")
+    Optional<Team> findByIdForUpdate(@Param("teamId") Long teamId);
+
     /**
      * Verifica si existe un equipo con el nombre especificado
      * @param nombre Nombre a verificar

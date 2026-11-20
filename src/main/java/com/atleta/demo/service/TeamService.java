@@ -19,8 +19,10 @@ import com.atleta.demo.repository.TeamMemberRepository;
 import com.atleta.demo.repository.TeamRepository;
 import com.atleta.demo.repository.TeamInviteRepository;
 import com.atleta.demo.repository.TeamStatsRepository;
+import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -272,6 +274,32 @@ public class TeamService {
             }
         }
         return true;
+    }
+
+    public UUID transferCaptain(Long teamId, UUID actorUuid, UUID targetUuid) {
+        Team team = teamRepository.findByIdForUpdate(teamId)
+                .filter(current -> !Boolean.TRUE.equals(current.getArchived()))
+                .orElseThrow(() -> new EntityNotFoundException("Equipo activo no encontrado"));
+
+        List<TeamMember> members = teamMemberRepository.findActiveByTeam(team);
+        TeamMember captain = members.stream()
+                .filter(member -> member.isCapitan() && member.getPlayer().getAtletaUuid().equals(actorUuid))
+                .findFirst()
+                .orElseThrow(() -> new AccessDeniedException("Solo el capitán activo puede transferir la capitanía"));
+        List<TeamMember> targets = members.stream()
+                .filter(member -> member.getPlayer().getAtletaUuid().equals(targetUuid))
+                .limit(2)
+                .toList();
+        if (actorUuid.equals(targetUuid) || targets.size() != 1) {
+            throw new IllegalArgumentException("El destinatario debe ser otro integrante activo del equipo");
+        }
+
+        captain.setRol(PlayerRole.JUGADOR);
+        // V029 checks uniqueness on each write, so persist the demotion before promoting the successor.
+        teamMemberRepository.flush();
+        TeamMember newCaptain = targets.getFirst();
+        newCaptain.setRol(PlayerRole.CAPITAN);
+        return newCaptain.getPlayer().getAtletaUuid();
     }
 
     public void deleteTeam(Long teamId, UUID actorUuid) {
