@@ -35,6 +35,9 @@ public class TeamMember extends BaseEntity {
     @Column(name = "rol", nullable = false)
     private PlayerRole rol = PlayerRole.JUGADOR;
 
+    @Column(name = "es_dt", nullable = false)
+    private boolean esDt;
+
     /**
      * Estado activo/inactivo del miembro en el equipo
      */
@@ -61,7 +64,7 @@ public class TeamMember extends BaseEntity {
     public TeamMember(Team team, PlayerProfile player, PlayerRole rol) {
         this.team = team;
         this.player = player;
-        this.rol = rol;
+        setRol(rol);
     }
 
     // Getters and Setters
@@ -86,6 +89,7 @@ public class TeamMember extends BaseEntity {
     }
 
     public void setRol(PlayerRole rol) {
+        esDt = isDT() || rol == PlayerRole.DT;
         this.rol = rol;
     }
 
@@ -117,7 +121,7 @@ public class TeamMember extends BaseEntity {
      * Verifica si el miembro es director técnico del equipo
      */
     public boolean isDT() {
-        return PlayerRole.DT.equals(rol);
+        return esDt || rol == PlayerRole.DT;
     }
 
     /**

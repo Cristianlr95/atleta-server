@@ -34,6 +34,7 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -202,6 +203,7 @@ public class TeamService {
                     primaryPosition != null && primaryPosition.getPosition() != null ? primaryPosition.getPosition().getNombre() : null,
                     overallByPlayer.getOrDefault(member.getPlayer().getAtletaUuid(), BigDecimal.valueOf(65))
             );
+            item.setEsDt(member.isDT());
             var goals = goalsByPlayer.get(member.getPlayer().getAtletaUuid());
             if (goals != null) {
                 item.setTeamMatches(goals.getTeamMatches() > 0 ? goals.getTeamMatches() : null);
@@ -307,7 +309,10 @@ public class TeamService {
         teamMemberRepository.flush();
         TeamMember newCaptain = targets.getFirst();
         newCaptain.setRol(PlayerRole.CAPITAN);
-        return newCaptain.getPlayer().getAtletaUuid();
+        UUID successorUuid = newCaptain.getPlayer().getAtletaUuid();
+        teamRepository.recordCaptainTransfer(teamId, captain.getPlayer().getAtletaUuid(), successorUuid,
+                actorUuid, Instant.now());
+        return successorUuid;
     }
 
     public void removeMember(Long teamId, UUID actorUuid, UUID targetUuid) {
@@ -322,17 +327,34 @@ public class TeamService {
             throw new IllegalArgumentException("El capitán no puede retirarse mediante esta operación");
         }
 
-        List<TeamMember> targets = members.stream()
-                .filter(member -> member.getPlayer().getAtletaUuid().equals(targetUuid))
+        TeamMember target = requireActiveMembership(members, targetUuid);
+        if (target.getRol() != PlayerRole.JUGADOR || target.isDT()) {
+            throw new IllegalArgumentException("El destinatario debe ser un jugador activo sin función de DT");
+        }
+        target.desactivar();
+    }
+
+    public void leaveTeam(Long teamId, UUID actorUuid) {
+        Team team = lockActiveTeam(teamId);
+        TeamMember membership = requireActiveMembership(teamMemberRepository.findActiveByTeam(team), actorUuid);
+        if (membership.isCapitan()) {
+            throw new IllegalStateException("Transfiere la capitanía antes de abandonar el equipo");
+        }
+        membership.desactivar();
+    }
+
+    private TeamMember requireActiveMembership(List<TeamMember> members, UUID playerUuid) {
+        List<TeamMember> matches = members.stream()
+                .filter(member -> member.getPlayer().getAtletaUuid().equals(playerUuid))
                 .limit(2)
                 .toList();
-        if (targets.isEmpty()) {
+        if (matches.isEmpty()) {
             throw new EntityNotFoundException("Integrante activo no encontrado");
         }
-        if (targets.size() != 1 || targets.getFirst().getRol() != PlayerRole.JUGADOR) {
-            throw new IllegalArgumentException("El destinatario debe tener una única membresía activa de jugador");
+        if (matches.size() != 1) {
+            throw new IllegalArgumentException("El integrante tiene más de una membresía activa");
         }
-        targets.getFirst().desactivar();
+        return matches.getFirst();
     }
 
     private Team lockActiveTeam(Long teamId) {

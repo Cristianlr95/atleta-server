@@ -9,6 +9,7 @@ public class TeamActiveMemberResponse {
     private UUID playerUuid;
     private String alias;
     private PlayerRole rol;
+    private boolean esDt;
     private Long primaryPositionId;
     private String primaryPositionName;
     private BigDecimal ovr;
@@ -68,6 +69,14 @@ public class TeamActiveMemberResponse {
 
     public void setRol(PlayerRole rol) {
         this.rol = rol;
+    }
+
+    public boolean isEsDt() {
+        return esDt;
+    }
+
+    public void setEsDt(boolean esDt) {
+        this.esDt = esDt;
     }
 
     public Long getPrimaryPositionId() {

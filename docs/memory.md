@@ -1,5 +1,13 @@
 # Memoria Viva del Backend Atleta
 
+## CAP-05 · Abandono, auditoría de transferencias y función de DT · 21/11/2026
+
+- `DELETE /api/v1/teams/{teamId}/members/me` desactiva la membresía del actor autenticado. El capitán recibe `409` hasta transferir la capitanía. El historial deportivo se conserva.
+- V030 añade `team_captain_transfers`. La transferencia y su registro se confirman en la misma transacción.
+- Decisión del usuario: al ceder el cargo, el ex-capitán pasa a `JUGADOR` y conserva su función de DT si la tenía. El listado activo devuelve ambas cosas con `rol` y `esDt`. La protección de DT frente a la expulsión sigue aplicando con ambos valores.
+- V031 añade la función independiente y marca las membresías existentes con rol `DT`. Las migraciones se entregan juntas para aplicar V030 antes de V031. La validación integral de beta queda pendiente.
+- Pasaron 62 pruebas dirigidas del paquete en PostgreSQL 18.1.
+
 ## CAP-05 · Anonimización de una cuenta con capitanía · 21/11/2026
 
 - Decisión confirmada por el usuario: transferir la capitanía antes de eliminar la cuenta si existe otro integrante activo con cuenta disponible. En un equipo sin otro integrante disponible, el borrado archiva el equipo en la misma transacción. Una membresía de una cuenta ya anonimizada sigue en el historial.

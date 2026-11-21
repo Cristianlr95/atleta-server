@@ -107,7 +107,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
      * @param team Equipo
      * @return Lista de DTs activos del equipo
      */
-    @Query("SELECT tm FROM TeamMember tm WHERE tm.team = :team AND tm.rol = 'DT' AND tm.activo = true")
+    @Query("SELECT tm FROM TeamMember tm WHERE tm.team = :team AND tm.activo = true AND (tm.esDt = true OR tm.rol = 'DT')")
     List<TeamMember> findCoachesByTeam(@Param("team") Team team);
 
     /**

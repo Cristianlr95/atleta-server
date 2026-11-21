@@ -5,13 +5,16 @@ import com.atleta.demo.entity.PlayerProfile;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Repositorio para la entidad Team.
@@ -35,6 +38,18 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM Team t WHERE t.id = :teamId")
     Optional<Team> findByIdForUpdate(@Param("teamId") Long teamId);
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            INSERT INTO team_captain_transfers
+                (team_id, outgoing_captain_uuid, incoming_captain_uuid, actor_uuid, transferred_at)
+            VALUES (:teamId, :outgoingUuid, :incomingUuid, :actorUuid, :transferredAt)
+            """, nativeQuery = true)
+    void recordCaptainTransfer(@Param("teamId") Long teamId,
+                               @Param("outgoingUuid") UUID outgoingUuid,
+                               @Param("incomingUuid") UUID incomingUuid,
+                               @Param("actorUuid") UUID actorUuid,
+                               @Param("transferredAt") Instant transferredAt);
 
     /**
      * Verifica si existe un equipo con el nombre especificado

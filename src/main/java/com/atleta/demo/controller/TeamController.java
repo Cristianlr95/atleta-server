@@ -174,6 +174,28 @@ public class TeamController {
 
     public record CaptainResponse(Long teamId, UUID captainPlayerUuid) {}
 
+    @DeleteMapping("/{teamId}/members/me")
+    @Operation(summary = "Abandonar un equipo", description = "El capitán debe transferir el cargo antes de abandonar")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Membresía desactivada"),
+            @ApiResponse(responseCode = "400", description = "Solicitud inválida o membresía ambigua"),
+            @ApiResponse(responseCode = "401", description = "Sesión requerida"),
+            @ApiResponse(responseCode = "404", description = "Equipo activo o membresía activa no encontrados"),
+            @ApiResponse(responseCode = "409", description = "El actor es el capitán activo")
+    })
+    public ResponseEntity<Void> leaveTeam(@PathVariable Long teamId, @AuthenticationPrincipal Jwt jwt) {
+        try {
+            teamService.leaveTeam(teamId, AuthenticatedUserUtils.currentUserUuid(jwt));
+            return ResponseEntity.noContent().build();
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
     @DeleteMapping("/{teamId}/members/{playerUuid}")
     @Operation(summary = "Retirar a un jugador del equipo como capitán activo",
             description = "Desactiva la membresía del jugador y conserva su historial deportivo")
