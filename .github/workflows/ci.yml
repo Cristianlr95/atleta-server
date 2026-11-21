@@ -67,6 +67,13 @@ jobs:
       - name: Ejecutar tests de migracion
         run: ./mvnw test -Dtest="*MigrationTest,FlywayIntegrationTest" -Dspring.profiles.active=test
 
+      - name: Verificar migraciones de capitania en PostgreSQL
+        run: ./mvnw test -Dtest=CaptainMigrationPostgresTest
+        env:
+          CAP02_TEST_JDBC_URL: jdbc:postgresql://localhost:5432/atleta_test
+          SPRING_DATASOURCE_USERNAME: test
+          SPRING_DATASOURCE_PASSWORD: test
+
       - name: Validar migraciones Flyway
         run: ./mvnw -Dflyway.url=jdbc:postgresql://localhost:5432/atleta_test -Dflyway.user=test -Dflyway.password=test -Dflyway.locations=classpath:db/migration flyway:migrate flyway:validate
 

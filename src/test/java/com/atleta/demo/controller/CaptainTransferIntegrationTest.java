@@ -25,6 +25,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -47,6 +48,7 @@ class CaptainTransferIntegrationTest {
     @Autowired private MockMvc mvc;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private TeamService teamService;
     @Autowired private AthleteService athleteService;
     @Autowired private SocialService socialService;
@@ -540,6 +542,62 @@ class CaptainTransferIntegrationTest {
         transfer(first, second).andExpect(status().isOk());
         assertCaptain(second);
         assertThat(activeRole(first)).isEqualTo("JUGADOR");
+    }
+
+    @Test
+    void authenticatesFounderAndSuccessorThroughTheCaptaincyLifecycle() throws Exception {
+        String founderAuth = login(captain);
+        String successorAuth = login(first);
+        String memberAuth = login(second);
+        String inviteBody = """
+                {"teamId":%d,"targetUuid":"%s","requesterUuid":"%s"}
+                """.formatted(teamId, outsider, captain);
+        String transferBody = "{\"targetPlayerUuid\":\"" + first + "\"}";
+
+        mvc.perform(put("/api/v1/teams/{teamId}/captain", teamId)
+                        .contentType(MediaType.APPLICATION_JSON).content(transferBody))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/social/team-invites").header("Authorization", memberAuth)
+                        .contentType(MediaType.APPLICATION_JSON).content(inviteBody))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/api/v1/teams/{teamId}/captain", teamId).header("Authorization", founderAuth)
+                        .contentType(MediaType.APPLICATION_JSON).content(transferBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.captainPlayerUuid").value(first.toString()));
+        mvc.perform(post("/api/v1/social/team-invites").header("Authorization", founderAuth)
+                        .contentType(MediaType.APPLICATION_JSON).content(inviteBody))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/social/team-invites").header("Authorization", successorAuth)
+                        .contentType(MediaType.APPLICATION_JSON).content(inviteBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.requesterUuid").value(first.toString()));
+        mvc.perform(delete("/api/v1/teams/{teamId}/members/{playerUuid}", teamId, second)
+                        .header("Authorization", successorAuth))
+                .andExpect(status().isNoContent());
+        mvc.perform(delete("/api/v1/teams/{teamId}/members/me", teamId).header("Authorization", successorAuth))
+                .andExpect(status().isConflict());
+        mvc.perform(delete("/api/v1/teams/{teamId}/members/me", teamId).header("Authorization", founderAuth))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/v1/teams/{teamId}/members/active", teamId).header("Authorization", successorAuth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].playerUuid").value(first.toString()))
+                .andExpect(jsonPath("$[0].rol").value("CAPITAN"));
+        assertThat(jdbc.queryForList("SELECT actor_uuid FROM team_captain_transfers WHERE team_id = ?",
+                UUID.class, teamId)).containsExactly(captain);
+    }
+
+    private String login(UUID playerUuid) throws Exception {
+        String password = "cap06-test-password";
+        jdbc.update("UPDATE athletes SET password_hash = ? WHERE atleta_uuid = ?", passwordEncoder.encode(password), playerUuid);
+        String body = mvc.perform(post("/api/v1/athletes/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s@example.test","password":"%s"}
+                                """.formatted(playerUuid, password)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.atletaUuid").value(playerUuid.toString()))
+                .andReturn().getResponse().getContentAsString();
+        return "Bearer " + objectMapper.readTree(body).get("accessToken").asText();
     }
 
     @Test

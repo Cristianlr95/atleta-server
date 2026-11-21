@@ -1,5 +1,13 @@
 # Memoria Viva del Backend Atleta
 
+## CAP-06 · QA con sesión autenticada · 21/11/2026
+
+- Bases de beta verificadas en GitHub: backend `64b92f8` y frontend `7033ffd`. La prueba local inicia sesión con tres cuentas sintéticas en `/api/v1/athletes/login` y usa los JWT firmados emitidos por Atleta a través de los filtros de seguridad de MockMvc.
+- El caso pasó en H2 y PostgreSQL 18.1. Comprueba el rechazo sin token, la transferencia del fundador al sucesor, los permisos de invitación antes y después del cambio, la expulsión, el abandono y el registro del actor en V030.
+- CI ejecuta `CaptainMigrationPostgresTest` contra su servicio PostgreSQL desechable. El nuevo caso parte de V029 con un capitán, un jugador y dos DT (uno inactivo), aplica V030 y V031 y comprueba que se conservan los roles y estados, se marca a ambos DT y el historial de transferencias empieza vacío. Pasaron los siete casos de migración y el recorrido JWT en PostgreSQL 18.1.
+- La página pública de Cloudflare respondió HTTP 200 y sirvió los módulos de Plantel y Ajustes con abandono, función de DT y el aviso al eliminar una cuenta. Render devolvió HTTP 200 y `UP` en salud y readiness tras el primer intento agotado. Estas respuestas públicas no identifican el SHA desplegado ni comprueban el estado de Flyway en Neon. GitHub Actions de frontend pasó y el de backend seguía ejecutándose.
+- Quedan pendientes la verificación de la revisión desplegada y Flyway en Neon, la QA autenticada en beta y la revisión visual en navegador y teléfono.
+
 ## CAP-05 · Abandono, auditoría de transferencias y función de DT · 21/11/2026
 
 - `DELETE /api/v1/teams/{teamId}/members/me` desactiva la membresía del actor autenticado. El capitán recibe `409` hasta transferir la capitanía. El historial deportivo se conserva.
