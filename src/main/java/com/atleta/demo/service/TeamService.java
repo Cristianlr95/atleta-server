@@ -11,6 +11,8 @@ import com.atleta.demo.entity.Team;
 import com.atleta.demo.entity.TeamMember;
 import com.atleta.demo.entity.TeamStats;
 import com.atleta.demo.enums.PlayerRole;
+import com.atleta.demo.exception.CaptainTransferRequiredException;
+import com.atleta.demo.repository.AthleteRepository;
 import com.atleta.demo.repository.PlayerProfileRepository;
 import com.atleta.demo.repository.PlayerHistoryRepository;
 import com.atleta.demo.repository.PlayerPositionRepository;
@@ -57,6 +59,7 @@ public class TeamService {
     private final MatchInviteRepository matchInviteRepository;
     private final RatingService ratingService;
     private final PlayerHistoryRepository playerHistoryRepository;
+    private final AthleteRepository athleteRepository;
 
     public TeamService(TeamRepository teamRepository,
                        PlayerProfileRepository playerProfileRepository,
@@ -66,7 +69,8 @@ public class TeamService {
                        TeamInviteRepository teamInviteRepository,
                        MatchInviteRepository matchInviteRepository,
                        RatingService ratingService,
-                       PlayerHistoryRepository playerHistoryRepository) {
+                       PlayerHistoryRepository playerHistoryRepository,
+                       AthleteRepository athleteRepository) {
         this.teamRepository = teamRepository;
         this.playerProfileRepository = playerProfileRepository;
         this.teamMemberRepository = teamMemberRepository;
@@ -76,6 +80,7 @@ public class TeamService {
         this.matchInviteRepository = matchInviteRepository;
         this.ratingService = ratingService;
         this.playerHistoryRepository = playerHistoryRepository;
+        this.athleteRepository = athleteRepository;
     }
 
     public TeamResponse createTeam(CreateTeamRequest request) {
@@ -88,6 +93,9 @@ public class TeamService {
             throw new IllegalArgumentException("Ya existe un equipo con ese nombre");
         }
 
+        if (!lockAvailableAccount(request.getCreadorUuid())) {
+            throw new IllegalArgumentException("La cuenta del creador no está disponible");
+        }
         PlayerProfile creator = playerProfileRepository.findById(request.getCreadorUuid())
                 .orElseThrow(() -> new IllegalArgumentException("Creador no encontrado: " + request.getCreadorUuid()));
 
@@ -277,6 +285,8 @@ public class TeamService {
     }
 
     public UUID transferCaptain(Long teamId, UUID actorUuid, UUID targetUuid) {
+        // Lock the incoming account before the team, in the same order as account deletion.
+        boolean targetAvailable = lockAvailableAccount(targetUuid);
         Team team = lockActiveTeam(teamId);
 
         List<TeamMember> members = teamMemberRepository.findActiveByTeam(team);
@@ -288,7 +298,7 @@ public class TeamService {
                 .filter(member -> member.getPlayer().getAtletaUuid().equals(targetUuid))
                 .limit(2)
                 .toList();
-        if (actorUuid.equals(targetUuid) || targets.size() != 1) {
+        if (!targetAvailable || actorUuid.equals(targetUuid) || targets.size() != 1) {
             throw new IllegalArgumentException("El destinatario debe ser otro integrante activo del equipo");
         }
 
@@ -332,7 +342,7 @@ public class TeamService {
     }
 
     public void deleteTeam(Long teamId, UUID actorUuid) {
-        Team team = teamRepository.findById(teamId)
+        Team team = teamRepository.findByIdForUpdate(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado: " + teamId));
 
         playerProfileRepository.findById(actorUuid)
@@ -342,6 +352,34 @@ public class TeamService {
             throw new SecurityException("Solo el creador del equipo puede eliminarlo");
         }
 
+        archiveLockedTeam(team, actorUuid);
+    }
+
+    void archiveTeamsForAccountDeletion(UUID actorUuid) {
+        // AthleteService holds the account lock, preventing a concurrent captain assignment.
+        List<Team> soloTeams = new ArrayList<>();
+        for (Long teamId : teamMemberRepository.findActiveCaptainTeamIds(actorUuid)) {
+            Team team = teamRepository.findByIdForUpdate(teamId).orElseThrow();
+            if (Boolean.TRUE.equals(team.getArchived())) {
+                continue;
+            }
+            if (teamMemberRepository.findCaptainsByTeam(team).stream()
+                    .noneMatch(member -> member.getPlayer().getAtletaUuid().equals(actorUuid))) {
+                continue;
+            }
+            if (teamMemberRepository.hasOtherAvailableMembers(team, actorUuid)) {
+                throw new CaptainTransferRequiredException();
+            }
+            soloTeams.add(team);
+        }
+        soloTeams.forEach(team -> archiveLockedTeam(team, actorUuid));
+    }
+
+    private boolean lockAvailableAccount(UUID playerUuid) {
+        return athleteRepository.findByIdForUpdate(playerUuid).filter(athlete -> athlete.getDeletedAt() == null).isPresent();
+    }
+
+    private void archiveLockedTeam(Team team, UUID actorUuid) {
         if (Boolean.TRUE.equals(team.getArchived())) {
             return;
         }
@@ -354,7 +392,7 @@ public class TeamService {
         teamRepository.save(team);
 
         logger.info("Equipo {} archivado por {}. Invitaciones eliminadas: teamInvites={}, matchInvites={}",
-                teamId, actorUuid, deletedTeamInvites, deletedMatchInvites);
+                team.getId(), actorUuid, deletedTeamInvites, deletedMatchInvites);
     }
 
     private TeamResponse toTeamResponse(Team team) {

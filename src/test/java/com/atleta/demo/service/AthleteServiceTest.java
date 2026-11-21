@@ -32,6 +32,9 @@ class AthleteServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private TeamService teamService;
+
     private AthleteService athleteService;
 
     private CreateAthleteRequest validRequest;
@@ -50,7 +53,7 @@ class AthleteServiceTest {
         sampleAthlete.setPasswordHash("hashedPassword");
         sampleAthlete.setNombre("Test Athlete");
 
-        athleteService = new AthleteService(athleteRepository, playerProfileRepository, passwordEncoder);
+        athleteService = new AthleteService(athleteRepository, playerProfileRepository, passwordEncoder, teamService);
     }
 
     @Test

@@ -84,6 +84,14 @@ public class ApiExceptionHandler {
         );
     }
 
+    @ExceptionHandler(CaptainTransferRequiredException.class)
+    public ResponseEntity<Map<String, Object>> handleCaptainTransferRequired(
+            CaptainTransferRequiredException ex, WebRequest request) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                createErrorResponse("CAPTAIN_TRANSFER_REQUIRED", ex.getMessage(), HttpStatus.CONFLICT, request)
+        );
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDeniedException(
         AccessDeniedException ex,

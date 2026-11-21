@@ -1,8 +1,12 @@
 package com.atleta.demo.controller;
 
+import com.atleta.demo.dto.request.CreateTeamInviteRequest;
+import com.atleta.demo.service.AthleteService;
+import com.atleta.demo.service.SocialService;
 import com.atleta.demo.service.TeamService;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -11,6 +15,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,6 +43,8 @@ class CaptainTransferIntegrationTest {
     @Autowired private MockMvc mvc;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private TeamService teamService;
+    @Autowired private AthleteService athleteService;
+    @Autowired private SocialService socialService;
     @Autowired private TransactionTemplate transactions;
 
     private Long teamId;
@@ -213,6 +221,182 @@ class CaptainTransferIntegrationTest {
     private ResultActions remove(UUID actor, UUID target) throws Exception {
         return mvc.perform(delete("/api/v1/teams/{teamId}/members/{playerUuid}", teamId, target)
                 .with(jwt().jwt(token -> token.subject(actor.toString()))));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void teamWritesWaitForPendingArchiveAndSeeTheArchivedState(boolean inviting) throws Exception {
+        assertSerializedWithPendingWrite(
+                () -> teamService.deleteTeam(teamId, captain),
+                () -> (inviting ? invite(captain, outsider, "") : transfer(captain, first))
+                        .andReturn().getResponse().getStatus(),
+                inviting ? 400 : 404);
+        assertCaptain(captain);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM team_invites WHERE team_id = ?", Long.class, teamId)).isZero();
+    }
+
+    @Test
+    void archiveWaitsForInvitationBeforeCleaningUpTheTeam() throws Exception {
+        var request = new CreateTeamInviteRequest();
+        request.setTeamId(teamId);
+        request.setTargetUuid(outsider);
+        assertSerializedWithPendingWrite(
+                () -> socialService.createTeamInvite(captain, request),
+                () -> archive(captain).andReturn().getResponse().getStatus(), 204);
+        assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM team_invites WHERE team_id = ?", Long.class, teamId)).isZero();
+    }
+
+    @Test
+    void archivingStillBelongsToTheFounderAfterTheCaptainChanges() throws Exception {
+        transfer(captain, first).andExpect(status().isOk());
+        archive(first).andExpect(status().isForbidden());
+        archive(captain).andExpect(status().isNoContent());
+        archive(captain).andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isTrue();
+    }
+
+    @Test
+    void captainWithOtherActiveMembersMustTransferBeforeDeletingTheAccount() throws Exception {
+        useGoogleAccount(captain);
+        deleteAccount(captain).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("CAPTAIN_TRANSFER_REQUIRED"));
+        assertThat(jdbc.queryForObject("SELECT deleted_at IS NULL FROM athletes WHERE atleta_uuid = ?",
+                Boolean.class, captain)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isFalse();
+        transfer(captain, first).andExpect(status().isOk());
+        deleteAccount(captain).andExpect(status().isNoContent());
+        assertCaptain(first);
+        assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isFalse();
+    }
+
+    @Test
+    void archivesTheTeamWhenItsOnlyActiveMemberDeletesTheirAccount() throws Exception {
+        transfer(captain, first).andExpect(status().isOk());
+        jdbc.update("UPDATE team_members SET activo = FALSE WHERE team_id = ? AND user_id <> ?", teamId, first);
+        invite(first, outsider, "").andExpect(status().isCreated());
+        useGoogleAccount(first);
+        deleteAccount(first).andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT deleted_at IS NOT NULL FROM athletes WHERE atleta_uuid = ?",
+                Boolean.class, first)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM team_members WHERE team_id = ?", Long.class, teamId)).isEqualTo(4L);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM team_invites WHERE team_id = ?", Long.class, teamId)).isZero();
+    }
+
+    @Test
+    void leavesAllTeamsActiveIfAnyCaptaincyStillNeedsToBeTransferred() throws Exception {
+        useGoogleAccount(captain);
+        jdbc.update("UPDATE team_members SET activo = FALSE WHERE team_id = ? AND user_id <> ?", teamId, captain);
+        String otherName = "CAP05-" + UUID.randomUUID();
+        jdbc.update("INSERT INTO teams(nombre, creador_user_id) VALUES (?, ?)", otherName, captain);
+        Long otherTeam = jdbc.queryForObject("SELECT id FROM teams WHERE nombre = ?", Long.class, otherName);
+        try {
+            jdbc.update("INSERT INTO team_members(team_id, user_id, rol) VALUES (?, ?, 'CAPITAN'), (?, ?, 'JUGADOR')",
+                    otherTeam, captain, otherTeam, first);
+            deleteAccount(captain).andExpect(status().isConflict());
+            assertThat(jdbc.queryForList("SELECT archived FROM teams WHERE id IN (?, ?)", Boolean.class, teamId, otherTeam))
+                    .containsExactly(false, false);
+        } finally {
+            jdbc.update("DELETE FROM team_members WHERE team_id = ?", otherTeam);
+            jdbc.update("DELETE FROM teams WHERE id = ?", otherTeam);
+        }
+    }
+
+    @Test
+    void anonymizedMembersDoNotPreventArchivingAndRemainInTeamHistory() throws Exception {
+        useGoogleAccount(captain);
+        jdbc.update("UPDATE athletes SET deleted_at = CURRENT_TIMESTAMP WHERE atleta_uuid IN (?, ?)", first, second);
+        deleteAccount(captain).andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM team_members WHERE team_id = ?", Long.class, teamId)).isEqualTo(4L);
+    }
+
+    @Test
+    void invitationCannotAddAMemberAfterTheSoloCaptainArchivesThroughAccountDeletion() throws Exception {
+        useGoogleAccount(captain);
+        jdbc.update("UPDATE team_members SET activo = FALSE WHERE team_id = ? AND user_id <> ?", teamId, captain);
+        invite(captain, outsider, "").andExpect(status().isCreated());
+        Long inviteId = jdbc.queryForObject("SELECT id FROM team_invites WHERE team_id = ?", Long.class, teamId);
+
+        assertSerializedWithPendingWrite(
+                () -> athleteService.deleteAccount(captain, null, "ELIMINAR"),
+                () -> mvc.perform(put("/api/v1/social/team-invites/{inviteId}/decision", inviteId)
+                                .with(jwt().jwt(token -> token.subject(outsider.toString())))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"accept\":true}"))
+                        .andReturn().getResponse().getStatus(), 403);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM team_members WHERE team_id = ? AND user_id = ?",
+                Long.class, teamId, outsider)).isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void accountDeletionAndCaptainPromotionCheckEligibilityAfterWaiting(boolean deletingFirst) throws Exception {
+        useGoogleAccount(first);
+        if (deletingFirst) {
+            assertSerializedWithPendingWrite(
+                    () -> athleteService.deleteAccount(first, null, "ELIMINAR"),
+                    () -> transfer(captain, first).andReturn().getResponse().getStatus(), 400);
+            assertCaptain(captain);
+        } else {
+            assertSerializedWithPendingWrite(
+                    () -> teamService.transferCaptain(teamId, captain, first),
+                    () -> deleteAccount(first).andReturn().getResponse().getStatus(), 409);
+            assertCaptain(first);
+            assertThat(jdbc.queryForObject("SELECT deleted_at IS NULL FROM athletes WHERE atleta_uuid = ?",
+                    Boolean.class, first)).isTrue();
+        }
+    }
+
+    private void useGoogleAccount(UUID actor) {
+        jdbc.update("UPDATE athletes SET auth_provider = 'GOOGLE' WHERE atleta_uuid = ?", actor);
+    }
+
+    private ResultActions deleteAccount(UUID actor) throws Exception {
+        return mvc.perform(delete("/api/v1/athletes/{atletaUuid}", actor)
+                .with(jwt().jwt(token -> token.subject(actor.toString())))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"confirmation\":\"ELIMINAR\"}"));
+    }
+
+    private ResultActions archive(UUID actor) throws Exception {
+        return mvc.perform(delete("/api/v1/teams/{teamId}", teamId)
+                .param("actorUuid", actor.toString())
+                .with(jwt().jwt(token -> token.subject(actor.toString()))));
+    }
+
+    private void assertSerializedWithPendingWrite(Runnable firstWrite, Callable<Integer> secondWrite, int expectedStatus)
+            throws Exception {
+        CountDownLatch pending = new CountDownLatch(1);
+        CountDownLatch allowCommit = new CountDownLatch(1);
+        CountDownLatch started = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var firstOperation = pool.submit(() -> transactions.executeWithoutResult(status -> {
+                firstWrite.run();
+                pending.countDown();
+                try {
+                    assertThat(allowCommit.await(10, TimeUnit.SECONDS)).isTrue();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+            }));
+            try {
+                assertThat(pending.await(10, TimeUnit.SECONDS)).isTrue();
+                var secondOperation = pool.submit(() -> {
+                    started.countDown();
+                    return secondWrite.call();
+                });
+                assertThat(started.await(10, TimeUnit.SECONDS)).isTrue();
+                assertThrows(TimeoutException.class, () -> secondOperation.get(250, TimeUnit.MILLISECONDS));
+                allowCommit.countDown();
+                firstOperation.get(10, TimeUnit.SECONDS);
+                assertThat(secondOperation.get(10, TimeUnit.SECONDS)).isEqualTo(expectedStatus);
+            } finally {
+                allowCommit.countDown();
+            }
+        }
     }
 
     @Test

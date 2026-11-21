@@ -58,6 +58,9 @@ class TeamServiceTest {
     @Mock
     private PlayerHistoryRepository playerHistoryRepository;
 
+    @Mock
+    private AthleteRepository athleteRepository;
+
     private TeamService teamService;
 
     private CreateTeamRequest validCreateRequest;
@@ -76,7 +79,8 @@ class TeamServiceTest {
                 teamInviteRepository,
                 matchInviteRepository,
                 ratingService,
-                playerHistoryRepository
+                playerHistoryRepository,
+                athleteRepository
         );
 
         UUID playerId = UUID.randomUUID();
@@ -158,6 +162,7 @@ class TeamServiceTest {
         // Arrange
         when(teamRepository.existsByNombre(validCreateRequest.getNombre())).thenReturn(false);
         when(playerProfileRepository.findById(validCreateRequest.getCreadorUuid())).thenReturn(Optional.of(samplePlayer));
+        when(athleteRepository.findByIdForUpdate(validCreateRequest.getCreadorUuid())).thenReturn(Optional.of(new Athlete()));
         when(teamRepository.saveAndFlush(any(Team.class))).thenReturn(sampleTeam);
         when(teamStatsRepository.save(any(TeamStats.class))).thenReturn(sampleStats);
         when(teamMemberRepository.save(any(TeamMember.class))).thenReturn(new TeamMember());
@@ -199,6 +204,7 @@ class TeamServiceTest {
     void createTeam_CreatorNotFound_ShouldThrowException() {
         // Arrange
         when(teamRepository.existsByNombre(validCreateRequest.getNombre())).thenReturn(false);
+        when(athleteRepository.findByIdForUpdate(validCreateRequest.getCreadorUuid())).thenReturn(Optional.of(new Athlete()));
         when(playerProfileRepository.findById(validCreateRequest.getCreadorUuid())).thenReturn(Optional.empty());
 
         // Act & Assert

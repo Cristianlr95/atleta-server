@@ -185,6 +185,11 @@ public class SocialService {
         }
 
         boolean accepted = Boolean.TRUE.equals(decision.getAccept());
+        if (accepted) {
+            teamRepository.findByIdForUpdate(invite.getTeam().getId())
+                    .filter(team -> !Boolean.TRUE.equals(team.getArchived()))
+                    .orElseThrow(() -> new AccessDeniedException("El equipo ya no está disponible"));
+        }
         invite.setStatus(accepted ? RequestStatus.ACEPTADA : RequestStatus.RECHAZADA);
         invite.setRespondedAt(LocalDateTime.now());
         invite = teamInviteRepository.save(invite);

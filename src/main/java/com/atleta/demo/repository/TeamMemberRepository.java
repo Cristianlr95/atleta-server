@@ -87,6 +87,21 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
     @Query("SELECT tm FROM TeamMember tm WHERE tm.team = :team AND tm.rol = 'CAPITAN' AND tm.activo = true")
     List<TeamMember> findCaptainsByTeam(@Param("team") Team team);
 
+    @Query("""
+            SELECT DISTINCT tm.team.id FROM TeamMember tm
+            WHERE tm.player.atletaUuid = :playerUuid AND tm.activo = true
+                AND tm.rol = 'CAPITAN' AND tm.team.archived = false
+            ORDER BY tm.team.id
+            """)
+    List<Long> findActiveCaptainTeamIds(@Param("playerUuid") UUID playerUuid);
+
+    @Query("""
+            SELECT COUNT(tm) > 0 FROM TeamMember tm
+            WHERE tm.team = :team AND tm.activo = true AND tm.player.atletaUuid <> :playerUuid
+                AND tm.player.athlete.deletedAt IS NULL
+            """)
+    boolean hasOtherAvailableMembers(@Param("team") Team team, @Param("playerUuid") UUID playerUuid);
+
     /**
      * Busca directores técnicos activos de un equipo
      * @param team Equipo

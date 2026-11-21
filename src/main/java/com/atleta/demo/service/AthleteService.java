@@ -38,15 +38,18 @@ public class AthleteService {
     private final AthleteRepository athleteRepository;
     private final PlayerProfileRepository playerProfileRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TeamService teamService;
 
     public AthleteService(
             AthleteRepository athleteRepository,
             PlayerProfileRepository playerProfileRepository,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            TeamService teamService
     ) {
         this.athleteRepository = athleteRepository;
         this.playerProfileRepository = playerProfileRepository;
         this.passwordEncoder = passwordEncoder;
+        this.teamService = teamService;
     }
 
     /**
@@ -220,7 +223,7 @@ public class AthleteService {
             throw new IllegalArgumentException("La confirmación de eliminación no es válida");
         }
 
-        Athlete athlete = athleteRepository.findById(atletaUuid)
+        Athlete athlete = athleteRepository.findByIdForUpdate(atletaUuid)
                 .orElseThrow(() -> new IllegalArgumentException("No se encontró atleta con UUID: " + atletaUuid));
 
         if (athlete.getDeletedAt() != null) {
@@ -232,6 +235,7 @@ public class AthleteService {
             throw new IllegalArgumentException("La contraseña actual es incorrecta");
         }
 
+        teamService.archiveTeamsForAccountDeletion(atletaUuid);
         playerProfileRepository.findById(atletaUuid).ifPresent(profile -> {
             profile.setAlias("Jugador eliminado");
             playerProfileRepository.save(profile);

@@ -1,5 +1,17 @@
 # Memoria Viva del Backend Atleta
 
+## CAP-05 · Anonimización de una cuenta con capitanía · 21/11/2026
+
+- Decisión confirmada por el usuario: transferir la capitanía antes de eliminar la cuenta si existe otro integrante activo con cuenta disponible. En un equipo sin otro integrante disponible, el borrado archiva el equipo en la misma transacción. Una membresía de una cuenta ya anonimizada sigue en el historial.
+- `DELETE /api/v1/athletes/{atletaUuid}` devuelve `409 CAPTAIN_TRANSFER_REQUIRED` antes de archivar o anonimizar si queda una capitanía que transferir. Alta, transferencia y borrado coordinan el acceso a la cuenta. La aceptación de invitaciones y el archivado coordinan los cambios de plantel mediante el bloqueo de equipo.
+- Pasaron 37 pruebas dirigidas en H2 y 62 contra PostgreSQL 18.1, incluidos los casos de varios equipos y de concurrencia.
+
+## CAP-05 · Archivado concurrente de equipo · 21/11/2026
+
+- Base local `f70cf81`. El archivado toma el mismo bloqueo de fila que la transferencia de capitanía y los cambios de membresía, antes de comprobar el estado del equipo y limpiar las invitaciones. Si una invitación se confirma primero, el archivado la limpia. Si el archivado se confirma primero, una nueva transferencia o invitación se rechaza al comprobar el estado bajo el bloqueo.
+- El fundador conserva el permiso de archivar incluso después de transferir la capitanía. El cambio queda preparado para revisión local.
+- Pasaron 21 pruebas dirigidas en H2 y 23 en PostgreSQL 18.1, incluidos los dos órdenes entre archivado e invitación y el rechazo de una transferencia que espera al archivado.
+
 ## CAP-02 · Protección local preparada para revisión · 20/11/2026
 
 Base `3aa2785`. El [inventario de lectura](../scripts/inventory-team-captains.sql) incluye los equipos archivados con más de una membresía de capitán activa. En `atleta_dev`, PostgreSQL 18.1 en V028, los 8 equipos activos tienen un capitán. Hay 0 equipos activos sin capitán, 0 activos con duplicados y 0 archivados con duplicados. El inventario manual de Neon beta (production / neondb) informó 0 activos sin capitán, 0 activos con duplicados y 0 archivados con duplicados.

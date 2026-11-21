@@ -1,7 +1,9 @@
 package com.atleta.demo.repository;
 
 import com.atleta.demo.entity.Athlete;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -18,6 +20,10 @@ import java.util.UUID;
  */
 @Repository
 public interface AthleteRepository extends JpaRepository<Athlete, UUID> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM Athlete a WHERE a.atletaUuid = :id")
+    Optional<Athlete> findByIdForUpdate(@Param("id") UUID id);
 
     /**
      * Busca un atleta por su email único
