@@ -174,6 +174,31 @@ public class TeamController {
 
     public record CaptainResponse(Long teamId, UUID captainPlayerUuid) {}
 
+    @DeleteMapping("/{teamId}/members/{playerUuid}")
+    @Operation(summary = "Retirar a un jugador del equipo como capitán activo",
+            description = "Desactiva la membresía del jugador y conserva su historial deportivo")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Membresía desactivada"),
+            @ApiResponse(responseCode = "400", description = "El destinatario no es otro jugador activo con una sola membresía"),
+            @ApiResponse(responseCode = "401", description = "Sesión requerida"),
+            @ApiResponse(responseCode = "403", description = "El actor no es el capitán activo del equipo"),
+            @ApiResponse(responseCode = "404", description = "Equipo activo o membresía activa no encontrados")
+    })
+    public ResponseEntity<Void> removeMember(
+            @PathVariable Long teamId,
+            @PathVariable UUID playerUuid,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        try {
+            teamService.removeMember(teamId, AuthenticatedUserUtils.currentUserUuid(jwt), playerUuid);
+            return ResponseEntity.noContent().build();
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
     @DeleteMapping("/{teamId}")
     @Operation(summary = "Archivar equipo",
             description = "Archiva logicamente un equipo solo si el actor es el creador")

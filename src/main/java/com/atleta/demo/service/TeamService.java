@@ -277,9 +277,7 @@ public class TeamService {
     }
 
     public UUID transferCaptain(Long teamId, UUID actorUuid, UUID targetUuid) {
-        Team team = teamRepository.findByIdForUpdate(teamId)
-                .filter(current -> !Boolean.TRUE.equals(current.getArchived()))
-                .orElseThrow(() -> new EntityNotFoundException("Equipo activo no encontrado"));
+        Team team = lockActiveTeam(teamId);
 
         List<TeamMember> members = teamMemberRepository.findActiveByTeam(team);
         TeamMember captain = members.stream()
@@ -300,6 +298,37 @@ public class TeamService {
         TeamMember newCaptain = targets.getFirst();
         newCaptain.setRol(PlayerRole.CAPITAN);
         return newCaptain.getPlayer().getAtletaUuid();
+    }
+
+    public void removeMember(Long teamId, UUID actorUuid, UUID targetUuid) {
+        Team team = lockActiveTeam(teamId);
+        List<TeamMember> members = teamMemberRepository.findActiveByTeam(team);
+        boolean actorIsCaptain = members.stream()
+                .anyMatch(member -> member.isCapitan() && member.getPlayer().getAtletaUuid().equals(actorUuid));
+        if (!actorIsCaptain) {
+            throw new AccessDeniedException("Solo el capitán activo puede retirar integrantes");
+        }
+        if (actorUuid.equals(targetUuid)) {
+            throw new IllegalArgumentException("El capitán no puede retirarse mediante esta operación");
+        }
+
+        List<TeamMember> targets = members.stream()
+                .filter(member -> member.getPlayer().getAtletaUuid().equals(targetUuid))
+                .limit(2)
+                .toList();
+        if (targets.isEmpty()) {
+            throw new EntityNotFoundException("Integrante activo no encontrado");
+        }
+        if (targets.size() != 1 || targets.getFirst().getRol() != PlayerRole.JUGADOR) {
+            throw new IllegalArgumentException("El destinatario debe tener una única membresía activa de jugador");
+        }
+        targets.getFirst().desactivar();
+    }
+
+    private Team lockActiveTeam(Long teamId) {
+        return teamRepository.findByIdForUpdate(teamId)
+                .filter(current -> !Boolean.TRUE.equals(current.getArchived()))
+                .orElseThrow(() -> new EntityNotFoundException("Equipo activo no encontrado"));
     }
 
     public void deleteTeam(Long teamId, UUID actorUuid) {

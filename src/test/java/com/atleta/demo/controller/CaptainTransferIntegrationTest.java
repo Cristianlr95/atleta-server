@@ -1,10 +1,12 @@
 package com.atleta.demo.controller;
 
+import com.atleta.demo.service.TeamService;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,9 +19,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -31,6 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class CaptainTransferIntegrationTest {
     @Autowired private MockMvc mvc;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private TeamService teamService;
+    @Autowired private TransactionTemplate transactions;
 
     private Long teamId;
     private UUID captain;
@@ -38,6 +45,7 @@ class CaptainTransferIntegrationTest {
     private UUID second;
     private UUID inactive;
     private UUID outsider;
+    private Long pastMatchId;
 
     @BeforeEach
     void setUp() {
@@ -57,6 +65,13 @@ class CaptainTransferIntegrationTest {
 
     @AfterEach
     void removeFixture() {
+        if (pastMatchId != null) {
+            jdbc.update("DELETE FROM player_history WHERE match_id = ?", pastMatchId);
+            jdbc.update("DELETE FROM match_players WHERE match_id = ?", pastMatchId);
+            jdbc.update("DELETE FROM matches WHERE id = ?", pastMatchId);
+            jdbc.update("DELETE FROM player_ratings WHERE player_profile_id = ?", first);
+            jdbc.update("DELETE FROM team_stats WHERE team_id = ?", teamId);
+        }
         jdbc.update("DELETE FROM notifications WHERE recipient_user_id = ? AND context_type = 'TEAM_INVITE'", outsider);
         jdbc.update("DELETE FROM team_invites WHERE team_id = ?", teamId);
         jdbc.update("DELETE FROM team_members WHERE team_id = ?", teamId);
@@ -65,6 +80,139 @@ class CaptainTransferIntegrationTest {
             jdbc.update("DELETE FROM player_profiles WHERE atleta_uuid = ?", player);
             jdbc.update("DELETE FROM athletes WHERE atleta_uuid = ?", player);
         }
+    }
+
+    @Test
+    void foundingCaptainDeactivatesMembershipAndPreservesSportsHistory() throws Exception {
+        Long positionId = jdbc.queryForObject("SELECT MIN(id) FROM positions", Long.class);
+        jdbc.update("""
+                INSERT INTO matches(modalidad, fecha_hora_programada, creador_user_id, estado, categoria_genero, match_type)
+                VALUES ('CINCO_VS_CINCO', CURRENT_TIMESTAMP, ?, 'FINALIZADO', 'MIXTO', 'FRIENDLY')
+                """, captain);
+        pastMatchId = jdbc.queryForObject("SELECT id FROM matches WHERE creador_user_id = ?", Long.class, captain);
+        jdbc.update("""
+                INSERT INTO match_players(match_id, team_id, user_id, position_id, rol, confirmado)
+                VALUES (?, ?, ?, ?, 'JUGADOR', TRUE)
+                """, pastMatchId, teamId, first, positionId);
+        jdbc.update("""
+                INSERT INTO player_history(match_id, team_id, user_id, position_id, goles, asistencias, resultado, xp_ganada)
+                VALUES (?, ?, ?, ?, 2, 1, 'VICTORIA', 25)
+                """, pastMatchId, teamId, first, positionId);
+        jdbc.update("""
+                INSERT INTO player_ratings(player_profile_id, role_type, priority_level, current_rating, matches_played)
+                VALUES (?, 'ATAQUE', 'PRINCIPAL', 76.50, 6)
+                """, first);
+        jdbc.update("INSERT INTO team_stats(team_id, partidos_jugados, goles_favor) VALUES (?, 1, 2)", teamId);
+
+        var participation = jdbc.queryForMap("SELECT * FROM match_players WHERE match_id = ?", pastMatchId);
+        var history = jdbc.queryForMap("SELECT * FROM player_history WHERE match_id = ?", pastMatchId);
+        var rating = jdbc.queryForMap("SELECT * FROM player_ratings WHERE player_profile_id = ?", first);
+        var stats = jdbc.queryForMap("SELECT * FROM team_stats WHERE team_id = ?", teamId);
+        var membership = jdbc.queryForMap("SELECT id, joined_at FROM team_members WHERE team_id = ? AND user_id = ?", teamId, first);
+
+        remove(captain, first).andExpect(status().isNoContent());
+        remove(captain, first).andExpect(status().isNotFound());
+
+        assertThat(jdbc.queryForMap("SELECT id, joined_at FROM team_members WHERE team_id = ? AND user_id = ? AND NOT activo",
+                teamId, first)).isEqualTo(membership);
+        assertThat(jdbc.queryForMap("SELECT * FROM match_players WHERE match_id = ?", pastMatchId)).isEqualTo(participation);
+        assertThat(jdbc.queryForMap("SELECT * FROM player_history WHERE match_id = ?", pastMatchId)).isEqualTo(history);
+        assertThat(jdbc.queryForMap("SELECT * FROM player_ratings WHERE player_profile_id = ?", first)).isEqualTo(rating);
+        assertThat(jdbc.queryForMap("SELECT * FROM team_stats WHERE team_id = ?", teamId)).isEqualTo(stats);
+        assertCaptain(captain);
+    }
+
+    @Test
+    void successorCanRemoveAPlayerAndTheFormerCaptainLosesPermission() throws Exception {
+        transfer(captain, first).andExpect(status().isOk());
+        remove(captain, second).andExpect(status().isForbidden());
+        remove(first, second).andExpect(status().isNoContent());
+        assertCaptain(first);
+    }
+
+    @Test
+    void rejectsANormalMemberEvenIfTheRequestNamesTheCaptainAsActor() throws Exception {
+        mvc.perform(delete("/api/v1/teams/{teamId}/members/{playerUuid}", teamId, second)
+                        .param("actorUuid", captain.toString())
+                        .with(jwt().jwt(token -> token.subject(first.toString()))))
+                .andExpect(status().isForbidden());
+        assertThat(activeRole(second)).isEqualTo("JUGADOR");
+    }
+
+    @Test
+    void rejectsRemovingTheCaptainByAnotherMember() throws Exception {
+        remove(first, captain).andExpect(status().isForbidden());
+        assertCaptain(captain);
+    }
+
+    @Test
+    void rejectsSelfRemovalAndRemovingACoach() throws Exception {
+        remove(captain, captain).andExpect(status().isBadRequest());
+        jdbc.update("UPDATE team_members SET rol = 'DT' WHERE team_id = ? AND user_id = ?", teamId, first);
+        remove(captain, first).andExpect(status().isBadRequest());
+        assertCaptain(captain);
+        assertThat(activeRole(first)).isEqualTo("DT");
+    }
+
+    @Test
+    void rejectsInactiveAndMissingMemberships() throws Exception {
+        for (UUID target : List.of(inactive, outsider, UUID.randomUUID())) {
+            remove(captain, target).andExpect(status().isNotFound());
+        }
+    }
+
+    @Test
+    void rejectsAmbiguousActiveMemberships() throws Exception {
+        addMember(first, "JUGADOR", true);
+        remove(captain, first).andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM team_members WHERE team_id = ? AND user_id = ? AND activo",
+                Long.class, teamId, first)).isEqualTo(2L);
+    }
+
+    @Test
+    void rejectsRemovalFromAnArchivedTeam() throws Exception {
+        jdbc.update("UPDATE teams SET archived = TRUE WHERE id = ?", teamId);
+        remove(captain, first).andExpect(status().isNotFound());
+        assertThat(activeRole(first)).isEqualTo("JUGADOR");
+    }
+
+    @Test
+    void removalWaitsForTransferAndRechecksTheActorUnderTheSameLock() throws Exception {
+        CountDownLatch transferred = new CountDownLatch(1);
+        CountDownLatch allowCommit = new CountDownLatch(1);
+        CountDownLatch removalStarted = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var transfer = pool.submit(() -> transactions.executeWithoutResult(status -> {
+                teamService.transferCaptain(teamId, captain, first);
+                transferred.countDown();
+                try {
+                    assertThat(allowCommit.await(10, TimeUnit.SECONDS)).isTrue();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+            }));
+            try {
+                assertThat(transferred.await(10, TimeUnit.SECONDS)).isTrue();
+                var removal = pool.submit(() -> {
+                    removalStarted.countDown();
+                    return remove(captain, first).andReturn().getResponse().getStatus();
+                });
+                assertThat(removalStarted.await(10, TimeUnit.SECONDS)).isTrue();
+                assertThrows(TimeoutException.class, () -> removal.get(250, TimeUnit.MILLISECONDS));
+                allowCommit.countDown();
+                transfer.get(10, TimeUnit.SECONDS);
+                assertThat(removal.get(10, TimeUnit.SECONDS)).isEqualTo(403);
+            } finally {
+                allowCommit.countDown();
+            }
+        }
+        assertCaptain(first);
+    }
+
+    private ResultActions remove(UUID actor, UUID target) throws Exception {
+        return mvc.perform(delete("/api/v1/teams/{teamId}/members/{playerUuid}", teamId, target)
+                .with(jwt().jwt(token -> token.subject(actor.toString()))));
     }
 
     @Test
