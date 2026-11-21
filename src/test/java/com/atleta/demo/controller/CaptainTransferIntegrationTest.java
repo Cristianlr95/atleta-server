@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -36,6 +37,7 @@ class CaptainTransferIntegrationTest {
     private UUID first;
     private UUID second;
     private UUID inactive;
+    private UUID outsider;
 
     @BeforeEach
     void setUp() {
@@ -43,6 +45,7 @@ class CaptainTransferIntegrationTest {
         first = player();
         second = player();
         inactive = player();
+        outsider = player();
         String name = "CAP05-" + UUID.randomUUID();
         jdbc.update("INSERT INTO teams(nombre, creador_user_id) VALUES (?, ?)", name, captain);
         teamId = jdbc.queryForObject("SELECT id FROM teams WHERE nombre = ?", Long.class, name);
@@ -54,12 +57,53 @@ class CaptainTransferIntegrationTest {
 
     @AfterEach
     void removeFixture() {
+        jdbc.update("DELETE FROM notifications WHERE recipient_user_id = ? AND context_type = 'TEAM_INVITE'", outsider);
+        jdbc.update("DELETE FROM team_invites WHERE team_id = ?", teamId);
         jdbc.update("DELETE FROM team_members WHERE team_id = ?", teamId);
         jdbc.update("DELETE FROM teams WHERE id = ?", teamId);
-        for (UUID player : List.of(captain, first, second, inactive)) {
+        for (UUID player : List.of(captain, first, second, inactive, outsider)) {
             jdbc.update("DELETE FROM player_profiles WHERE atleta_uuid = ?", player);
             jdbc.update("DELETE FROM athletes WHERE atleta_uuid = ?", player);
         }
+    }
+
+    @Test
+    void letsTheFoundingCaptainInviteUsingOnlyTheJwt() throws Exception {
+        invite(captain, outsider, "").andExpect(status().isCreated())
+                .andExpect(jsonPath("$.requesterUuid").value(captain.toString()));
+    }
+
+    @Test
+    void grantsInvitationPermissionToTheSuccessorAndRevokesItFromTheFounder() throws Exception {
+        transfer(captain, first).andExpect(status().isOk());
+        invite(captain, outsider, "").andExpect(status().isForbidden());
+        invite(first, outsider, ",\"requesterUuid\":\"" + captain + "\"")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.requesterUuid").value(first.toString()));
+    }
+
+    @Test
+    void deniesMembersAndOutsidersEvenIfTheySendTheCaptainsUuid() throws Exception {
+        String forgedRequester = ",\"requesterUuid\":\"" + captain + "\"";
+        invite(first, outsider, forgedRequester).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.errorCode").value("ACCESS_DENIED"));
+        invite(outsider, inactive, forgedRequester).andExpect(status().isForbidden());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM team_invites WHERE team_id = ?", Long.class, teamId))
+                .isZero();
+    }
+
+    @Test
+    void reportsValidationErrorsForAuthorizedCaptains() throws Exception {
+        invite(captain, first, "").andExpect(status().isBadRequest());
+        jdbc.update("UPDATE teams SET archived = TRUE WHERE id = ?", teamId);
+        invite(captain, outsider, "").andExpect(status().isBadRequest());
+    }
+
+    private ResultActions invite(UUID actor, UUID target, String extraFields) throws Exception {
+        return mvc.perform(post("/api/v1/social/team-invites")
+                .with(jwt().jwt(token -> token.subject(actor.toString())))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"teamId\":" + teamId + ",\"targetUuid\":\"" + target + "\"" + extraFields + "}"));
     }
 
     @Test

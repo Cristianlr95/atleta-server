@@ -76,13 +76,17 @@ public class SocialController {
     }
 
     @PostMapping("/team-invites")
-    @Operation(summary = "Enviar invitacion a equipo")
+    @Operation(summary = "Enviar invitación a equipo como capitán activo")
     public ResponseEntity<SocialRequestResponse> createTeamInvite(
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody CreateTeamInviteRequest request
     ) {
-        request.setRequesterUuid(AuthenticatedUserUtils.currentUserUuid(jwt));
-        return ResponseEntity.status(HttpStatus.CREATED).body(socialService.createTeamInvite(request));
+        UUID actorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+        try {
+            return ResponseEntity.status(HttpStatus.CREATED).body(socialService.createTeamInvite(actorUuid, request));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     @PutMapping("/team-invites/{inviteId}/decision")

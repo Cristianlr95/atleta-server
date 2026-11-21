@@ -141,16 +141,20 @@ public class SocialService {
                 .toList();
     }
 
-    public SocialRequestResponse createTeamInvite(CreateTeamInviteRequest request) {
-        Team team = teamRepository.findById(request.getTeamId())
+    public SocialRequestResponse createTeamInvite(UUID actorUuid, CreateTeamInviteRequest request) {
+        Team team = teamRepository.findByIdForUpdate(request.getTeamId())
                 .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado"));
-        PlayerProfile requester = getPlayer(request.getRequesterUuid());
+        PlayerProfile requester = teamMemberRepository.findCaptainsByTeam(team).stream()
+                .map(TeamMember::getPlayer)
+                .filter(player -> player.getAtletaUuid().equals(actorUuid))
+                .findFirst()
+                .orElseThrow(() -> new AccessDeniedException("Solo el capitán activo puede invitar al equipo"));
+        if (Boolean.TRUE.equals(team.getArchived())) {
+            throw new IllegalArgumentException("El equipo está archivado");
+        }
         PlayerProfile target = getPlayer(request.getTargetUuid());
         validateDistinctUsers(requester.getAtletaUuid(), target.getAtletaUuid());
 
-        if (!teamMemberRepository.isActiveMember(team, requester)) {
-            throw new IllegalArgumentException("Solo un miembro activo del equipo puede invitar");
-        }
         if (teamMemberRepository.isActiveMember(team, target)) {
             throw new IllegalArgumentException("El jugador ya pertenece al equipo");
         }

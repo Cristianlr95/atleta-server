@@ -1,15 +1,15 @@
 package com.atleta.demo.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.util.UUID;
 
+@JsonIgnoreProperties("requesterUuid")
 public class CreateTeamInviteRequest {
     @NotNull
     private Long teamId;
-    @NotNull
-    private UUID requesterUuid;
     @NotNull
     private UUID targetUuid;
     @Size(max = 255)
@@ -21,14 +21,6 @@ public class CreateTeamInviteRequest {
 
     public void setTeamId(Long teamId) {
         this.teamId = teamId;
-    }
-
-    public UUID getRequesterUuid() {
-        return requesterUuid;
-    }
-
-    public void setRequesterUuid(UUID requesterUuid) {
-        this.requesterUuid = requesterUuid;
     }
 
     public UUID getTargetUuid() {
