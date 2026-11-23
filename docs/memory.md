@@ -1,5 +1,13 @@
 # Memoria Viva del Backend Atleta
 
+## CAP-03A · Archivado manual por el capitán vigente · 23/11/2026
+
+- Base de beta `adcdfa8`, con CAP-03 y CAP-05. Los commits locales SEC-01 y SEC-02 quedan en sus ramas. `DELETE /api/v1/teams/{teamId}?actorUuid=...` conserva el parámetro y exige que coincida con el JWT. El servicio bloquea el equipo y autoriza por membresía activa `CAPITAN`.
+- El capitán activo recibe `204`, incluido un reintento sobre el equipo ya archivado. La autorización se comprueba antes del reintento. El equipo inexistente devuelve `404`, la ausencia de sesión `401` y un actor autenticado sin el cargo `403`.
+- La transferencia conserva las invitaciones pendientes. El archivado conserva el historial deportivo y mantiene la limpieza existente de invitaciones de equipo y de partido. El archivado por baja de cuenta conserva su regla.
+- En PostgreSQL 18.1 aislado, RED dio tres fallos esperados de cinco casos. GREEN pasó 157 pruebas, sin fallos ni omisiones, y generó el JAR con `clean package`. Se verificaron la matriz con JWT firmado, la concurrencia y el rollback del archivado. La regresión completa H2 pasó 798 pruebas con 4 omisiones dependientes de PostgreSQL.
+- CAP-03C debe actualizar el botón y la validación en Perfil (`profile-teams` y `PlayerProfilePage.onDeleteTeam`), Social (`TeamsPanelComponent` y `SocialFacadeService.createdTeams`), y la variante de Inicio que reutiliza el panel de equipos. Los controles deben consultar el cargo por equipo, actualizarse tras la transferencia y recuperar el estado ante un `403`.
+
 ## CAP-06 · QA con sesión autenticada · 21/11/2026
 
 - Bases de beta verificadas en GitHub: backend `64b92f8` y frontend `7033ffd`. La prueba local inicia sesión con tres cuentas sintéticas en `/api/v1/athletes/login` y usa los JWT firmados emitidos por Atleta a través de los filtros de seguridad de MockMvc.

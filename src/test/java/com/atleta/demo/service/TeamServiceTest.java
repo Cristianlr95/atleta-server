@@ -4,6 +4,7 @@ import com.atleta.demo.dto.request.CreateTeamRequest;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.dto.response.TeamResponse;
 import com.atleta.demo.entity.*;
+import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,6 +68,36 @@ class TeamServiceTest {
     private PlayerProfile samplePlayer;
     private Team sampleTeam;
     private TeamStats sampleStats;
+
+    @Test
+    void archivesAfterLockingTheTeamAndCheckingItsCaptain() {
+        sampleTeam.setCreador(new PlayerProfile());
+        when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleTeam));
+        when(teamMemberRepository.findCaptainsByTeam(sampleTeam))
+                .thenReturn(List.of(new TeamMember(sampleTeam, samplePlayer, PlayerRole.CAPITAN)));
+
+        teamService.deleteTeam(1L, samplePlayer.getAtletaUuid());
+
+        var calls = inOrder(teamRepository, teamMemberRepository, teamInviteRepository, matchInviteRepository);
+        calls.verify(teamRepository).findByIdForUpdate(1L);
+        calls.verify(teamMemberRepository).findCaptainsByTeam(sampleTeam);
+        calls.verify(teamInviteRepository).deleteByTeam(sampleTeam);
+        calls.verify(matchInviteRepository).deleteByTeam(sampleTeam);
+        calls.verify(teamRepository).save(sampleTeam);
+        assertTrue(sampleTeam.getArchived());
+    }
+
+    @Test
+    void deniesAFounderWithoutCaptaincyBeforeWritingAnything() {
+        when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleTeam));
+        when(teamMemberRepository.findCaptainsByTeam(sampleTeam)).thenReturn(List.of());
+
+        assertThrows(SecurityException.class, () -> teamService.deleteTeam(1L, samplePlayer.getAtletaUuid()));
+
+        verifyNoInteractions(teamInviteRepository, matchInviteRepository);
+        verify(teamRepository, never()).save(any());
+        assertFalse(sampleTeam.getArchived());
+    }
 
     @BeforeEach
     void setUp() {

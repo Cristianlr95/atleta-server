@@ -367,11 +367,10 @@ public class TeamService {
         Team team = teamRepository.findByIdForUpdate(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado: " + teamId));
 
-        playerProfileRepository.findById(actorUuid)
-                .orElseThrow(() -> new IllegalArgumentException("Jugador no encontrado: " + actorUuid));
-
-        if (team.getCreador() == null || !team.getCreador().getAtletaUuid().equals(actorUuid)) {
-            throw new SecurityException("Solo el creador del equipo puede eliminarlo");
+        boolean actorIsCaptain = teamMemberRepository.findCaptainsByTeam(team).stream()
+                .anyMatch(member -> member.getPlayer().getAtletaUuid().equals(actorUuid));
+        if (!actorIsCaptain) {
+            throw new SecurityException("Solo el capitán activo puede archivar el equipo");
         }
 
         archiveLockedTeam(team, actorUuid);

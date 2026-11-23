@@ -223,11 +223,13 @@ public class TeamController {
 
     @DeleteMapping("/{teamId}")
     @Operation(summary = "Archivar equipo",
-            description = "Archiva logicamente un equipo solo si el actor es el creador")
+            description = "Archiva el equipo como capitán activo identificado por el JWT. "
+                    + "Un reintento por el mismo capitán devuelve 204 si el equipo ya está archivado.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Equipo archivado exitosamente"),
-            @ApiResponse(responseCode = "403", description = "No autorizado para eliminar el equipo"),
-            @ApiResponse(responseCode = "404", description = "Equipo o jugador no encontrado")
+            @ApiResponse(responseCode = "204", description = "Equipo archivado o ya archivado"),
+            @ApiResponse(responseCode = "401", description = "Sesión requerida"),
+            @ApiResponse(responseCode = "403", description = "El actor no es el capitán activo o actorUuid no coincide con el JWT"),
+            @ApiResponse(responseCode = "404", description = "Equipo no encontrado")
     })
     public ResponseEntity<Void> deleteTeam(
             @PathVariable Long teamId,

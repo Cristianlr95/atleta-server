@@ -1,13 +1,16 @@
 package com.atleta.demo.controller;
 
 import com.atleta.demo.dto.request.CreateTeamInviteRequest;
+import com.atleta.demo.dto.request.RespondRequestDecision;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.service.AthleteService;
 import com.atleta.demo.service.SocialService;
 import com.atleta.demo.service.TeamService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -22,7 +25,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.MockMvcPrint;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -32,6 +37,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.SoftAssertions.assertSoftly;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -42,7 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(print = MockMvcPrint.NONE)
 @ActiveProfiles("test")
 class CaptainTransferIntegrationTest {
     @Autowired private MockMvc mvc;
@@ -80,6 +86,7 @@ class CaptainTransferIntegrationTest {
 
     @AfterEach
     void removeFixture() {
+        jdbc.update("DELETE FROM match_invites WHERE team_id = ?", teamId);
         if (pastMatchId != null) {
             jdbc.update("DELETE FROM player_history WHERE match_id = ?", pastMatchId);
             jdbc.update("DELETE FROM match_players WHERE match_id = ?", pastMatchId);
@@ -87,7 +94,9 @@ class CaptainTransferIntegrationTest {
             jdbc.update("DELETE FROM player_ratings WHERE player_profile_id = ?", first);
             jdbc.update("DELETE FROM team_stats WHERE team_id = ?", teamId);
         }
-        jdbc.update("DELETE FROM notifications WHERE recipient_user_id = ? AND context_type = 'TEAM_INVITE'", outsider);
+        jdbc.update("DELETE FROM player_positions WHERE player_id = ?", first);
+        jdbc.update("DELETE FROM notifications WHERE recipient_user_id IN (?, ?) AND context_type = 'TEAM_INVITE'",
+                captain, outsider);
         jdbc.update("DELETE FROM team_invites WHERE team_id = ?", teamId);
         jdbc.update("DELETE FROM team_captain_transfers WHERE team_id = ?", teamId);
         jdbc.update("DELETE FROM team_members WHERE team_id = ?", teamId);
@@ -101,6 +110,26 @@ class CaptainTransferIntegrationTest {
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void deactivatesMembershipAndPreservesSportsHistory(boolean leaving) throws Exception {
+        seedSportsHistory();
+        var participation = jdbc.queryForMap("SELECT * FROM match_players WHERE match_id = ?", pastMatchId);
+        var history = jdbc.queryForMap("SELECT * FROM player_history WHERE match_id = ?", pastMatchId);
+        var rating = jdbc.queryForMap("SELECT * FROM player_ratings WHERE player_profile_id = ?", first);
+        var stats = jdbc.queryForMap("SELECT * FROM team_stats WHERE team_id = ?", teamId);
+        var membership = jdbc.queryForMap("SELECT id, joined_at FROM team_members WHERE team_id = ? AND user_id = ?", teamId, first);
+
+        (leaving ? leave(first) : remove(captain, first)).andExpect(status().isNoContent());
+        (leaving ? leave(first) : remove(captain, first)).andExpect(status().isNotFound());
+
+        assertThat(jdbc.queryForMap("SELECT id, joined_at FROM team_members WHERE team_id = ? AND user_id = ? AND NOT activo",
+                teamId, first)).isEqualTo(membership);
+        assertThat(jdbc.queryForMap("SELECT * FROM match_players WHERE match_id = ?", pastMatchId)).isEqualTo(participation);
+        assertThat(jdbc.queryForMap("SELECT * FROM player_history WHERE match_id = ?", pastMatchId)).isEqualTo(history);
+        assertThat(jdbc.queryForMap("SELECT * FROM player_ratings WHERE player_profile_id = ?", first)).isEqualTo(rating);
+        assertThat(jdbc.queryForMap("SELECT * FROM team_stats WHERE team_id = ?", teamId)).isEqualTo(stats);
+        assertCaptain(captain);
+    }
+
+    private void seedSportsHistory() {
         Long positionId = jdbc.queryForObject("SELECT MIN(id) FROM positions", Long.class);
         jdbc.update("""
                 INSERT INTO matches(modalidad, fecha_hora_programada, creador_user_id, estado, categoria_genero, match_type)
@@ -121,22 +150,6 @@ class CaptainTransferIntegrationTest {
                 """, first);
         jdbc.update("INSERT INTO team_stats(team_id, partidos_jugados, goles_favor) VALUES (?, 1, 2)", teamId);
 
-        var participation = jdbc.queryForMap("SELECT * FROM match_players WHERE match_id = ?", pastMatchId);
-        var history = jdbc.queryForMap("SELECT * FROM player_history WHERE match_id = ?", pastMatchId);
-        var rating = jdbc.queryForMap("SELECT * FROM player_ratings WHERE player_profile_id = ?", first);
-        var stats = jdbc.queryForMap("SELECT * FROM team_stats WHERE team_id = ?", teamId);
-        var membership = jdbc.queryForMap("SELECT id, joined_at FROM team_members WHERE team_id = ? AND user_id = ?", teamId, first);
-
-        (leaving ? leave(first) : remove(captain, first)).andExpect(status().isNoContent());
-        (leaving ? leave(first) : remove(captain, first)).andExpect(status().isNotFound());
-
-        assertThat(jdbc.queryForMap("SELECT id, joined_at FROM team_members WHERE team_id = ? AND user_id = ? AND NOT activo",
-                teamId, first)).isEqualTo(membership);
-        assertThat(jdbc.queryForMap("SELECT * FROM match_players WHERE match_id = ?", pastMatchId)).isEqualTo(participation);
-        assertThat(jdbc.queryForMap("SELECT * FROM player_history WHERE match_id = ?", pastMatchId)).isEqualTo(history);
-        assertThat(jdbc.queryForMap("SELECT * FROM player_ratings WHERE player_profile_id = ?", first)).isEqualTo(rating);
-        assertThat(jdbc.queryForMap("SELECT * FROM team_stats WHERE team_id = ?", teamId)).isEqualTo(stats);
-        assertCaptain(captain);
     }
 
     @Test
@@ -341,12 +354,228 @@ class CaptainTransferIntegrationTest {
     }
 
     @Test
-    void archivingStillBelongsToTheFounderAfterTheCaptainChanges() throws Exception {
+    void foundingCaptainCanCreateAndArchiveATeam() throws Exception {
+        String authorization = login(captain);
+        String body = mvc.perform(post("/api/v1/teams").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "nombre", "CAP03A-" + UUID.randomUUID(), "creadorUuid", captain))))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long createdTeamId = objectMapper.readTree(body).get("id").asLong();
+        try {
+            assertThat(jdbc.queryForList("SELECT user_id FROM team_members WHERE team_id = ? AND activo AND rol = 'CAPITAN'",
+                    UUID.class, createdTeamId)).containsExactly(captain);
+            mvc.perform(delete("/api/v1/teams/{teamId}", createdTeamId).param("actorUuid", captain.toString())
+                            .header("Authorization", authorization))
+                    .andExpect(status().isNoContent());
+            assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, createdTeamId))
+                    .isTrue();
+        } finally {
+            jdbc.update("DELETE FROM team_members WHERE team_id = ?", createdTeamId);
+            jdbc.update("DELETE FROM team_stats WHERE team_id = ?", createdTeamId);
+            jdbc.update("DELETE FROM teams WHERE id = ?", createdTeamId);
+        }
+    }
+
+    @Test
+    void successorCanArchiveAndRetryWithoutChangingTheArchiveTimestamp() throws Exception {
+        String successorAuth = login(first);
+        invite(captain, outsider, "").andExpect(status().isCreated());
         transfer(captain, first).andExpect(status().isOk());
-        archive(first).andExpect(status().isForbidden());
-        archive(captain).andExpect(status().isNoContent());
-        archive(captain).andExpect(status().isNoContent());
+        assertThat(jdbc.queryForList("SELECT status FROM team_invites WHERE team_id = ?", String.class, teamId))
+                .containsExactly("PENDIENTE");
+
+        archiveWithJwt(successorAuth, first).andExpect(status().isNoContent());
         assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isTrue();
+        var timestamp = jdbc.queryForObject("SELECT archived_at FROM teams WHERE id = ?", LocalDateTime.class, teamId);
+        assertThat(timestamp).isNotNull();
+        archiveWithJwt(successorAuth, first).andExpect(status().isNoContent());
+        archiveWithJwt(login(captain), captain).andExpect(status().isForbidden());
+        assertThat(jdbc.queryForObject("SELECT archived_at FROM teams WHERE id = ?", LocalDateTime.class, teamId))
+                .isEqualTo(timestamp);
+        assertThat(archiveInvites()).isEmpty();
+        assertCaptain(first);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void formerFounderCannotArchiveWithOrWithoutActiveMembership(boolean leaves) throws Exception {
+        String founderAuth = login(captain);
+        invite(captain, outsider, "").andExpect(status().isCreated());
+        transfer(captain, first).andExpect(status().isOk());
+        if (leaves) {
+            mvc.perform(delete("/api/v1/teams/{teamId}/members/me", teamId).header("Authorization", founderAuth))
+                    .andExpect(status().isNoContent());
+        }
+        var beforeTeam = jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId);
+        var beforeInvites = archiveInvites();
+        int result = archiveWithJwt(founderAuth, captain).andReturn().getResponse().getStatus();
+
+        assertSoftly(softly -> {
+            softly.assertThat(result).as("former founder archive status").isEqualTo(403);
+            softly.assertThat(jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId))
+                    .as("team is unchanged").isEqualTo(beforeTeam);
+            softly.assertThat(archiveInvites()).as("pending invites are unchanged").isEqualTo(beforeInvites);
+        });
+        assertCaptain(first);
+    }
+
+    @Test
+    void rejectsUnauthorizedArchiveRequestsWithoutChangingTeamOrInvitations() throws Exception {
+        invite(captain, outsider, "").andExpect(status().isCreated());
+        var beforeTeam = jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId);
+        var beforeInvites = archiveInvites();
+        var beforeMembers = archiveMembers();
+        String outsiderAuth = login(outsider);
+
+        for (UUID actor : List.of(second, inactive)) {
+            archiveWithJwt(login(actor), actor).andExpect(status().isForbidden());
+        }
+        archiveWithJwt(outsiderAuth, outsider).andExpect(status().isForbidden());
+        archiveWithJwt(outsiderAuth, captain).andExpect(status().isForbidden());
+        mvc.perform(delete("/api/v1/teams/{teamId}", teamId).param("actorUuid", outsider.toString())
+                        .header("Authorization", outsiderAuth).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"actorUuid\":\"" + captain + "\",\"role\":\"CAPITAN\",\"rol\":\"CAPITAN\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/v1/teams/{teamId}", teamId).param("actorUuid", captain.toString()))
+                .andExpect(status().isUnauthorized());
+
+        assertThat(jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId)).isEqualTo(beforeTeam);
+        assertThat(archiveInvites()).isEqualTo(beforeInvites);
+        assertThat(archiveMembers()).isEqualTo(beforeMembers);
+        assertCaptain(captain);
+    }
+
+    private ResultActions archiveWithJwt(String authorization, UUID actorUuid) throws Exception {
+        return mvc.perform(delete("/api/v1/teams/{teamId}", teamId)
+                .param("actorUuid", actorUuid.toString()).header("Authorization", authorization));
+    }
+
+    private List<Map<String, Object>> archiveInvites() {
+        return jdbc.queryForList("SELECT * FROM team_invites WHERE team_id = ? ORDER BY id", teamId);
+    }
+
+    @Test
+    void archivePreservesSportsRecordsAndRollsBackInviteCleanupOnFailure() throws Exception {
+        seedSportsHistory();
+        jdbc.update("INSERT INTO player_positions(player_id, position_id, prioridad, xp) "
+                + "SELECT ?, MIN(id), 1, 25 FROM positions", first);
+        invite(captain, outsider, "").andExpect(status().isCreated());
+        jdbc.update("""
+                INSERT INTO match_invites(match_id, team_id, requester_user_id, target_user_id, status)
+                VALUES (?, ?, ?, ?, 'PENDIENTE')
+                """, pastMatchId, teamId, captain, outsider);
+        var members = archiveMembers();
+        var sports = sportsRecords();
+        var teamInvitations = archiveInvites();
+        var matchInvitations = archiveMatchInvites();
+        var teamBefore = jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId);
+        jdbc.update("ALTER TABLE teams ADD CONSTRAINT cap03a_test_keep_active CHECK (id <> " + teamId + " OR NOT archived)");
+        try {
+            assertThrows(DataIntegrityViolationException.class, () -> teamService.deleteTeam(teamId, captain));
+        } finally {
+            jdbc.update("ALTER TABLE teams DROP CONSTRAINT cap03a_test_keep_active");
+        }
+        assertThat(jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId)).isEqualTo(teamBefore);
+        assertThat(archiveInvites()).isEqualTo(teamInvitations);
+        assertThat(archiveMatchInvites()).isEqualTo(matchInvitations);
+
+        String authorization = login(captain);
+        archiveWithJwt(authorization, captain).andExpect(status().isNoContent());
+        assertThat(archiveInvites()).isEmpty();
+        assertThat(archiveMatchInvites()).isEmpty();
+        assertThat(archiveMembers()).isEqualTo(members);
+        assertThat(sportsRecords()).isEqualTo(sports);
+        mvc.perform(get("/api/v1/teams/{teamId}/members/active", teamId).header("Authorization", authorization))
+                .andExpect(status().isNotFound());
+    }
+
+    private List<Map<String, Object>> archiveMembers() {
+        return jdbc.queryForList("SELECT * FROM team_members WHERE team_id = ? ORDER BY id", teamId);
+    }
+
+    private List<Map<String, Object>> archiveMatchInvites() {
+        return jdbc.queryForList("SELECT * FROM match_invites WHERE team_id = ? ORDER BY id", teamId);
+    }
+
+    private List<Map<String, Object>> sportsRecords() {
+        return List.of(jdbc.queryForMap("SELECT * FROM matches WHERE id = ?", pastMatchId),
+                jdbc.queryForMap("SELECT * FROM match_players WHERE match_id = ?", pastMatchId),
+                jdbc.queryForMap("SELECT * FROM player_history WHERE match_id = ?", pastMatchId),
+                jdbc.queryForMap("SELECT * FROM player_ratings WHERE player_profile_id = ?", first),
+                jdbc.queryForMap("SELECT * FROM player_positions WHERE player_id = ?", first),
+                jdbc.queryForMap("SELECT * FROM team_stats WHERE team_id = ?", teamId));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void archiveWaitingForTransferUsesTheCommittedCaptain(boolean successor) throws Exception {
+        UUID actor = successor ? first : captain;
+        String authorization = login(actor);
+        assertSerializedWithPendingWrite(
+                () -> teamService.transferCaptain(teamId, captain, first),
+                () -> archiveWithJwt(authorization, actor).andReturn().getResponse().getStatus(),
+                successor ? 204 : 403);
+        assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId))
+                .isEqualTo(successor);
+        assertCaptain(first);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void archiveAndInviteAcceptanceSerializeWithoutPartialChanges(boolean acceptFirst) throws Exception {
+        long inviteId = objectMapper.readTree(invite(captain, outsider, "").andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        if (acceptFirst) {
+            var decision = new RespondRequestDecision();
+            decision.setAccept(true);
+            decision.setActorUuid(outsider);
+            assertSerializedWithPendingWrite(
+                    () -> socialService.respondTeamInvite(inviteId, decision),
+                    () -> archive(captain).andReturn().getResponse().getStatus(), 204);
+        } else {
+            String authorization = login(outsider);
+            assertSerializedWithPendingWrite(
+                    () -> teamService.deleteTeam(teamId, captain),
+                    () -> mvc.perform(put("/api/v1/social/team-invites/{inviteId}/decision", inviteId)
+                                    .header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON)
+                                    .content("{\"accept\":true}"))
+                            .andReturn().getResponse().getStatus(), 403);
+        }
+        assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isTrue();
+        assertThat(archiveInvites()).isEmpty();
+        assertThat(jdbc.queryForList("SELECT rol FROM team_members WHERE team_id = ? AND user_id = ? AND activo",
+                String.class, teamId, outsider)).containsExactlyElementsOf(acceptFirst ? List.of("JUGADOR") : List.of());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void archiveAndRemovalSerializeWithoutPartialChanges(boolean removeFirst) throws Exception {
+        if (removeFirst) {
+            assertSerializedWithPendingWrite(
+                    () -> teamService.removeMember(teamId, captain, second),
+                    () -> archive(captain).andReturn().getResponse().getStatus(), 204);
+        } else {
+            assertSerializedWithPendingWrite(
+                    () -> teamService.deleteTeam(teamId, captain),
+                    () -> remove(captain, second).andReturn().getResponse().getStatus(), 404);
+        }
+        assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT activo FROM team_members WHERE team_id = ? AND user_id = ?",
+                Boolean.class, teamId, second)).isEqualTo(!removeFirst);
+        assertCaptain(captain);
+    }
+
+    @Test
+    void concurrentArchivesKeepTheAuthorizedRetryIdempotent() throws Exception {
+        invite(captain, outsider, "").andExpect(status().isCreated());
+        String authorization = login(captain);
+        assertSerializedWithPendingWrite(
+                () -> teamService.deleteTeam(teamId, captain),
+                () -> archiveWithJwt(authorization, captain).andReturn().getResponse().getStatus(), 204);
+        assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isTrue();
+        assertThat(archiveInvites()).isEmpty();
+        assertCaptain(captain);
     }
 
     @Test
