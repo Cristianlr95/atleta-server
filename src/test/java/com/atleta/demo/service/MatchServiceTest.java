@@ -15,6 +15,8 @@ import com.atleta.demo.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -273,29 +275,34 @@ class MatchServiceTest {
         verify(matchRepository, never()).save(any(Match.class));
     }
 
-    @Test
-    void joinMatch_ValidRequest_ShouldAddPlayerToMatch() {
+    @ParameterizedTest
+    @CsvSource({"JUGADOR,JUGADOR", "CAPITAN,JUGADOR", "DT,DT"})
+    void joinMatchPersistsOnlyRolesAllowedForSelfEnrollment(PlayerRole requestedRole, PlayerRole expectedRole) {
         // Arrange
-        when(matchRepository.findById(validJoinRequest.getMatchId())).thenReturn(Optional.of(sampleMatch));
+        validJoinRequest.setRol(requestedRole);
+        when(matchRepository.findByIdForUpdate(validJoinRequest.getMatchId())).thenReturn(Optional.of(sampleMatch));
         when(playerProfileRepository.findById(validJoinRequest.getPlayerUuid())).thenReturn(Optional.of(samplePlayer));
         when(teamRepository.findById(validJoinRequest.getTeamId())).thenReturn(Optional.of(sampleTeam));
         when(positionRepository.findById(validJoinRequest.getPositionId())).thenReturn(Optional.of(samplePosition));
         when(matchPlayerRepository.existsByMatchAndPlayer(sampleMatch, samplePlayer)).thenReturn(false);
         when(matchTeamRepository.existsByMatchAndTeam(sampleMatch, sampleTeam)).thenReturn(true);
         
-        MatchPlayer newMatchPlayer = new MatchPlayer(sampleMatch, sampleTeam, samplePlayer, samplePosition, validJoinRequest.getRol());
-        newMatchPlayer.setId(1L);
-        when(matchPlayerRepository.save(any(MatchPlayer.class))).thenReturn(newMatchPlayer);
+        when(matchPlayerRepository.save(any(MatchPlayer.class))).thenAnswer(invocation -> {
+            MatchPlayer participation = invocation.getArgument(0);
+            assertEquals(expectedRole, participation.getRol());
+            participation.setId(1L);
+            return participation;
+        });
 
         // Act
         MatchPlayerResponse response = matchService.joinMatch(validJoinRequest);
 
         // Assert
         assertNotNull(response);
-        assertEquals(validJoinRequest.getRol(), response.getRol());
+        assertEquals(expectedRole, response.getRol());
         assertFalse(response.getConfirmado()); // Initially not confirmed
 
-        verify(matchRepository).findById(validJoinRequest.getMatchId());
+        verify(matchRepository).findByIdForUpdate(validJoinRequest.getMatchId());
         verify(playerProfileRepository).findById(validJoinRequest.getPlayerUuid());
         verify(teamRepository).findById(validJoinRequest.getTeamId());
         verify(positionRepository).findById(validJoinRequest.getPositionId());
@@ -307,7 +314,7 @@ class MatchServiceTest {
     @Test
     void joinMatch_MatchNotFound_ShouldThrowException() {
         // Arrange
-        when(matchRepository.findById(validJoinRequest.getMatchId())).thenReturn(Optional.empty());
+        when(matchRepository.findByIdForUpdate(validJoinRequest.getMatchId())).thenReturn(Optional.empty());
 
         // Act & Assert
         IllegalArgumentException exception = assertThrows(
@@ -316,14 +323,14 @@ class MatchServiceTest {
         );
 
         assertEquals("Partido no encontrado: " + validJoinRequest.getMatchId(), exception.getMessage());
-        verify(matchRepository).findById(validJoinRequest.getMatchId());
+        verify(matchRepository).findByIdForUpdate(validJoinRequest.getMatchId());
         verify(playerProfileRepository, never()).findById(any());
     }
 
     @Test
     void joinMatch_PlayerAlreadyRegistered_ShouldThrowException() {
         // Arrange
-        when(matchRepository.findById(validJoinRequest.getMatchId())).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.findByIdForUpdate(validJoinRequest.getMatchId())).thenReturn(Optional.of(sampleMatch));
         when(playerProfileRepository.findById(validJoinRequest.getPlayerUuid())).thenReturn(Optional.of(samplePlayer));
         when(teamRepository.findById(validJoinRequest.getTeamId())).thenReturn(Optional.of(sampleTeam));
         when(positionRepository.findById(validJoinRequest.getPositionId())).thenReturn(Optional.of(samplePosition));
@@ -343,7 +350,7 @@ class MatchServiceTest {
     @Test
     void joinMatch_TeamNotInMatch_ShouldThrowException() {
         // Arrange
-        when(matchRepository.findById(validJoinRequest.getMatchId())).thenReturn(Optional.of(sampleMatch));
+        when(matchRepository.findByIdForUpdate(validJoinRequest.getMatchId())).thenReturn(Optional.of(sampleMatch));
         when(playerProfileRepository.findById(validJoinRequest.getPlayerUuid())).thenReturn(Optional.of(samplePlayer));
         when(teamRepository.findById(validJoinRequest.getTeamId())).thenReturn(Optional.of(sampleTeam));
         when(positionRepository.findById(validJoinRequest.getPositionId())).thenReturn(Optional.of(samplePosition));

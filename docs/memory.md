@@ -1,5 +1,13 @@
 # Memoria Viva del Backend Atleta
 
+## SEC-02 · Capitanía en la incorporación a partidos · 23/11/2026
+
+- Base `adcdfa8`. Una prueba unitaria con repositorio simulado confirmó que la autoinscripción entregaba a persistencia el rol `CAPITAN` del DTO. El alcance de esta autorización es la participación del partido, independiente de la membresía del equipo.
+- La autoinscripción conserva el contrato y normaliza `CAPITAN` a `JUGADOR`. Se mantienen `DT` y los caminos de asignación del creador en el servidor. Se toma el bloqueo del partido antes de comprobar duplicados y cupos.
+- Los cargos ya persistidos se conservan. La revisión de su procedencia, las reglas de asignación a un capitán distinto del creador y la discrepancia `role`/ `rol` de Angular quedan fuera de este cambio.
+- PostgreSQL 18.1 local: 88 pruebas aprobadas, sin fallos ni omisiones, y empaquetado correcto. Se verificaron JWT firmado, rechazo anónimo, rol persistido, alta concurrente, cierre e historial. Pendiente revisión antes del commit.
+- Verificación final con `clean package` en PostgreSQL 18.1 aislado: 317 pruebas aprobadas, sin fallos ni omisiones. Incluye cierre, concurrencia, MVP, estadísticas, ratings e historial. El contrato HTTP exige `rol`, devuelve `rol` y mantiene la posición solicitada para los tres roles de entrada. Un cuerpo que solo envía `role` recibe `400`. En la revisión Angular auditada, `joinMatch` se usa únicamente en una prueba de contrato; el flujo de invitaciones usa otro endpoint.
+
 ## CAP-06 · QA con sesión autenticada · 21/11/2026
 
 - Bases de beta verificadas en GitHub: backend `64b92f8` y frontend `7033ffd`. La prueba local inicia sesión con tres cuentas sintéticas en `/api/v1/athletes/login` y usa los JWT firmados emitidos por Atleta a través de los filtros de seguridad de MockMvc.
