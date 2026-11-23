@@ -1,7 +1,9 @@
 package com.atleta.demo.controller;
 
 import com.atleta.demo.dto.request.CreateTeamInviteRequest;
+import com.atleta.demo.dto.request.CreateTeamRequest;
 import com.atleta.demo.dto.request.RespondRequestDecision;
+import com.atleta.demo.dto.request.UpdateTeamRequest;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.service.AthleteService;
 import com.atleta.demo.service.SocialService;
@@ -9,6 +11,7 @@ import com.atleta.demo.service.TeamService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -42,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -449,6 +453,174 @@ class CaptainTransferIntegrationTest {
     private ResultActions archiveWithJwt(String authorization, UUID actorUuid) throws Exception {
         return mvc.perform(delete("/api/v1/teams/{teamId}", teamId)
                 .param("actorUuid", actorUuid.toString()).header("Authorization", authorization));
+    }
+
+    @Test
+    void foundingCaptainCanEditTheNameWithASignedJwt() throws Exception {
+        rename(teamId, login(captain), "{\"nombre\":\"  Atlética Ñandú ⚽  \"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(teamId))
+                .andExpect(jsonPath("$.nombre").value("Atlética Ñandú ⚽"));
+        assertThat(jdbc.queryForObject("SELECT nombre FROM teams WHERE id = ?", String.class, teamId))
+                .isEqualTo("Atlética Ñandú ⚽");
+    }
+
+    @Test
+    void editingPermissionFollowsTheCaptaincyAndNotTheFounder() throws Exception {
+        String founderAuth = login(captain);
+        String successorAuth = login(first);
+        transfer(captain, first).andExpect(status().isOk());
+        rename(teamId, founderAuth, "{\"nombre\":\"Otro nombre\"}").andExpect(status().isForbidden());
+        mvc.perform(delete("/api/v1/teams/{teamId}/members/me", teamId).header("Authorization", founderAuth))
+                .andExpect(status().isNoContent());
+        rename(teamId, founderAuth, "{\"nombre\":\"Otro nombre\"}").andExpect(status().isForbidden());
+        rename(teamId, successorAuth, "{\"nombre\":\"Nombre del capitán vigente\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("Nombre del capitán vigente"));
+        assertCaptain(first);
+    }
+
+    @Test
+    void nonCaptainsCannotEditAndArchivedTeamsAreUnavailable() throws Exception {
+        String body = "{\"nombre\":\"Nuevo nombre\"}";
+        var original = jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId);
+        rename(teamId, null, body).andExpect(status().isUnauthorized());
+        for (UUID actor : List.of(second, inactive, outsider)) {
+            rename(teamId, login(actor), body).andExpect(status().isForbidden());
+        }
+        assertThat(jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId)).isEqualTo(original);
+        String authorization = login(captain);
+        rename(Long.MAX_VALUE, authorization, body).andExpect(status().isNotFound());
+        archiveWithJwt(authorization, captain).andExpect(status().isNoContent());
+        var archived = jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId);
+        rename(teamId, authorization, body).andExpect(status().isNotFound());
+        assertThat(jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId)).isEqualTo(archived);
+    }
+
+    private ResultActions rename(long id, String authorization, String body) throws Exception {
+        var request = patch("/api/v1/teams/{teamId}", id).contentType(MediaType.APPLICATION_JSON).content(body);
+        if (authorization != null) {
+            request.header("Authorization", authorization);
+        }
+        return mvc.perform(request);
+    }
+
+    @Test
+    void rejectsInvalidNamesAndProtectedFieldsWithoutChangingTheTeam() throws Exception {
+        String authorization = login(captain);
+        invite(captain, outsider, "").andExpect(status().isCreated());
+        var original = jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId);
+        var invites = archiveInvites();
+        var members = archiveMembers();
+
+        for (String body : List.of("null", "[]", "{}", "{\"nombre\":null}", "{\"nombre\":\"\"}",
+                "{\"nombre\":\"\\u00a0\\u2003\"}", "{\"nombre\":42}", "{\"nombre\":\"A\\u0000B\"}",
+                "{\"nombre\":\"" + "A".repeat(101) + "\"}")) {
+            rename(teamId, authorization, body).andExpect(status().isBadRequest());
+        }
+        for (String key : List.of("id", "creador", "creadorUuid", "actorUuid", "archived", "archivedAt",
+                "version", "createdAt", "updatedAt", "members", "stats", "role", "rol", "descripcion",
+                "logoUrl", "anioFundacion")) {
+            rename(teamId, authorization, objectMapper.writeValueAsString(Map.of("nombre", "Otro FC", key, "ignored")))
+                    .andExpect(status().isBadRequest());
+        }
+        assertThat(jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId)).isEqualTo(original);
+        assertThat(archiveInvites()).isEqualTo(invites);
+        assertThat(archiveMembers()).isEqualTo(members);
+    }
+
+    @Test
+    void renamingChangesOnlyTheNameAndItsAuditMetadata() throws Exception {
+        seedSportsHistory();
+        jdbc.update("INSERT INTO player_positions(player_id, position_id, prioridad, xp) "
+                + "SELECT ?, MIN(id), 1, 25 FROM positions", first);
+        invite(captain, outsider, "").andExpect(status().isCreated());
+        jdbc.update("""
+                INSERT INTO match_invites(match_id, team_id, requester_user_id, target_user_id, status)
+                VALUES (?, ?, ?, ?, 'PENDIENTE')
+                """, pastMatchId, teamId, captain, outsider);
+        jdbc.update("UPDATE teams SET logo_url = ?, anio_fundacion = ? WHERE id = ?", "/uploads/test-logo.png", 1998, teamId);
+        var original = new LinkedHashMap<>(jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId));
+        original.keySet().removeAll(List.of("nombre", "version", "updated_at"));
+        var sports = sportsRecords();
+        var members = archiveMembers();
+        var teamInvites = archiveInvites();
+        var matchInvites = archiveMatchInvites();
+        String name = "Ñ".repeat(100);
+
+        rename(teamId, login(captain), objectMapper.writeValueAsString(Map.of("nombre", name)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value(name))
+                .andExpect(jsonPath("$.anioFundacion").value(1998));
+
+        assertThat(jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId))
+                .containsAllEntriesOf(original).containsEntry("nombre", name);
+        assertThat(sportsRecords()).isEqualTo(sports);
+        assertThat(archiveMembers()).isEqualTo(members);
+        assertThat(archiveInvites()).isEqualTo(teamInvites);
+        assertThat(archiveMatchInvites()).isEqualTo(matchInvites);
+    }
+
+    @Test
+    void preservesGlobalNameUniquenessAndTreatsTheCurrentNameAsANoOp() throws Exception {
+        long otherTeamId = teamService.createTeam(new CreateTeamRequest("Club Reservado", first)).getId();
+        try {
+            teamService.deleteTeam(otherTeamId, first);
+            String authorization = login(captain);
+            var original = jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId);
+
+            rename(teamId, authorization, "{\"nombre\":\"   Club Reservado  \"}").andExpect(status().isConflict());
+            rename(teamId, authorization, objectMapper.writeValueAsString(Map.of("nombre", original.get("nombre"))))
+                    .andExpect(status().isOk());
+            assertThat(jdbc.queryForMap("SELECT * FROM teams WHERE id = ?", teamId)).isEqualTo(original);
+            rename(teamId, authorization, "{\"nombre\":\"club reservado\"}").andExpect(status().isOk());
+        } finally {
+            deleteExtraTeam(otherTeamId);
+        }
+    }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "SPRING_DATASOURCE_URL", matches = "jdbc:postgresql:.*")
+    void concurrentRenamesToTheSameNameLeaveOneWinnerAcrossTeams() throws Exception {
+        long otherTeamId = teamService.createTeam(new CreateTeamRequest("Otro equipo", first)).getId();
+        try {
+            String authorization = login(first);
+            assertSerializedWithPendingWrite(
+                    () -> teamService.updateTeam(teamId, captain, new UpdateTeamRequest("Nombre común")),
+                    () -> rename(otherTeamId, authorization, "{\"nombre\":\"Nombre común\"}")
+                            .andReturn().getResponse().getStatus(), 409);
+            assertThat(jdbc.queryForList("SELECT id FROM teams WHERE nombre = ?", Long.class, "Nombre común"))
+                    .containsExactly(teamId);
+            assertThat(jdbc.queryForObject("SELECT nombre FROM teams WHERE id = ?", String.class, otherTeamId))
+                    .isEqualTo("Otro equipo");
+        } finally {
+            deleteExtraTeam(otherTeamId);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void waitingEditRechecksTheCaptaincyAndArchiveStatus(boolean archiveFirst) throws Exception {
+        String authorization = login(captain);
+        String original = jdbc.queryForObject("SELECT nombre FROM teams WHERE id = ?", String.class, teamId);
+        assertSerializedWithPendingWrite(
+                () -> {
+                    if (archiveFirst) {
+                        teamService.deleteTeam(teamId, captain);
+                    } else {
+                        teamService.transferCaptain(teamId, captain, first);
+                    }
+                },
+                () -> rename(teamId, authorization, "{\"nombre\":\"No se debe aplicar\"}")
+                        .andReturn().getResponse().getStatus(), archiveFirst ? 404 : 403);
+        assertThat(jdbc.queryForObject("SELECT nombre FROM teams WHERE id = ?", String.class, teamId))
+                .isEqualTo(original);
+    }
+
+    private void deleteExtraTeam(long id) {
+        jdbc.update("DELETE FROM team_stats WHERE team_id = ?", id);
+        jdbc.update("DELETE FROM team_members WHERE team_id = ?", id);
+        jdbc.update("DELETE FROM teams WHERE id = ?", id);
     }
 
     private List<Map<String, Object>> archiveInvites() {

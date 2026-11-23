@@ -1,6 +1,7 @@
 package com.atleta.demo.controller;
 
 import com.atleta.demo.dto.request.CreateTeamRequest;
+import com.atleta.demo.dto.request.UpdateTeamRequest;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.dto.response.TeamResponse;
 import com.atleta.demo.security.AuthenticatedUserUtils;
@@ -22,6 +23,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -146,6 +148,31 @@ public class TeamController {
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (IllegalArgumentException e) {
             logger.warn("Error en creacion de equipo: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+    }
+
+    @PatchMapping(value = "/{teamId}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Editar el nombre de un equipo activo como capitán vigente")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Equipo actualizado"),
+            @ApiResponse(responseCode = "400", description = "Se requiere únicamente el campo nombre con un valor válido"),
+            @ApiResponse(responseCode = "401", description = "Sesión requerida"),
+            @ApiResponse(responseCode = "403", description = "El actor no es el capitán activo"),
+            @ApiResponse(responseCode = "404", description = "Equipo activo no encontrado"),
+            @ApiResponse(responseCode = "409", description = "El nombre entra en conflicto con un equipo existente")
+    })
+    public ResponseEntity<TeamResponse> updateTeam(
+            @PathVariable Long teamId,
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody UpdateTeamRequest request
+    ) {
+        UUID actorUuid = AuthenticatedUserUtils.currentUserUuid(jwt);
+        try {
+            return ResponseEntity.ok(teamService.updateTeam(teamId, actorUuid, request));
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
     }

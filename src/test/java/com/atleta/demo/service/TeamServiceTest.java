@@ -1,6 +1,7 @@
 package com.atleta.demo.service;
 
 import com.atleta.demo.dto.request.CreateTeamRequest;
+import com.atleta.demo.dto.request.UpdateTeamRequest;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.dto.response.TeamResponse;
 import com.atleta.demo.entity.*;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -68,6 +70,38 @@ class TeamServiceTest {
     private PlayerProfile samplePlayer;
     private Team sampleTeam;
     private TeamStats sampleStats;
+
+    @Test
+    void updatesTheTeamNameAfterLockingAndCheckingTheCaptain() {
+        sampleTeam.setCreador(new PlayerProfile());
+        when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleTeam));
+        when(teamMemberRepository.findCaptainsByTeam(sampleTeam))
+                .thenReturn(List.of(new TeamMember(sampleTeam, samplePlayer, PlayerRole.CAPITAN)));
+
+        TeamResponse updated = teamService.updateTeam(1L, samplePlayer.getAtletaUuid(), new UpdateTeamRequest("Nuevo FC"));
+
+        assertEquals("Nuevo FC", updated.getNombre());
+        assertEquals("http://example.com/logo.png", updated.getLogoUrl());
+        assertEquals(2024, updated.getAnioFundacion());
+        var calls = inOrder(teamRepository, teamMemberRepository);
+        calls.verify(teamRepository).findByIdForUpdate(1L);
+        calls.verify(teamMemberRepository).findCaptainsByTeam(sampleTeam);
+        calls.verify(teamRepository).flush();
+        verifyNoInteractions(teamInviteRepository, matchInviteRepository, teamStatsRepository);
+    }
+
+    @Test
+    void deniesEditingBeforeCheckingNameAvailabilityForAFormerFounder() {
+        when(teamRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleTeam));
+        when(teamMemberRepository.findCaptainsByTeam(sampleTeam)).thenReturn(List.of());
+
+        assertThrows(AccessDeniedException.class,
+                () -> teamService.updateTeam(1L, samplePlayer.getAtletaUuid(), new UpdateTeamRequest("Nuevo FC")));
+
+        assertEquals("Test Team", sampleTeam.getNombre());
+        verify(teamRepository, never()).existsByNombre(anyString());
+        verify(teamRepository, never()).flush();
+    }
 
     @Test
     void archivesAfterLockingTheTeamAndCheckingItsCaptain() {

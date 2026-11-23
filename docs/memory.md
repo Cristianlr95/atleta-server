@@ -1,5 +1,15 @@
 # Memoria Viva del Backend Atleta
 
+## CAP-03B · Edición del nombre por el capitán vigente · 23/11/2026
+
+- Base local `1b3f82d` (CAP-03A), descendiente de beta `adcdfa8`. SEC-01 y SEC-02 siguen en sus ramas independientes.
+- `PATCH /api/v1/teams/{teamId}` recibe un JSON con `nombre` como único campo editable. Devuelve `200` con `TeamResponse`, `400` para formato inválido, `401` sin sesión, `403` sin capitanía, `404` si el equipo no existe o está archivado y `409` por nombre en conflicto. El actor sale del JWT. Un nombre omitido deja la petición sin edición, un nulo intenta borrar un campo obligatorio y un vacío carece de contenido. Los tres devuelven `400`.
+- Se recortan espacios Unicode externos y se conserva Unicode y espacio interno. El límite es de 100 unidades UTF-16 como en la validación existente. El nombre actual normalizado es una operación sin escritura. La unicidad exacta global sigue aplicando a equipos archivados. El bloqueo del equipo coordina las escrituras del mismo equipo y la restricción SQL arbitra el conflicto entre equipos distintos.
+- `logoUrl` y `anioFundacion` son datos administrativos existentes y quedan fuera del PATCH. No existe descripción en el modelo ni en las migraciones. Agregarla o ampliar los campos de edición requiere definir reglas propias. El identificador, creador y fecha de creación se preservan. Versión y actualización quedan a cargo de JPA, y archivado, membresías y relaciones deportivas se gestionan en sus flujos propios.
+- RED registró tres fallos HTTP por ausencia del PATCH y cinco casos unitarios que no pasaban con el DTO y el método aún sin implementar. En PostgreSQL 18.1 sobre base nueva se aprobaron 172 pruebas y `clean package`, sin fallos ni omisiones. La regresión cubre JWT, campos protegidos, Unicode, duplicados, carreras con transferencia o archivado y preservación de registros deportivos.
+- La suite completa en H2 dejó 812 pruebas aprobadas, sin fallos y con 5 omisiones dependientes de PostgreSQL. Las verificaciones se hicieron sin tocar beta.
+- Próxima tarea, CAP-03C. Integrar en Angular los controles de archivado de CAP-03A y de edición del nombre de CAP-03B según la capitanía vigente de cada equipo. Actualizar el permiso después de una transferencia y ante un `403`.
+
 ## CAP-03A · Archivado manual por el capitán vigente · 23/11/2026
 
 - Base de beta `adcdfa8`, con CAP-03 y CAP-05. Los commits locales SEC-01 y SEC-02 quedan en sus ramas. `DELETE /api/v1/teams/{teamId}?actorUuid=...` conserva el parámetro y exige que coincida con el JWT. El servicio bloquea el equipo y autoriza por membresía activa `CAPITAN`.

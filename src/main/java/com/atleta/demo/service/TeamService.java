@@ -1,6 +1,7 @@
 package com.atleta.demo.service;
 
 import com.atleta.demo.dto.request.CreateTeamRequest;
+import com.atleta.demo.dto.request.UpdateTeamRequest;
 import com.atleta.demo.dto.response.PlayerProfileResponse;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
 import com.atleta.demo.dto.response.TeamResponse;
@@ -24,6 +25,7 @@ import com.atleta.demo.repository.TeamStatsRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -363,17 +365,38 @@ public class TeamService {
                 .orElseThrow(() -> new EntityNotFoundException("Equipo activo no encontrado"));
     }
 
+    public TeamResponse updateTeam(Long teamId, UUID actorUuid, UpdateTeamRequest request) {
+        Team team = lockActiveTeam(teamId);
+        if (!isActiveCaptain(team, actorUuid)) {
+            throw new AccessDeniedException("Solo el capitán activo puede editar el equipo");
+        }
+
+        String name = request.nombre();
+        if (!team.getNombre().equals(name)) {
+            if (teamRepository.existsByNombre(name)) {
+                throw new DuplicateKeyException("Ya existe un equipo con ese nombre");
+            }
+            team.setNombre(name);
+            // The unique constraint also covers concurrent edits on different teams.
+            teamRepository.flush();
+        }
+        return toTeamResponse(team);
+    }
+
     public void deleteTeam(Long teamId, UUID actorUuid) {
         Team team = teamRepository.findByIdForUpdate(teamId)
                 .orElseThrow(() -> new IllegalArgumentException("Equipo no encontrado: " + teamId));
 
-        boolean actorIsCaptain = teamMemberRepository.findCaptainsByTeam(team).stream()
-                .anyMatch(member -> member.getPlayer().getAtletaUuid().equals(actorUuid));
-        if (!actorIsCaptain) {
+        if (!isActiveCaptain(team, actorUuid)) {
             throw new SecurityException("Solo el capitán activo puede archivar el equipo");
         }
 
         archiveLockedTeam(team, actorUuid);
+    }
+
+    private boolean isActiveCaptain(Team team, UUID actorUuid) {
+        return teamMemberRepository.findCaptainsByTeam(team).stream()
+                .anyMatch(member -> member.getPlayer().getAtletaUuid().equals(actorUuid));
     }
 
     void archiveTeamsForAccountDeletion(UUID actorUuid) {
