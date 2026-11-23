@@ -5,12 +5,14 @@ import com.atleta.demo.dto.response.AthleteResponse;
 import com.atleta.demo.entity.Athlete;
 import com.atleta.demo.repository.AthleteRepository;
 import com.atleta.demo.repository.PlayerProfileRepository;
+import com.atleta.demo.repository.RefreshSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -39,17 +41,20 @@ public class AthleteService {
     private final PlayerProfileRepository playerProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final TeamService teamService;
+    private final RefreshSessionRepository refreshSessionRepository;
 
     public AthleteService(
             AthleteRepository athleteRepository,
             PlayerProfileRepository playerProfileRepository,
             PasswordEncoder passwordEncoder,
-            TeamService teamService
+            TeamService teamService,
+            RefreshSessionRepository refreshSessionRepository
     ) {
         this.athleteRepository = athleteRepository;
         this.playerProfileRepository = playerProfileRepository;
         this.passwordEncoder = passwordEncoder;
         this.teamService = teamService;
+        this.refreshSessionRepository = refreshSessionRepository;
     }
 
     /**
@@ -236,6 +241,7 @@ public class AthleteService {
         }
 
         teamService.archiveTeamsForAccountDeletion(atletaUuid);
+        refreshSessionRepository.revokeAllByAthleteUuid(atletaUuid, Instant.now());
         playerProfileRepository.findById(atletaUuid).ifPresent(profile -> {
             profile.setAlias("Jugador eliminado");
             playerProfileRepository.save(profile);

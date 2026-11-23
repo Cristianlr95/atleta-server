@@ -52,7 +52,10 @@ public class SessionLifecycleService {
 
     @Transactional
     public AuthResponse createSession(Athlete athlete) {
-        Instant now = Instant.now();
+        return issueSession(lockActiveAthlete(athlete.getAtletaUuid()), Instant.now());
+    }
+
+    private AuthResponse issueSession(Athlete athlete, Instant now) {
         String rawRefreshToken = randomToken();
         RefreshSession session = refreshSessionRepository.save(new RefreshSession(
                 athlete,
@@ -66,14 +69,25 @@ public class SessionLifecycleService {
 
     @Transactional
     public AuthResponse rotateRefreshToken(String rawRefreshToken) {
-        Instant now = Instant.now();
-        RefreshSession current = refreshSessionRepository.findByTokenHash(hash(rawRefreshToken))
+        String tokenHash = hash(rawRefreshToken);
+        UUID athleteUuid = refreshSessionRepository.findAthleteUuidByTokenHash(tokenHash)
                 .orElseThrow(() -> new IllegalArgumentException("Refresh token invalido"));
+        // Account deletion takes the athlete lock before updating its sessions.
+        Athlete athlete = lockActiveAthlete(athleteUuid);
+        RefreshSession current = refreshSessionRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new IllegalArgumentException("Refresh token invalido"));
+        Instant now = Instant.now();
         if (current.getRevokedAt() != null || !current.getExpiresAt().isAfter(now)) {
             throw new IllegalArgumentException("Refresh token expirado o revocado");
         }
         current.revoke(now);
-        return createSession(current.getAthlete());
+        return issueSession(athlete, now);
+    }
+
+    private Athlete lockActiveAthlete(UUID athleteUuid) {
+        return athleteRepository.findByIdForUpdate(athleteUuid)
+                .filter(athlete -> athlete.getDeletedAt() == null)
+                .orElseThrow(() -> new IllegalArgumentException("Cuenta no disponible"));
     }
 
     @Transactional
@@ -108,7 +122,7 @@ public class SessionLifecycleService {
         if (resetToken.getUsedAt() != null || !resetToken.getExpiresAt().isAfter(now)) {
             throw new IllegalArgumentException("Token de recuperacion expirado o utilizado");
         }
-        Athlete athlete = resetToken.getAthlete();
+        Athlete athlete = lockActiveAthlete(resetToken.getAthlete().getAtletaUuid());
         athlete.setPasswordHash(passwordEncoder.encode(newPassword));
         resetToken.markUsed(now);
         refreshSessionRepository.revokeAllByAthleteUuid(athlete.getAtletaUuid(), now);

@@ -16,7 +16,15 @@ public interface RefreshSessionRepository extends JpaRepository<RefreshSession, 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<RefreshSession> findByTokenHash(String tokenHash);
 
-    boolean existsByIdAndRevokedAtIsNullAndExpiresAtAfter(UUID id, Instant now);
+    @Query("select session.athlete.atletaUuid from RefreshSession session where session.tokenHash = :tokenHash")
+    Optional<UUID> findAthleteUuidByTokenHash(@Param("tokenHash") String tokenHash);
+
+    @Query("""
+            select count(session) > 0 from RefreshSession session
+            where session.id = :id and session.athlete.atletaUuid = :athleteUuid
+                and session.athlete.deletedAt is null and session.revokedAt is null and session.expiresAt > :now
+            """)
+    boolean hasActiveSession(@Param("id") UUID id, @Param("athleteUuid") UUID athleteUuid, @Param("now") Instant now);
 
     @Modifying
     @Query("update RefreshSession session set session.revokedAt = :now where session.athlete.atletaUuid = :athleteUuid and session.revokedAt is null")

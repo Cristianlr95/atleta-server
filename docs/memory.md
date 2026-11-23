@@ -1,5 +1,12 @@
 # Memoria Viva del Backend Atleta
 
+## SEC-01 · Revocación de sesiones al eliminar una cuenta · 23/11/2026
+
+- Base `adcdfa8`. En PostgreSQL 18.1, después de una baja confirmada, el JWT anterior aún permitía la lectura y el archivado como fundador, y el refresh anterior emitía credenciales nuevas.
+- La corrección local revoca todas las sesiones en la transacción de baja. La emisión y renovación bloquean la misma fila de atleta antes de operar sobre sesiones. El validador comprueba cuenta activa incluso con JWT antiguos sin `sid`.
+- La reproducción dio cuatro fallos esperados de seis casos sobre el código base. La regresión final pasó 72 pruebas en PostgreSQL, incluidos dos accesos revocados, baja denegada con `409`, rollback, integridad de equipos y ambos órdenes de concurrencia entre baja y refresh. Pendiente aprobación para el commit.
+- El empaquetado limpio con el perfil de pruebas terminó con 791 pruebas aprobadas y 4 omitidas, sin fallos. `git diff --check` pasó.
+
 ## CAP-06 · QA con sesión autenticada · 21/11/2026
 
 - Bases de beta verificadas en GitHub: backend `64b92f8` y frontend `7033ffd`. La prueba local inicia sesión con tres cuentas sintéticas en `/api/v1/athletes/login` y usa los JWT firmados emitidos por Atleta a través de los filtros de seguridad de MockMvc.

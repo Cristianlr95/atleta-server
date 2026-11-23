@@ -25,6 +25,8 @@ public interface AthleteRepository extends JpaRepository<Athlete, UUID> {
     @Query("SELECT a FROM Athlete a WHERE a.atletaUuid = :id")
     Optional<Athlete> findByIdForUpdate(@Param("id") UUID id);
 
+    boolean existsByAtletaUuidAndDeletedAtIsNull(UUID atletaUuid);
+
     /**
      * Busca un atleta por su email único
      * @param email Email del atleta

@@ -99,11 +99,13 @@ public class AthleteController {
                 request.getEmail(), request.getPassword());
 
         if (athleteOpt.isPresent()) {
-            Athlete athlete = athleteOpt.get();
-            AuthResponse response = sessionLifecycleService.createSession(athlete);
-
-            logger.info("Login exitoso para email: {}", request.getEmail());
-            return ResponseEntity.ok(response);
+            try {
+                AuthResponse response = sessionLifecycleService.createSession(athleteOpt.get());
+                logger.info("Login exitoso para email: {}", request.getEmail());
+                return ResponseEntity.ok(response);
+            } catch (IllegalArgumentException exception) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
         }
 
         logger.warn("Login fallido para email: {}", request.getEmail());
