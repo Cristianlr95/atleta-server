@@ -4,8 +4,12 @@ import com.atleta.demo.dto.request.CreateTeamInviteRequest;
 import com.atleta.demo.dto.request.CreateTeamRequest;
 import com.atleta.demo.dto.request.RespondRequestDecision;
 import com.atleta.demo.dto.request.UpdateTeamRequest;
+import com.atleta.demo.dto.response.AuthResponse;
 import com.atleta.demo.dto.response.TeamActiveMemberResponse;
+import com.atleta.demo.repository.AthleteRepository;
 import com.atleta.demo.service.AthleteService;
+import com.atleta.demo.service.JwtService;
+import com.atleta.demo.service.SessionLifecycleService;
 import com.atleta.demo.service.SocialService;
 import com.atleta.demo.service.TeamService;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -20,6 +24,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,12 +60,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc(print = MockMvcPrint.NONE)
 @ActiveProfiles("test")
 class CaptainTransferIntegrationTest {
+    private static final String PASSWORD = "cap06-test-password";
     @Autowired private MockMvc mvc;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private TeamService teamService;
     @Autowired private AthleteService athleteService;
+    @Autowired private AthleteRepository athleteRepository;
+    @Autowired private JwtService jwtService;
+    @Autowired private SessionLifecycleService sessions;
     @Autowired private SocialService socialService;
     @Autowired private TransactionTemplate transactions;
 
@@ -96,11 +105,11 @@ class CaptainTransferIntegrationTest {
             jdbc.update("DELETE FROM match_players WHERE match_id = ?", pastMatchId);
             jdbc.update("DELETE FROM matches WHERE id = ?", pastMatchId);
             jdbc.update("DELETE FROM player_ratings WHERE player_profile_id = ?", first);
-            jdbc.update("DELETE FROM team_stats WHERE team_id = ?", teamId);
         }
         jdbc.update("DELETE FROM player_positions WHERE player_id = ?", first);
         jdbc.update("DELETE FROM notifications WHERE recipient_user_id IN (?, ?) AND context_type = 'TEAM_INVITE'",
                 captain, outsider);
+        jdbc.update("DELETE FROM team_stats WHERE team_id = ?", teamId);
         jdbc.update("DELETE FROM team_invites WHERE team_id = ?", teamId);
         jdbc.update("DELETE FROM team_captain_transfers WHERE team_id = ?", teamId);
         jdbc.update("DELETE FROM team_members WHERE team_id = ?", teamId);
@@ -989,16 +998,159 @@ class CaptainTransferIntegrationTest {
     }
 
     private String login(UUID playerUuid) throws Exception {
-        String password = "cap06-test-password";
-        jdbc.update("UPDATE athletes SET password_hash = ? WHERE atleta_uuid = ?", passwordEncoder.encode(password), playerUuid);
-        String body = mvc.perform(post("/api/v1/athletes/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"%s@example.test","password":"%s"}
-                                """.formatted(playerUuid, password)))
+        return authorization(loginSession(playerUuid));
+    }
+
+    private AuthResponse loginSession(UUID playerUuid) throws Exception {
+        jdbc.update("UPDATE athletes SET password_hash = ? WHERE atleta_uuid = ?", passwordEncoder.encode(PASSWORD), playerUuid);
+        String body = loginWithPassword(playerUuid)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.atletaUuid").value(playerUuid.toString()))
                 .andReturn().getResponse().getContentAsString();
-        return "Bearer " + objectMapper.readTree(body).get("accessToken").asText();
+        return objectMapper.readValue(body, AuthResponse.class);
+    }
+
+    private ResultActions loginWithPassword(UUID playerUuid) throws Exception {
+        return mvc.perform(post("/api/v1/athletes/login").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of(
+                        "email", playerUuid + "@example.test", "password", PASSWORD))));
+    }
+
+    @Test
+    void revokesEverySessionWhenTheFormerCaptainDeletesTheirAccount() throws Exception {
+        AuthResponse primary = loginSession(captain);
+        AuthResponse secondary = loginSession(captain);
+        AuthResponse other = loginSession(first);
+        transfer(captain, first).andExpect(status().isOk());
+        jdbc.update("INSERT INTO team_stats(team_id, partidos_jugados, goles_favor) VALUES (?, 1, 2)", teamId);
+        var stats = jdbc.queryForMap("SELECT * FROM team_stats WHERE team_id = ?", teamId);
+        var members = jdbc.queryForList("SELECT * FROM team_members WHERE team_id = ? ORDER BY id", teamId);
+
+        deleteAccount(primary).andExpect(status().isNoContent());
+
+        int accessStatus = protectedRead(authorization(primary));
+        int secondaryStatus = protectedRead(authorization(secondary));
+        int archiveStatus = mvc.perform(delete("/api/v1/teams/{teamId}", teamId)
+                        .param("actorUuid", captain.toString()).header("Authorization", authorization(primary)))
+                .andReturn().getResponse().getStatus();
+        int refreshStatus = refresh(primary).andReturn().getResponse().getStatus();
+        int secondaryRefreshStatus = refresh(secondary).andReturn().getResponse().getStatus();
+        assertSoftly(softly -> {
+            softly.assertThat(accessStatus).as("original access").isEqualTo(401);
+            softly.assertThat(secondaryStatus).as("other access").isEqualTo(401);
+            softly.assertThat(refreshStatus).as("original refresh").isEqualTo(401);
+            softly.assertThat(secondaryRefreshStatus).as("other refresh").isEqualTo(401);
+            softly.assertThat(archiveStatus).as("former founder cannot archive after deletion").isEqualTo(401);
+            softly.assertThat(unrevokedSessions(captain)).isZero();
+            softly.assertThat(jdbc.queryForObject("SELECT deleted_at IS NOT NULL FROM athletes WHERE atleta_uuid = ?",
+                    Boolean.class, captain)).isTrue();
+            softly.assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isFalse();
+            softly.assertThat(jdbc.queryForList("SELECT * FROM team_members WHERE team_id = ? ORDER BY id", teamId)).isEqualTo(members);
+            softly.assertThat(jdbc.queryForMap("SELECT * FROM team_stats WHERE team_id = ?", teamId)).isEqualTo(stats);
+        });
+        assertThat(protectedRead(authorization(other))).isEqualTo(200);
+        loginWithPassword(captain).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void deniedCaptainDeletionKeepsBothSessionsUsable() throws Exception {
+        AuthResponse primary = loginSession(captain);
+        AuthResponse secondary = loginSession(captain);
+
+        deleteAccount(primary).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("CAPTAIN_TRANSFER_REQUIRED"));
+
+        assertThat(unrevokedSessions(captain)).isEqualTo(2);
+        assertThat(protectedRead(authorization(primary))).isEqualTo(200);
+        assertThat(protectedRead(authorization(secondary))).isEqualTo(200);
+        refresh(primary).andExpect(status().isOk());
+        refresh(primary).andExpect(status().isUnauthorized());
+        assertCaptain(captain);
+    }
+
+    @Test
+    void persistenceFailureRollsBackDeletionArchivingAndSessionRevocation() throws Exception {
+        AuthResponse session = loginSession(captain);
+        jdbc.update("UPDATE team_members SET activo = FALSE WHERE team_id = ? AND user_id <> ?", teamId, captain);
+        jdbc.update("ALTER TABLE athletes ADD CONSTRAINT sec01_test_keep_account CHECK "
+                + "(atleta_uuid <> CAST('" + captain + "' AS UUID) OR deleted_at IS NULL)");
+        try {
+            assertThrows(DataIntegrityViolationException.class,
+                    () -> athleteService.deleteAccount(captain, PASSWORD, "ELIMINAR"));
+        } finally {
+            jdbc.update("ALTER TABLE athletes DROP CONSTRAINT sec01_test_keep_account");
+        }
+        assertThat(jdbc.queryForObject("SELECT deleted_at IS NULL FROM athletes WHERE atleta_uuid = ?",
+                Boolean.class, captain)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT archived FROM teams WHERE id = ?", Boolean.class, teamId)).isFalse();
+        assertCaptain(captain);
+        assertThat(unrevokedSessions(captain)).isEqualTo(1);
+        assertThat(protectedRead(authorization(session))).isEqualTo(200);
+        refresh(session).andExpect(status().isOk());
+    }
+
+    @Test
+    void rejectsOldSignedCredentialsForAnAlreadyDeletedAccount() throws Exception {
+        AuthResponse session = loginSession(outsider);
+        var athlete = athleteRepository.findById(outsider).orElseThrow();
+        String legacyAuthorization = "Bearer " + jwtService.generateToken(athlete);
+        assertThat(protectedRead(legacyAuthorization)).isEqualTo(200);
+        jdbc.update("UPDATE athletes SET deleted_at = CURRENT_TIMESTAMP WHERE atleta_uuid = ?", outsider);
+
+        int accessStatus = protectedRead(authorization(session));
+        int legacyStatus = protectedRead(legacyAuthorization);
+        int refreshStatus = refresh(session).andReturn().getResponse().getStatus();
+        assertSoftly(softly -> {
+            softly.assertThat(accessStatus).as("unrevoked session for deleted account").isEqualTo(401);
+            softly.assertThat(legacyStatus).as("token issued without sid").isEqualTo(401);
+            softly.assertThat(refreshStatus).as("refresh for already deleted account").isEqualTo(401);
+        });
+        assertThrows(IllegalArgumentException.class, () -> sessions.createSession(athlete));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void accountDeletionAndRefreshUseTheSameAccountLock(boolean deletingFirst) throws Exception {
+        AuthResponse old = loginSession(outsider);
+        if (deletingFirst) {
+            assertSerializedWithPendingWrite(
+                    () -> athleteService.deleteAccount(outsider, PASSWORD, "ELIMINAR"),
+                    () -> refresh(old).andReturn().getResponse().getStatus(), 401);
+        } else {
+            var rotated = new AtomicReference<AuthResponse>();
+            assertSerializedWithPendingWrite(
+                    () -> rotated.set(sessions.rotateRefreshToken(old.getRefreshToken())),
+                    () -> deleteAccount(old).andReturn().getResponse().getStatus(), 204);
+            assertThat(protectedRead(authorization(rotated.get()))).isEqualTo(401);
+            refresh(rotated.get()).andExpect(status().isUnauthorized());
+        }
+        assertThat(unrevokedSessions(outsider)).isZero();
+    }
+
+    private static String authorization(AuthResponse session) {
+        return "Bearer " + session.getAccessToken();
+    }
+
+    private ResultActions deleteAccount(AuthResponse session) throws Exception {
+        return mvc.perform(delete("/api/v1/athletes/{atletaUuid}", session.getAtletaUuid())
+                .header("Authorization", authorization(session)).contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("confirmation", "ELIMINAR",
+                        "currentPassword", PASSWORD))));
+    }
+
+    private int protectedRead(String authorization) throws Exception {
+        return mvc.perform(get("/api/v1/athletes/stats").header("Authorization", authorization))
+                .andReturn().getResponse().getStatus();
+    }
+
+    private ResultActions refresh(AuthResponse session) throws Exception {
+        return mvc.perform(post("/api/v1/athletes/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("refreshToken", session.getRefreshToken()))));
+    }
+
+    private long unrevokedSessions(UUID player) {
+        return jdbc.queryForObject("SELECT count(*) FROM refresh_sessions WHERE athlete_uuid = ? AND revoked_at IS NULL",
+                Long.class, player);
     }
 
     @Test

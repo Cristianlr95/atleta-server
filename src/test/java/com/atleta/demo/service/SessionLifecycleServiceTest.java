@@ -19,6 +19,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -56,6 +57,7 @@ class SessionLifecycleServiceTest {
     @Test
     void createSessionStoresOnlyHashAndReturnsOpaqueRefreshToken() {
         UUID sessionId = UUID.randomUUID();
+        when(athletes.findByIdForUpdate(athlete.getAtletaUuid())).thenReturn(Optional.of(athlete));
         when(refreshSessions.save(any())).thenAnswer(invocation -> {
             RefreshSession session = invocation.getArgument(0);
             ReflectionTestUtils.setField(session, "id", sessionId);
@@ -75,6 +77,8 @@ class SessionLifecycleServiceTest {
     @Test
     void rotateRefreshTokenRevokesTheUsedToken() {
         RefreshSession current = new RefreshSession(athlete, "hash", Instant.now().plusSeconds(60), Instant.now());
+        when(refreshSessions.findAthleteUuidByTokenHash(anyString())).thenReturn(Optional.of(athlete.getAtletaUuid()));
+        when(athletes.findByIdForUpdate(athlete.getAtletaUuid())).thenReturn(Optional.of(athlete));
         when(refreshSessions.findByTokenHash(anyString())).thenReturn(Optional.of(current));
         when(refreshSessions.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(jwtService.generateToken(any(), any())).thenReturn("new-access");
@@ -89,6 +93,8 @@ class SessionLifecycleServiceTest {
     void rejectsReuseOfRevokedRefreshToken() {
         RefreshSession current = new RefreshSession(athlete, "hash", Instant.now().plusSeconds(60), Instant.now());
         current.revoke(Instant.now());
+        when(refreshSessions.findAthleteUuidByTokenHash(anyString())).thenReturn(Optional.of(athlete.getAtletaUuid()));
+        when(athletes.findByIdForUpdate(athlete.getAtletaUuid())).thenReturn(Optional.of(athlete));
         when(refreshSessions.findByTokenHash(anyString())).thenReturn(Optional.of(current));
 
         assertThatThrownBy(() -> service.rotateRefreshToken("reused"))
@@ -120,6 +126,7 @@ class SessionLifecycleServiceTest {
         PasswordResetToken token = new PasswordResetToken(
                 athlete, "hash", Instant.now().plusSeconds(60), Instant.now());
         when(resetTokens.findByTokenHash(anyString())).thenReturn(Optional.of(token));
+        when(athletes.findByIdForUpdate(athlete.getAtletaUuid())).thenReturn(Optional.of(athlete));
         when(passwordEncoder.encode("new-password")).thenReturn("new-hash");
 
         service.confirmPasswordReset("raw-token", "new-password");
@@ -128,5 +135,20 @@ class SessionLifecycleServiceTest {
         assertThat(athlete.getPasswordHash()).isEqualTo("new-hash");
         verify(refreshSessions).revokeAllByAthleteUuid(any(), any());
         verify(athletes).save(athlete);
+    }
+
+    @Test
+    void rejectsPasswordResetForDeletedAccountWithoutChangingCredentials() {
+        var token = new PasswordResetToken(athlete, "hash", Instant.now().plusSeconds(60), Instant.now());
+        athlete.setDeletedAt(LocalDateTime.now());
+        when(resetTokens.findByTokenHash(anyString())).thenReturn(Optional.of(token));
+        when(athletes.findByIdForUpdate(athlete.getAtletaUuid())).thenReturn(Optional.of(athlete));
+
+        assertThatThrownBy(() -> service.confirmPasswordReset("raw-token", "new-password"))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(token.getUsedAt()).isNull();
+        assertThat(athlete.getPasswordHash()).isEqualTo("hash");
+        verify(refreshSessions, never()).revokeAllByAthleteUuid(any(), any());
     }
 }
