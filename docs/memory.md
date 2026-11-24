@@ -1,5 +1,10 @@
 # Memoria Viva del Backend Atleta
 
+## SEC-01 y SEC-02 · Integración en beta local · 24/11/2026
+
+- SEC-01 (`879548c`) y SEC-02 (`41df371`) se integraron sobre beta `3d3e71d`, con CAP-03A y CAP-03B. La resolución conservó las pruebas de capitanía y la limpieza de los datos de prueba de ambos desarrollos.
+- `mvnw.cmd -B clean test` con selección de 23 clases en PostgreSQL 18.1 desechable: 253 pruebas aprobadas, cero fallos, errores u omisiones. Incluye revocación y renovación concurrente, incorporación a partidos, cierre, MVP e historial, permisos de equipos y migraciones de capitanía. Sin push ni despliegue.
+
 ## CAP-03B · Edición del nombre por el capitán vigente · 23/11/2026
 
 - Base local `1b3f82d` (CAP-03A), descendiente de beta `adcdfa8`. SEC-01 y SEC-02 siguen en sus ramas independientes.
@@ -24,6 +29,14 @@
 - La corrección local revoca todas las sesiones en la transacción de baja. La emisión y renovación bloquean la misma fila de atleta antes de operar sobre sesiones. El validador comprueba cuenta activa incluso con JWT antiguos sin `sid`.
 - La reproducción dio cuatro fallos esperados de seis casos sobre el código base. La regresión final pasó 72 pruebas en PostgreSQL, incluidos dos accesos revocados, baja denegada con `409`, rollback, integridad de equipos y ambos órdenes de concurrencia entre baja y refresh.
 - El empaquetado limpio con el perfil de pruebas terminó con 791 pruebas aprobadas y 4 omitidas, sin fallos. `git diff --check` pasó.
+
+## SEC-02 · Capitanía en la incorporación a partidos · 23/11/2026
+
+- Base `adcdfa8`. Una prueba unitaria con repositorio simulado confirmó que la autoinscripción entregaba a persistencia el rol `CAPITAN` del DTO. El alcance de esta autorización es la participación del partido, independiente de la membresía del equipo.
+- La autoinscripción conserva el contrato y normaliza `CAPITAN` a `JUGADOR`. Se mantienen `DT` y los caminos de asignación del creador en el servidor. Se toma el bloqueo del partido antes de comprobar duplicados y cupos.
+- Los cargos ya persistidos se conservan. La revisión de su procedencia, las reglas de asignación a un capitán distinto del creador y la discrepancia `role`/ `rol` de Angular quedan fuera de este cambio.
+- PostgreSQL 18.1 local: 88 pruebas aprobadas, sin fallos ni omisiones, y empaquetado correcto. Se verificaron JWT firmado, rechazo anónimo, rol persistido, alta concurrente, cierre e historial.
+- Verificación final con `clean package` en PostgreSQL 18.1 aislado: 317 pruebas aprobadas, sin fallos ni omisiones. Incluye cierre, concurrencia, MVP, estadísticas, ratings e historial. El contrato HTTP exige `rol`, devuelve `rol` y mantiene la posición solicitada para los tres roles de entrada. Un cuerpo que solo envía `role` recibe `400`. En la revisión Angular auditada, `joinMatch` se usa únicamente en una prueba de contrato; el flujo de invitaciones usa otro endpoint.
 
 ## CAP-06 · QA con sesión autenticada · 21/11/2026
 

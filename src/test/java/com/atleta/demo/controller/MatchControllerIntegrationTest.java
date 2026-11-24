@@ -9,14 +9,18 @@ import com.atleta.demo.enums.MatchMode;
 import com.atleta.demo.enums.MatchType;
 import com.atleta.demo.enums.PlayerRole;
 import com.atleta.demo.repository.*;
+import com.atleta.demo.service.JwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
@@ -26,14 +30,17 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.web.context.WebApplicationContext;
 
-import com.atleta.demo.config.TestConfig;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -62,7 +69,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * - 8.5: Actualización automática de estadísticas
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(TestConfig.class)
 @ActiveProfiles("test")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @Transactional
@@ -100,6 +106,12 @@ public class MatchControllerIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JwtService jwtService;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private MockMvc mockMvc;
     private UUID testCreatorUuid;
@@ -203,7 +215,7 @@ public class MatchControllerIntegrationTest {
         long id = objectMapper.readTree(response).get("id").asLong();
         entityManager.flush();
         entityManager.clear();
-        mockMvc.perform(get("/api/v1/matches/{matchId}", id))
+        mockMvc.perform(get("/api/v1/matches/{matchId}", id).with(jwtFor(testCreatorUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.rotativeGoalkeeper").value(true));
     }
@@ -299,11 +311,11 @@ public class MatchControllerIntegrationTest {
 
             long matchId = objectMapper.readTree(response).get("id").asLong();
 
-            mockMvc.perform(get("/api/v1/matches/{matchId}", matchId))
+            mockMvc.perform(get("/api/v1/matches/{matchId}", matchId).with(jwtFor(testCreatorUuid)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.matchType").value(matchType.name()));
 
-            mockMvc.perform(get("/api/v1/matches"))
+            mockMvc.perform(get("/api/v1/matches").with(jwtFor(testCreatorUuid)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$[?(@.id == " + matchId + ")].matchType").value(matchType.name()));
         }
@@ -392,7 +404,7 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         // When & Then
-        mockMvc.perform(get("/api/v1/matches/{matchId}", matchId))
+        mockMvc.perform(get("/api/v1/matches/{matchId}", matchId).with(jwtFor(testCreatorUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(matchId))
                 .andExpect(jsonPath("$.modalidad").value("CINCO_VS_CINCO"))
@@ -405,7 +417,7 @@ public class MatchControllerIntegrationTest {
         Long nonExistentId = 999L;
 
         // When & Then
-        mockMvc.perform(get("/api/v1/matches/{matchId}", nonExistentId))
+        mockMvc.perform(get("/api/v1/matches/{matchId}", nonExistentId).with(jwtFor(testCreatorUuid)))
                 .andExpect(status().isNotFound());
     }
 
@@ -429,7 +441,7 @@ public class MatchControllerIntegrationTest {
         }
 
         // When & Then
-        mockMvc.perform(get("/api/v1/matches"))
+        mockMvc.perform(get("/api/v1/matches").with(jwtFor(testCreatorUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(3)));
     }
@@ -466,7 +478,7 @@ public class MatchControllerIntegrationTest {
                 .andExpect(status().isCreated());
 
         // When & Then - Should only return future matches
-        mockMvc.perform(get("/api/v1/matches/upcoming"))
+        mockMvc.perform(get("/api/v1/matches/upcoming").with(jwtFor(testCreatorUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)));
     }
@@ -537,9 +549,111 @@ public class MatchControllerIntegrationTest {
                 .andExpect(jsonPath("$.matchTeams[0].team.id").value(testTeamId));
     }
 
+    @ParameterizedTest
+    @EnumSource(PlayerRole.class)
+    void testJoinMatch_Success(PlayerRole requestedRole) throws Exception {
+        Long matchId = createMatchForJoin();
+        String body = joinBody(matchId, requestedRole);
+        String playerAuthorization = signedAuthorization(testPlayerUuid);
+        String captainAuthorization = signedAuthorization(testCreatorUuid);
+        String expectedRole = requestedRole == PlayerRole.DT ? "DT" : "JUGADOR";
+
+        mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}/players/import", matchId, testTeamId)
+                        .header("Authorization", playerAuthorization))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}/players/import", matchId, testTeamId)
+                        .header("Authorization", captainAuthorization))
+                .andExpect(status().isOk());
+
+        entityManager.flush();
+        String creatorRow = "SELECT * FROM match_players WHERE match_id = ? AND user_id = ?";
+        var captainBefore = jdbc.queryForMap(creatorRow, matchId, testCreatorUuid);
+
+        mockMvc.perform(post("/api/v1/matches/join").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/matches/join")
+                .header("Authorization", playerAuthorization)
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.confirmado").value(false))
+                .andExpect(jsonPath("$.rol").value(expectedRole))
+                .andExpect(jsonPath("$.role").doesNotExist())
+                .andExpect(jsonPath("$.player.atletaUuid").value(testPlayerUuid.toString()))
+                .andExpect(jsonPath("$.team.id").value(testTeamId))
+                .andExpect(jsonPath("$.position.id").value(testPositionId));
+
+        mockMvc.perform(post("/api/v1/matches/{matchId}/teams/{teamId}/players/import", matchId, testTeamId)
+                        .header("Authorization", playerAuthorization))
+                .andExpect(status().isBadRequest());
+        entityManager.flush();
+        assertThat(jdbc.queryForObject("SELECT rol FROM match_players WHERE match_id = ? AND user_id = ?",
+                String.class, matchId, testPlayerUuid), is(expectedRole));
+        assertThat(jdbc.queryForList("SELECT user_id FROM match_players WHERE match_id = ? AND rol = 'CAPITAN'",
+                UUID.class, matchId), contains(testCreatorUuid));
+        assertThat(jdbc.queryForMap(creatorRow, matchId, testCreatorUuid), is(captainBefore));
+    }
+
     @Test
-    void testJoinMatch_Success() throws Exception {
-        // Given - Create match and add team first
+    void joinRequiresTheRolePropertyNamedRol() throws Exception {
+        Long matchId = createMatchForJoin();
+        var body = objectMapper.createObjectNode()
+                .put("matchId", matchId)
+                .put("playerUuid", testPlayerUuid.toString())
+                .put("teamId", testTeamId)
+                .put("positionId", testPositionId)
+                .put("role", "JUGADOR");
+
+        mockMvc.perform(post("/api/v1/matches/join")
+                        .header("Authorization", signedAuthorization(testPlayerUuid))
+                        .contentType(MediaType.APPLICATION_JSON).content(body.toString()))
+                .andExpect(status().isBadRequest());
+
+        assertThat(jdbc.queryForList("SELECT rol FROM match_players WHERE match_id = ? AND user_id = ?",
+                String.class, matchId, testPlayerUuid), empty());
+    }
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "SEC02_TEST_POSTGRES", matches = "true")
+    void concurrentSelfEnrollmentKeepsOneParticipation() throws Exception {
+        Long matchId = createMatchForJoin();
+        String authorization = signedAuthorization(testPlayerUuid);
+        String body = joinBody(matchId, PlayerRole.JUGADOR);
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+
+        var start = new CountDownLatch(1);
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            java.util.concurrent.Callable<Integer> join = () -> {
+                assertTrue(start.await(5, TimeUnit.SECONDS));
+                return mockMvc.perform(post("/api/v1/matches/join")
+                                .header("Authorization", authorization)
+                                .contentType(MediaType.APPLICATION_JSON).content(body))
+                        .andReturn().getResponse().getStatus();
+            };
+            var first = workers.submit(join);
+            var second = workers.submit(join);
+            start.countDown();
+            assertThat(List.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS)),
+                    containsInAnyOrder(201, 400));
+            assertThat(jdbc.queryForList("SELECT rol FROM match_players WHERE match_id = ? AND user_id = ?",
+                    String.class, matchId, testPlayerUuid), contains("JUGADOR"));
+            assertThat(jdbc.queryForList("SELECT user_id FROM match_players WHERE match_id = ? AND rol = 'CAPITAN'",
+                    UUID.class, matchId), contains(testCreatorUuid));
+        } finally {
+            jdbc.update("DELETE FROM match_players WHERE match_id = ?", matchId);
+            jdbc.update("DELETE FROM match_teams WHERE match_id = ?", matchId);
+            jdbc.update("DELETE FROM matches WHERE id = ?", matchId);
+            jdbc.update("DELETE FROM teams WHERE id = ?", testTeamId);
+            jdbc.update("DELETE FROM player_profiles WHERE atleta_uuid IN (?, ?)", testCreatorUuid, testPlayerUuid);
+            jdbc.update("DELETE FROM athletes WHERE atleta_uuid IN (?, ?)", testCreatorUuid, testPlayerUuid);
+        }
+    }
+
+    private String signedAuthorization(UUID playerUuid) {
+        return "Bearer " + jwtService.generateToken(athleteRepository.findById(playerUuid).orElseThrow());
+    }
+
+    private Long createMatchForJoin() throws Exception {
         CreateMatchRequest createRequest = new CreateMatchRequest();
         createRequest.setModalidad(MatchMode.CINCO_VS_CINCO);
         createRequest.setFechaHoraProgramada(LocalDateTime.now().plusDays(1));
@@ -563,25 +677,18 @@ public class MatchControllerIntegrationTest {
                 .param("esLocal", "true"))
                 .andExpect(status().isOk());
 
-        // When - Player joins match
+        return matchId;
+    }
+
+    private String joinBody(Long matchId, PlayerRole requestedRole) throws Exception {
         JoinMatchRequest joinRequest = new JoinMatchRequest();
         joinRequest.setMatchId(matchId);
-        joinRequest.setPlayerUuid(testPlayerUuid);
+        joinRequest.setPlayerUuid(testCreatorUuid);
         joinRequest.setTeamId(testTeamId);
         joinRequest.setPositionId(testPositionId);
-        joinRequest.setRol(PlayerRole.JUGADOR);
+        joinRequest.setRol(requestedRole);
 
-        // Then
-        mockMvc.perform(post("/api/v1/matches/join")
-                .with(jwtFor(testPlayerUuid))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(joinRequest)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.confirmado").value(false))
-                .andExpect(jsonPath("$.rol").value("JUGADOR"))
-                .andExpect(jsonPath("$.player.atletaUuid").value(testPlayerUuid.toString()))
-                .andExpect(jsonPath("$.team.id").value(testTeamId))
-                .andExpect(jsonPath("$.position.id").value(testPositionId));
+        return objectMapper.writeValueAsString(joinRequest);
     }
 
     @Test
@@ -748,7 +855,7 @@ public class MatchControllerIntegrationTest {
         Long matchId = objectMapper.readTree(response).get("id").asLong();
 
         // When & Then - Get events (should be empty initially)
-        mockMvc.perform(get("/api/v1/matches/{matchId}/events", matchId))
+        mockMvc.perform(get("/api/v1/matches/{matchId}/events", matchId).with(jwtFor(testCreatorUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
     }
@@ -825,7 +932,7 @@ public class MatchControllerIntegrationTest {
                 .andExpect(status().isOk());
 
         // When & Then - Get matches by team
-        mockMvc.perform(get("/api/v1/matches/by-team/{teamId}", testTeamId))
+        mockMvc.perform(get("/api/v1/matches/by-team/{teamId}", testTeamId).with(jwtFor(testCreatorUuid)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].id").value(matchId));

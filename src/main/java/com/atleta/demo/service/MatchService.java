@@ -136,7 +136,7 @@ public class MatchService {
      */
     public MatchPlayerResponse joinMatch(JoinMatchRequest request) {
         // Buscar el partido
-        Match match = matchRepository.findById(request.getMatchId())
+        Match match = matchRepository.findByIdForUpdate(request.getMatchId())
                 .orElseThrow(() -> new IllegalArgumentException("Partido no encontrado: " + request.getMatchId()));
 
         // Buscar el jugador (Requisito 7.1)
@@ -170,7 +170,9 @@ public class MatchService {
         }
 
         // Crear la participaciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n (Requisito 7.3, 7.4, 7.5)
-        MatchPlayer matchPlayer = new MatchPlayer(match, team, player, position, request.getRol());
+        // Captaincy is assigned by the server when it creates the organizer's participation.
+        PlayerRole role = request.getRol() == PlayerRole.CAPITAN ? PlayerRole.JUGADOR : request.getRol();
+        MatchPlayer matchPlayer = new MatchPlayer(match, team, player, position, role);
         matchPlayer.setTeamSide(resolveTeamSide(match, team));
         matchPlayer = matchPlayerRepository.save(matchPlayer);
 
