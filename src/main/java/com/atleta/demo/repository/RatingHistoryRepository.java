@@ -4,6 +4,7 @@ import com.atleta.demo.entity.RatingHistory;
 import com.atleta.demo.enums.MatchResultType;
 import com.atleta.demo.enums.PriorityLevel;
 import com.atleta.demo.enums.RoleType;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,6 +27,7 @@ public interface RatingHistoryRepository extends JpaRepository<RatingHistory, Lo
      * @param playerProfileId UUID del perfil del jugador
      * @return Lista del historial de calificaciones ordenado por fecha descendente
      */
+    @EntityGraph(attributePaths = {"playerRating.playerProfile", "match"})
     @Query("SELECT rh FROM RatingHistory rh WHERE rh.playerRating.playerProfile.atletaUuid = :playerProfileId ORDER BY rh.createdAt DESC")
     List<RatingHistory> findByPlayerProfileId(@Param("playerProfileId") UUID playerProfileId);
 
@@ -35,6 +37,7 @@ public interface RatingHistoryRepository extends JpaRepository<RatingHistory, Lo
      * @param roleType Tipo de rol
      * @return Lista del historial de calificaciones para el rol ordenado por fecha descendente
      */
+    @EntityGraph(attributePaths = {"playerRating.playerProfile", "match"})
     @Query("SELECT rh FROM RatingHistory rh WHERE rh.playerRating.playerProfile.atletaUuid = :playerProfileId AND rh.playerRating.roleType = :roleType ORDER BY rh.createdAt DESC")
     List<RatingHistory> findByPlayerProfileIdAndRoleType(
             @Param("playerProfileId") UUID playerProfileId,
@@ -90,6 +93,7 @@ public interface RatingHistoryRepository extends JpaRepository<RatingHistory, Lo
      * @param endDate Fecha de fin del período
      * @return Lista del historial de calificaciones del jugador en el período
      */
+    @EntityGraph(attributePaths = {"playerRating.playerProfile", "match"})
     @Query("SELECT rh FROM RatingHistory rh WHERE rh.playerRating.playerProfile.atletaUuid = :playerProfileId AND rh.createdAt BETWEEN :startDate AND :endDate ORDER BY rh.createdAt DESC")
     List<RatingHistory> findByPlayerProfileIdAndCreatedAtBetween(
             @Param("playerProfileId") UUID playerProfileId,
